@@ -1,0 +1,11 @@
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {section}{\numberline {2}Typing System}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Primitives}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Reference Types}{3}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Expressions}{3}{section.3}%
+\contentsline {section}{\numberline {4}Handling Whitespace}{4}{section.4}%
+\contentsline {section}{\numberline {5}Buildup of a Program}{4}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Global Declarations}{4}{subsection.5.1}%
+\contentsline {section}{\numberline {6}Formal Grammar}{4}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Lexer Grammar}{4}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Parser Grammar}{5}{subsection.6.2}%

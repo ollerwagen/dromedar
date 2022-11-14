@@ -1,0 +1,374 @@
+\documentclass{article}
+
+\usepackage{listings, xcolor, enumitem, hyperref, multicol, booktabs, longtable, titlesec, amssymb}
+
+\usepackage{sourcecodepro}
+\usepackage[T1]{fontenc}
+
+\usepackage[margin=2cm,a4paper]{geometry}
+
+\DeclareFontShape{OT1}{cmtt}{bx}{n}{<5><6><7><8><9><10><10.95><12><14.4><17.28><20.74><24.88>cmttb10}{}
+
+\lstdefinelanguage{Dromedar}{
+	morekeywords = [1]{int,flt,char,bool},
+	morekeywords = [2]{true,false},
+	morekeywords = [3]{},
+	morekeywords = [4]{},
+	comment = [l]{\#},
+	%morecomment = [s]{/*}{*/},
+	string = [b]',
+	morestring = [b]"
+}
+
+\lstset{
+	language=Dromedar,
+	nolol=false,
+	frame=shadowbox,
+	rulesepcolor=\color{gray},
+	xleftmargin=\parindent,
+	framexleftmargin=0.2em,
+	belowskip=0.6em,
+	%basewidth=0.5em,
+	backgroundcolor=\color{white!90!black},
+	emphstyle=\bfseries\slshape,
+	basicstyle=\ttfamily\color{black},
+	keywordstyle=\bfseries,
+	commentstyle=\color{gray},
+	stringstyle=\slshape,
+	showstringspaces=false,
+	tabsize=4
+}
+
+\renewcommand{\c}[1]{\texttt{#1}}
+\newcommand{\code}[1]{\lstinline[columns=fixed]{#1}}
+
+\newcommand{\parw}{9cm}
+
+\setcounter{secnumdepth}{4}
+
+\titleformat{\paragraph}
+{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+
+\newcommand{\subsubsubsection}{\paragraph}
+
+\begin{document}
+	
+	\vfill
+	\begin{center}
+		\large{Oliver Graf}\\
+		\vspace{5cm}
+		\large{\textsc{The}}\\\vspace{1cm}
+		\Huge{\textsc{Dromedar}}\\\vspace{1cm}
+		\large{\textsc{Programming Language}}
+	\end{center}
+	\vfill
+	
+	\clearpage
+	
+	\setcounter{tocdepth}{1}
+	\tableofcontents
+	\clearpage
+	
+	\section{Introduction}
+	
+	\section{Typing System}
+	
+		Dromedar uses a static, strong and sound typing system -- typing errors cannot happen at runtime. It knows primitive and reference types.
+		
+		\subsection{Primitives}
+		
+			There are four primitive types:
+			
+			\begin{itemize}
+				\item \code{int} represents 64-bit 2's complement (signed) integers.
+				\item \code{flt} represents 64-bit IEEE-754 standard floating point numbers.
+				\item \code{char} represents 8-bit UTF-8 characters.
+				\item \code{bool} represents a 1-bit value: \code{true} and \code{false}.
+			\end{itemize}
+		
+		\subsection{Reference Types}
+		
+			Reference Types of type \code{t} come in two shapes: \code{t}, a strictly non-\code{null} reference; and \code{t?}, a reference that may be \code{null}, where \code{t} is considered a subtype of \code{t?}.
+			
+			Splitting up references that way has two advantages: On one hand, it enforces a good coding style and helps find Null pointer bugs before they even appear; on the other hand it accelerates the execution environment by allowing it to skip Null checks when dereferencing an object if it is of a strictly non-\code{null} type.
+		
+	\section{Expressions}
+	
+		Because Dromedar has a strong type system, it generally disallows any operations with operands of a non-specified type unless they are explicitly cast to the correct type before. This means that integer and floating point numbers cannot be added, multiplied, etc.
+		
+		The following table describes precedence and type of all operators:\\
+		
+		\begin{tabular}{l|l|c|l|l}
+			\textbf{Operator} & \textbf{Name} & \textbf{Prec.} & \textbf{Assoc.} & \textbf{Types}\\
+			\midrule
+			\code{-} & Unary Negation & 100 & non-assoc. & \code{int -> int}\\
+				&&&& \code{flt -> flt}\\
+			\code{!} & Logical Negation &&& \code{bool -> bool}\\
+			\midrule
+			\code{**} & Exponentiation & 90 & right & \code{int,int -> int}\\
+				&&&& \code{flt,flt -> flt}\\
+			\midrule
+			\code{*} & Multiplication & 80 & left & \code{int,int -> int}\\
+				&&&& \code{flt,flt -> flt}\\
+			\midrule
+			\code{+} & Addition & 70 & left & \code{int,int -> int}\\
+				&&&& \code{flt,flt -> flt}\\
+				&&&& \code{char,int -> char}\\
+				&&&& \code{int,char -> char}\\
+			\code{-} & Subtraction &&& \code{int,int -> int}\\
+				&&&& \code{flt,flt -> flt}\\
+				&&&& \code{char,int -> char}\\
+				&&&& \code{int,char -> char}\\
+			\midrule
+			\code{\&} & Bitwise And & 60 & left & \code{int,int -> int}\\
+			\midrule
+			\code{\^} & Bitwise Xor & 50 & left & \code{int,int -> int}\\
+			\midrule
+			\code{|} & Bitwise Or & 40 & left & \code{int,int -> int}\\
+		\end{tabular}\\
+	
+		Consider the following example:
+		
+		The expression \code{1+18-18+'a'} is well-typed (of type \code{char}) and gets parsed as \code{((1+18)-18)+'a'} and evaluated to \code{'b'}. \code{10 - 0.0} on the other hand is not well-typed as \code{-} cannot take an \code{int} and a \code{flt} operand as arguments.
+		
+	\section{Handling Whitespace}
+	
+		In order to keep the code simple and easy to look at, Dromedar uses significant whitespace: Blocks of code (such as bodies of \code{if}) statements, are denoted by adding a level of indentation.
+		
+		Every line is either empty (this includes lines containing only comments), or it contains code. 
+		
+		If a line contains code, the level of its indentation is determined by its relationship to the previous line and its environment:
+		
+		Two neighboring lines of code within the same block of code must have exactly matching whitespace characters before their respective code starts. If a following line has a deeper level of indentation, it must match the whitespace characters of the previous line and then add a number of additional whitespace characters (space(s) and/or tab(s)).
+		
+		A line of code can only have a deeper indentation level of one step compared to the previous line. The first line of code is always a global instruction and as such has the lowest level of indentation. If it is indented, this level of indentation corresponds to a baseline indentation that every line of code must share.
+		
+		Consider this valid example:
+		
+		\begin{lstlisting}
+  global x := 3 		# baseline indentation of two spaces
+						# empty line -> indentation doesn't matter
+  fn main : args:[string] -> int
+  			Stdio.println "Hello, World!"	# deeper indentation level
+  			return 0						# same indentation level
+		\end{lstlisting}
+		
+		Blocks with the same level of indentation can have different indentation strings, but they must still match their environments, as follows:
+		
+		\begin{lstlisting}
+		if <condition>
+				BLOCK A
+		else
+		  BLOCK B
+		\end{lstlisting}
+		
+		The two blocks have a different indentation level, but from context it is still clear that \code{BLOCK A} is a sub-block of the \code{if}-statement, whereas \code{BLOCK B} belongs to the \code{else}-statement.
+		
+	\section{Buildup of a Program}
+	
+		A program consists of a series of global statements -- global variable declarations and function definitions.
+		
+		\subsection{Global Declarations}
+		
+			Global variables are all assigned a value at the point of their declaration. This value is evaluated statically -- declaration expressions can only contain literals and global variables that were already declared previously.
+		
+	\section{Formal Grammar}
+	
+		\subsection{Lexer Grammar}
+		
+			The Lexer Grammar is specified using \textbf{regular expressions}:
+			
+			\begin{verbatim}
+				LiteralInt  ::= /[1-9]\d*/
+				LiteralFlt  ::= /\d+\.\d+/
+				LiteralChar ::= /'([^'\\]|(\\[\\nrt']))'/
+				LiteralBool ::= /true|false/
+				
+				Identifier  ::= /[a-zA-Z][a-zA-Z0-9_]*/
+				
+				global      ::= /global/
+				fn          ::= /fn/
+				let         ::= /let/
+				mut         ::= /mut/
+				
+				int         ::= /int/
+				flt         ::= /flt/
+				char        ::= /char/
+				bool        ::= /bool/
+				void        ::= /void/
+				
+				if          ::= /if/
+				elif        ::= /elif/
+				else        ::= /else/
+				do          ::= /do/
+				while       ::= /while/
+				
+				return      ::= /return/
+				
+				Dash        ::= /\-/
+				Bang        ::= /!/
+				Star        ::= /\*/
+				Plus        ::= /\+/
+				LShift      ::= /<</
+				RShift      ::= />>/
+				AShift      ::= />>>/
+				Bitand      ::= /&/
+				Xor         ::= /\^/
+				Bitor       ::= /\|/
+				
+				Assign      ::= /:=/
+				
+				Colon       ::= /:/
+				Arrow       ::= /\->/
+				
+				Comma       ::= /\,/
+				
+				LParen      ::= /\(/
+				RParen      ::= /\)/
+			\end{verbatim}
+			
+		\subsection{Parser Grammar}
+		
+			The following grammar specification uses a preceding \texttt{\%} for lexer tokens.
+		
+			\begin{verbatim}
+				Program          ::=
+				                 | €
+				                 | GlobalStatement Program
+				                 
+				GlobalStatement  ::=
+				                 | GVDeclaration
+				                 | GFDeclaration
+				                 
+				GVDeclaration    ::=
+				                 | %Global      %Identifier             %Assign GlobalExpression
+				                 | %Global %Mut %Identifier             %Assign GlobalExpression
+				                 | %Global      %Identifier %Colon Type %Assign GlobalExpression
+				                 | %Global %Mut %Identifier %Colon Type %Assign GlobalExpression
+				                 
+				GFDeclaration    ::=
+				                 | %Fn %Identifier                   %Arrow ReturnType Block
+				                 | %Fn %Identifier %Colon FArguments %Arrow ReturnType Block
+				                 
+				FArguments       ::=
+				                 | %Identifier %Colon Type
+				                 | %Identifier %Colon Type %Comma FArguments
+				
+				ReturnType       ::=
+				                 | %Void
+				                 | Type
+				                 
+				Block            ::=
+				                 | €
+				                 | Statement Block
+				
+				Statement        ::=
+				                 | VDeclaration
+				                 | AssignStmt
+				                 | IfStmt
+				                 | WhileStmt
+				                 | DoWhileStmt
+				                 | ReturnStmt
+				                 
+				VDeclaration     ::=
+				                 | %Let      %Identifier             %Assign Expression
+				                 | %Let %Mut %Identifier             %Assign Expression
+				                 | %Let      %Identifier %Colon Type %Assign Expression
+				                 | %Let %Mut %Identifier %Colon Type %Assign Expression
+				                 
+				AssignStmt       ::=
+				                 | LHS %Assign Expression
+				                 
+				IfStmt           ::=
+				                 | %If Expression Block ElifStmt
+				                 
+				ElifStmt         ::=
+				                 | %Elif Expression Block ElifStmt
+				                 | %Else Block
+				                 | €
+				                 
+				WhileStmt        ::=
+				                 | %While Expression Block
+				
+				DoWhileStmt      ::=
+				                 | %Do Block %While Expression
+				                 
+				ReturnStmt       ::=
+				                 | %Return
+				                 | %Return Expression
+				                 
+				LHS              ::=
+				                 | %Identifier
+				                 
+				Type             ::=
+				                 | %Int
+				                 | %Flt
+				                 | %Char
+				                 | %Bool
+				                 
+				GlobalExpression ::= Expression*
+			
+				Expression       ::=
+				                 | ExprPrec30
+				ExprPrec30       ::=
+				                 | ExprPrec40
+				                 | ExprPrec40 %Bitor ExprPrec40
+				ExprPrec40       ::=
+				                 | ExprPrec50
+				                 | ExprPrec50 %Xor ExprPrec60
+				ExprPrec50       ::=
+				                 | ExprPrec60
+				                 | ExprPrec60 %Bitand ExprPrec50
+				ExprPrec60       ::=
+				                 | ExprPrec70
+				                 | ExprPrec70 %LShift ExprPrec60
+				                 | ExprPrec70 %RShift ExprPrec60
+				                 | ExprPrec70 %AShift ExprPrec60
+				ExprPrec70       ::=
+				                 | ExprPrec80
+				                 | ExprPrec80 %Plus ExprPrec70
+				                 | ExprPrec80 %Minus ExprPrec70
+				ExprPrec80       ::=
+				                 | ExprPrec90
+				                 | ExprPrec90 %Star ExprPrec80
+				ExprPrec90       ::=
+				                 | ExprPrec100
+				                 | ExprPrec100 %StarStar ExprPrec90
+				ExprPrec100      ::=
+				                 | SimpleExpression
+				                 | %Dash ExprPrec100
+				                 | %Bang ExprPrec100
+				SimpleExpression ::=
+				                 | %LParen Expression %RParen
+				                 | %LiteralInt
+				                 | %LiteralFlt
+				                 | %LiteralChar
+				                 | %LiteralBool
+				                 | %Identifier
+			\end{verbatim}
+	
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
