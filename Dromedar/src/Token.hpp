@@ -37,6 +37,15 @@ namespace drm {
             BITAND,         // &
             XOR,            // ^
             BITOR,          // |
+            LOGAND,         // &&
+            LOGOR,          // ||
+
+            EQUAL,          // =
+            NOT_EQUAL,      // !=
+            GREATER,        // >
+            LESS,           // >
+            GREATER_EQ,     // >=
+            LESS_EQ,        // <=
 
             ASSIGN,         // :=
             COLON,          // :
@@ -102,16 +111,18 @@ namespace drm {
                 { DASH,         "DASH"         }, { BANG,         "BANG"         },
                 { STARSTAR,     "STARSTAR"     },
                 { STAR,         "STAR"         }, { PLUS,         "PLUS"         },
-                { LSHIFT,       "LSHIFT"       }, { ASHIFT,       "ASHIFT"       }, { RSHIFT, "RSHIFT" },
-                { BITAND,       "BITAND"       }, { XOR,          "XOR"          }, { BITOR,  "BITOR"  },
-                { ASSIGN,       "ASSIGN"       }, { COLON,        "COLON"        }, { COMMA,  "COMMA"  },
+                { LSHIFT,       "LSHIFT"       }, { ASHIFT,       "ASHIFT"       }, { RSHIFT,   "RSHIFT"  },
+                { BITAND,       "BITAND"       }, { XOR,          "XOR"          }, { BITOR,    "BITOR"   },
+                { LOGAND,       "LOGAND"       }, { LOGOR,        "LOGOR"        },
+                { EQUAL,        "EQUAL"        }, { NOT_EQUAL,    "NOT_EQUAL"    }, { GREATER,  "GREATER" }, { LESS,     "LESS" }, { GREATER_EQ, "GREATER_EQ" }, { LESS_EQ, "LESS_EQ" },
+                { ASSIGN,       "ASSIGN"       }, { COLON,        "COLON"        }, { COMMA,    "COMMA"   },
                 { ARROW,        "ARROW"        },
                 { LPAREN,       "LPAREN"       }, { RPAREN,       "RPAREN"       },
                 { $,            "EOF"          }, { WHITESPACE,   "INDENT"       },
-                { KEY_GLOBAL,   "GLOBAL"       }, { KEY_FN,       "FN"           }, { KEY_LET,  "LET"  }, { KEY_MUT,  "MUT" },
-                { KEY_INT,      "INT"          }, { KEY_FLT,      "FLT"          }, { KEY_CHAR, "CHAR" }, { KEY_BOOL, "BOOL"},
+                { KEY_GLOBAL,   "GLOBAL"       }, { KEY_FN,       "FN"           }, { KEY_LET,  "LET"     }, { KEY_MUT,  "MUT"  },
+                { KEY_INT,      "INT"          }, { KEY_FLT,      "FLT"          }, { KEY_CHAR, "CHAR"    }, { KEY_BOOL, "BOOL" },
                 { KEY_VOID,     "VOID"         },
-                { KEY_IF,       "IF"           }, { KEY_ELIF,     "ELIF"         }, { KEY_ELSE,     "ELSE"         },
+                { KEY_IF,       "IF"           }, { KEY_ELIF,     "ELIF"         }, { KEY_ELSE, "ELSE"    },
                 { KEY_WHILE,    "WHILE"        }, { KEY_DO,       "DO"           },
                 { KEY_RETURN,   "RETURN"       }
             };

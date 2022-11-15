@@ -1,11 +1,15 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "Token.hpp"
+
+// debug
+#include <iostream>
 
 namespace drm {
 
@@ -16,7 +20,7 @@ namespace drm {
         virtual ~TypeExpression() {}
 
         enum Type {
-            PRIMITIVE
+            PRIMITIVE,
         };
         virtual Type getType() const = 0;
 
@@ -26,19 +30,53 @@ namespace drm {
             virtual T visitTypeExpression(const TypeExpression *expr);
             virtual T visitPrimitiveTypeExpression(const PrimitiveTypeExpression *expr);
         };
+
+        virtual bool equal(const std::shared_ptr<TypeExpression> &t) = 0;
     };
 
     struct PrimitiveTypeExpression : public TypeExpression {
-        Token primitive; // of a type keyword type
+        
+        enum PType {
+            INT, FLT, CHAR, BOOL,
+            VOID
+        } type;
 
-        inline PrimitiveTypeExpression(const Token &t) { primitive = t; }
+        inline PrimitiveTypeExpression(PType t) { type = t; }
         ~PrimitiveTypeExpression() {}
 
         Type getType() const override { return PRIMITIVE; }
 
-        inline static std::shared_ptr<TypeExpression> of(const Token &t) {
+        bool equal(const std::shared_ptr<TypeExpression> &t) override {
+            return t->getType() == getType() &&
+                   type == std::static_pointer_cast<PrimitiveTypeExpression>(t)->type;
+        }
+
+        inline static std::shared_ptr<TypeExpression> of(PType t) {
             return std::static_pointer_cast<TypeExpression>(std::make_shared<PrimitiveTypeExpression>(t));
         }
+
+        inline static std::shared_ptr<TypeExpression> ofTypename(Token::Type t) {   
+            PType pt;
+            switch (t) {
+                case Token::Type::KEY_INT:  pt = INT;  break;
+                case Token::Type::KEY_FLT:  pt = FLT;  break;
+                case Token::Type::KEY_CHAR: pt = CHAR; break;
+                case Token::Type::KEY_BOOL: pt = BOOL; break;
+                case Token::Type::KEY_VOID: pt = VOID; break;
+                default:                    throw std::runtime_error("not well-formed AST");
+            }
+            return of(pt);
+        }
+
+        inline static std::shared_ptr<TypeExpression> ofTypename(const Token &t) {
+            return ofTypename(t.type);
+        }
+
+        inline static std::shared_ptr<TypeExpression> MAKE_INT()  { return ofTypename(Token::Type::KEY_INT);  }
+        inline static std::shared_ptr<TypeExpression> MAKE_FLT()  { return ofTypename(Token::Type::KEY_FLT);  }
+        inline static std::shared_ptr<TypeExpression> MAKE_CHAR() { return ofTypename(Token::Type::KEY_CHAR); }
+        inline static std::shared_ptr<TypeExpression> MAKE_BOOL() { return ofTypename(Token::Type::KEY_BOOL); }
+        inline static std::shared_ptr<TypeExpression> MAKE_VOID() { return ofTypename(Token::Type::KEY_VOID); }
     };
 
     struct VariableLHS;
@@ -77,6 +115,7 @@ namespace drm {
     struct LiteralExpression;
     struct UnaryExpression;
     struct BinaryExpression;
+    struct ComparisonList;
 
     struct Expression {    
         using LiteralType = Token::LiteralType;
@@ -86,7 +125,8 @@ namespace drm {
         enum Type {
             LITERAL,
             UNARY,
-            BINARY
+            BINARY,
+            COMPLIST
         };
         virtual Type getType() const = 0;
 
@@ -96,7 +136,8 @@ namespace drm {
             virtual T visitExpression(const Expression *expr);
             virtual T visitLiteralExpression(const LiteralExpression *expr);
             virtual T visitUnaryExpression(const UnaryExpression *expr);
-            virtual T visitBinaryExpression(const BinaryExpression*expr);
+            virtual T visitBinaryExpression(const BinaryExpression *expr);
+            virtual T visitComparisonList(const ComparisonList *expr);
         };
     };
 
@@ -141,6 +182,21 @@ namespace drm {
 
         inline static std::shared_ptr<Expression> of(const std::shared_ptr<Expression> &lexp, const Token &op, const std::shared_ptr<Expression> &rexp) {
             return std::static_pointer_cast<Expression>(std::make_shared<BinaryExpression>(lexp, op, rexp));
+        }
+    };
+
+    struct ComparisonList : public Expression {
+
+        std::shared_ptr<Expression> first;
+        std::vector<std::pair<Token, std::shared_ptr<Expression>>> comparisons;
+
+        inline ComparisonList(const std::shared_ptr<Expression> &e, std::vector<std::pair<Token, std::shared_ptr<Expression>>> &l) { first = e; comparisons = l; }
+        ~ComparisonList() {}
+
+        Type getType() const override { return COMPLIST; }
+
+        inline static std::shared_ptr<Expression> of(const std::shared_ptr<Expression> &e, std::vector<std::pair<Token, std::shared_ptr<Expression>>> &l) {
+            return std::static_pointer_cast<Expression>(std::make_shared<ComparisonList>(e, l));
         }
     };
 
@@ -221,45 +277,48 @@ namespace drm {
     struct AssignStatement : public Statement {
 
         std::shared_ptr<LHS> lhs;
+        Token op;
         std::shared_ptr<Expression> expr;
 
-        inline AssignStatement(const std::shared_ptr<LHS> &l, const std::shared_ptr<Expression> &e) { lhs = l; expr = e; }
+        inline AssignStatement(const std::shared_ptr<LHS> &l, const Token &o, const std::shared_ptr<Expression> &e) { lhs = l; op = o; expr = e; }
         ~AssignStatement() {}
 
         Type getType() const override { return ASSIGN; }
 
-        inline static std::shared_ptr<Statement> of(const std::shared_ptr<LHS> &l, const std::shared_ptr<Expression> &e) {
-            return std::static_pointer_cast<Statement>(std::make_shared<AssignStatement>(l, e));
+        inline static std::shared_ptr<Statement> of(const std::shared_ptr<LHS> &l, const Token &o, const std::shared_ptr<Expression> &e) {
+            return std::static_pointer_cast<Statement>(std::make_shared<AssignStatement>(l, o, e));
         }
     };
 
     struct IfStatement : public Statement {
 
+        Token key;
         std::shared_ptr<Expression> cond;
         Block taken, not_taken;
 
-        inline IfStatement(const std::shared_ptr<Expression> &e, const Block &a, const Block &b) { cond = e; taken = a; not_taken = b; }
+        inline IfStatement(const Token &t, const std::shared_ptr<Expression> &e, const Block &a, const Block &b) { key = t; cond = e; taken = a; not_taken = b; }
         ~IfStatement() {}
 
         Type getType() const override { return IFSTMT; }
 
-        inline static std::shared_ptr<Statement> of(const std::shared_ptr<Expression> &e, const Block &a, const Block &b) {
-            return std::static_pointer_cast<Statement>(std::make_shared<IfStatement>(e, a, b));
+        inline static std::shared_ptr<Statement> of(const Token &t, const std::shared_ptr<Expression> &e, const Block &a, const Block &b) {
+            return std::static_pointer_cast<Statement>(std::make_shared<IfStatement>(t, e, a, b));
         }
     };
 
     struct WhileStatement : public Statement {
 
+        Token key;
         std::shared_ptr<Expression> cond;
         Block body;
 
-        inline WhileStatement(const std::shared_ptr<Expression> &e, const Block &b) { cond = e; body = b; }
+        inline WhileStatement(const Token &t, const std::shared_ptr<Expression> &e, const Block &b) { key = t; cond = e; body = b; }
         ~WhileStatement() {}
 
         Type getType() const override { return WHILESTMT; }
 
-        inline static std::shared_ptr<Statement> of(const std::shared_ptr<Expression> &e, const Block &b) {
-            return std::static_pointer_cast<Statement>(std::make_shared<WhileStatement>(e, b));
+        inline static std::shared_ptr<Statement> of(const Token &t, const std::shared_ptr<Expression> &e, const Block &b) {
+            return std::static_pointer_cast<Statement>(std::make_shared<WhileStatement>(t, e, b));
         }
     };
 
@@ -267,33 +326,35 @@ namespace drm {
 
         std::shared_ptr<Expression> cond;
         Block body;
+        Token whilekey;
 
-        inline DoWhileStatement(const std::shared_ptr<Expression> &e, const Block &b) { cond = e; body = b; }
+        inline DoWhileStatement(const std::shared_ptr<Expression> &e, const Block &b, const Token &t) { cond = e; body = b; whilekey = t; }
         ~DoWhileStatement() {}
 
         Type getType() const override { return DOWHILESTMT; }
 
-        inline static std::shared_ptr<Statement> of(const std::shared_ptr<Expression> &e, const Block &b) {
-            return std::static_pointer_cast<Statement>(std::make_shared<DoWhileStatement>(e, b));
+        inline static std::shared_ptr<Statement> of(const std::shared_ptr<Expression> &e, const Block &b, const Token &t) {
+            return std::static_pointer_cast<Statement>(std::make_shared<DoWhileStatement>(e, b, t));
         }
     };
 
     struct ReturnStatement : public Statement {
 
+        Token key;
         bool withVal;
         std::shared_ptr<Expression> expr;
 
-        inline ReturnStatement() : withVal(false) {}
-        inline ReturnStatement(const std::shared_ptr<Expression> &e) : withVal(true) { expr = e; }
+        inline ReturnStatement(const Token &t) : withVal(false) { key = t; }
+        inline ReturnStatement(const Token &t, const std::shared_ptr<Expression> &e) : withVal(true) { key = t; expr = e; }
         ~ReturnStatement() {}
 
         Type getType() const override { return RETURN; }
 
-        inline static std::shared_ptr<Statement> of() {
-            return std::static_pointer_cast<Statement>(std::make_shared<ReturnStatement>());
+        inline static std::shared_ptr<Statement> of(const Token &t) {
+            return std::static_pointer_cast<Statement>(std::make_shared<ReturnStatement>(t));
         }
-        inline static std::shared_ptr<Statement> of(const std::shared_ptr<Expression> &e) {
-            return std::static_pointer_cast<Statement>(std::make_shared<ReturnStatement>(e));
+        inline static std::shared_ptr<Statement> of(const Token &t, const std::shared_ptr<Expression> &e) {
+            return std::static_pointer_cast<Statement>(std::make_shared<ReturnStatement>(t, e));
         }
     };
 

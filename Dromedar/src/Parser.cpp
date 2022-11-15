@@ -6,6 +6,9 @@
 namespace drm {
 
     const std::vector<std::vector<Parser::Type>> Parser::PRECEDENCES = {
+        { Type::LOGOR },
+        { Type::LOGAND },
+        { Type::EQUAL, Type::NOT_EQUAL, Type::GREATER, Type::LESS, Type::GREATER_EQ, Type::LESS_EQ },
         { Type::BITOR },
         { Type::XOR },
         { Type::BITAND },
@@ -19,8 +22,15 @@ namespace drm {
         { Type::STARSTAR, false },
         { Type::STAR, true },
         { Type::PLUS, true }, { Type::DASH, true },
-        { Type::LSHIFT, false }, { Type::RSHIFT, false }, { Type::ASHIFT, false },
-        { Type::BITAND, true }, { Type::XOR, true }, { Type::BITOR, true }
+        { Type::LSHIFT, true }, { Type::RSHIFT, true }, { Type::ASHIFT, true },
+        { Type::BITAND, true }, { Type::XOR, true }, { Type::BITOR, true },
+        { Type::LOGAND, true }, { Type::LOGOR, true }
+    };
+
+    const std::vector<Parser::Type> Parser::COMPARATORS = {
+        Type::EQUAL,   Type::NOT_EQUAL,
+        Type::LESS,    Type::GREATER,
+        Type::LESS_EQ, Type::GREATER_EQ
     };
 
     Parser::Parser() {}
@@ -123,30 +133,30 @@ namespace drm {
 
     std::shared_ptr<Statement> Parser::parseAssignStatement() {
         std::shared_ptr<LHS> lhs = parseLHS();
-        expect(Type::ASSIGN, "assignment must use ':=' operator");
+        Token op = expect(Type::ASSIGN, "assignment must use ':=' operator");
         std::shared_ptr<Expression> expr = parseExpression();
-        return AssignStatement::of(lhs, expr);
+        return AssignStatement::of(lhs, op, expr);
     }
 
     std::shared_ptr<Statement> Parser::parseIfStatement(Type t) {
-        expect(t, "if statement must start with keyword 'if'");
+        Token key = expect(t, "if statement must start with keyword 'if'");
         std::shared_ptr<Expression> condition = parseExpression();
         Block taken = parseBlock();
         if (matchIndentAnd(Type::KEY_ELIF)) {
             reverse();
-            return IfStatement::of(condition, taken, { parseIfStatement(Type::KEY_ELIF) });
+            return IfStatement::of(key, condition, taken, { parseIfStatement(Type::KEY_ELIF) });
         } else if (matchIndentAnd(Type::KEY_ELSE)) {
-            return IfStatement::of(condition, taken, parseBlock());
+            return IfStatement::of(key, condition, taken, parseBlock());
         } else {
-            return IfStatement::of(condition, taken, {});
+            return IfStatement::of(key, condition, taken, {});
         }
     }
 
     std::shared_ptr<Statement> Parser::parseWhileStatement() {
-        expect(Type::KEY_WHILE, "while statement must start with keyword 'while'");
+        Token key = expect(Type::KEY_WHILE, "while statement must start with keyword 'while'");
         std::shared_ptr<Expression> condition = parseExpression();
         Block body = parseBlock();
-        return WhileStatement::of(condition, body);
+        return WhileStatement::of(key, condition, body);
     }
 
     std::shared_ptr<Statement> Parser::parseDoWhileStatement() {
@@ -154,17 +164,17 @@ namespace drm {
         Block body = parseBlock();
         if (!matchIndentAnd(Type::KEY_WHILE))
             throw ParserError(advance(), "do-while statement must end with <while %expr>");
+        Token key = previous();
         std::shared_ptr<Expression> condition = parseExpression();
-        return DoWhileStatement::of(condition, body);
+        return DoWhileStatement::of(condition, body, key);
     }
 
     std::shared_ptr<Statement> Parser::parseReturnStatement() {
-        expect(Type::KEY_RETURN, "return statement must start with keyword 'start'");
-        
+        Token key = expect(Type::KEY_RETURN, "return statement must start with keyword 'start'");
         if (peek() == Type::$ || peek() == Type::WHITESPACE)
-            return ReturnStatement::of();
+            return ReturnStatement::of(key);
         else
-            return ReturnStatement::of(parseExpression());
+            return ReturnStatement::of(key, parseExpression());
     }
 
     std::shared_ptr<LHS> Parser::parseLHS() {
@@ -173,12 +183,12 @@ namespace drm {
 
     std::shared_ptr<TypeExpression> Parser::parseTypeExpression(bool return_type) {
         if (return_type && matchStay(Type::KEY_VOID))
-            return PrimitiveTypeExpression::of(advance());
+            return PrimitiveTypeExpression::ofTypename(advance());
         return parsePrimitiveTypeExpression();
     }
 
     std::shared_ptr<TypeExpression> Parser::parsePrimitiveTypeExpression() {
-        return PrimitiveTypeExpression::of(expect([] (Type t) {
+        return PrimitiveTypeExpression::ofTypename(expect([] (Type t) {
             return t == Token::Type::KEY_INT || t == Token::Type::KEY_FLT || t == Token::Type::KEY_CHAR || t == Token::Type::KEY_BOOL; },
             "expect a primitive type"));
     }
@@ -222,12 +232,24 @@ namespace drm {
                 return std::find(PRECEDENCES.at(precindex).begin(), PRECEDENCES.at(precindex).end(), t) != PRECEDENCES.at(precindex).end();
             })) {
                 Token op = advance();
-                if (ASSOCIATIVITIES.at(op.type)) { // left-associative
-                    auto rexp = parseBinaryExpression(precindex + 1);
-                    exp = BinaryExpression::of(exp, op, rexp);
+                if (std::find(COMPARATORS.begin(), COMPARATORS.end(), op.type) != COMPARATORS.end()) {
+                    reverse();
+                    std::vector<std::pair<Token, std::shared_ptr<Expression>>> comparisons;
+                    while (matchStay([&precindex] (Type t) {
+                        return std::find(PRECEDENCES.at(precindex).begin(), PRECEDENCES.at(precindex).end(), t) != PRECEDENCES.at(precindex).end();
+                    })) {
+                        Token op = advance();
+                        comparisons.push_back(std::make_pair(op, parseBinaryExpression(precindex + 1)));
+                    }
+                    return ComparisonList::of(exp, comparisons);
                 } else {
-                    auto rexp = parseBinaryExpression(precindex);
-                    return BinaryExpression::of(exp, op, rexp);
+                    if (ASSOCIATIVITIES.at(op.type)) { // left-associative
+                        auto rexp = parseBinaryExpression(precindex + 1);
+                        exp = BinaryExpression::of(exp, op, rexp);
+                    } else {
+                        auto rexp = parseBinaryExpression(precindex);
+                        return BinaryExpression::of(exp, op, rexp);
+                    }
                 }
             }
             return exp;
@@ -236,6 +258,10 @@ namespace drm {
 
     Parser::Type Parser::peek() const {
         return stream.at(index).type;
+    }
+
+    Token Parser::previous() const {
+        return stream.at(index - 1);
     }
 
     Token Parser::next() const {

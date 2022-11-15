@@ -113,25 +113,36 @@
 			\code{*} & Multiplication & 80 & left & \code{int,int -> int}\\
 				&&&& \code{flt,flt -> flt}\\
 			\midrule
-			\code{+} & Addition & 70 & left & \code{int,int -> int}\\
-				&&&& \code{flt,flt -> flt}\\
+			\code{+},\code{-} & Addition & 70 & left & \code{int,int -> int}\\
+				& Subtraction &&& \code{flt,flt -> flt}\\
 				&&&& \code{char,int -> char}\\
 				&&&& \code{int,char -> char}\\
-			\code{-} & Subtraction &&& \code{int,int -> int}\\
-				&&&& \code{flt,flt -> flt}\\
-				&&&& \code{char,int -> char}\\
-				&&&& \code{int,char -> char}\\
+			\midrule
+			\code{<<},\code{>>},\code{>>>} & Left Shift & 60 & left & \code{int,int -> int}\\
+			& Logical Right Shift &&& \\
+			& Arithmetic Right Shift &&& \\
 			\midrule
 			\code{\&} & Bitwise And & 60 & left & \code{int,int -> int}\\
 			\midrule
 			\code{\^} & Bitwise Xor & 50 & left & \code{int,int -> int}\\
 			\midrule
 			\code{|} & Bitwise Or & 40 & left & \code{int,int -> int}\\
+			\midrule
+			\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=} & Comparison & 30 & non-assoc. & \code{[int] -> bool} \\
+				&&&& \code{[flt] -> bool}\\
+			\midrule
+			\code{\&\&} & Logical And & 20 & left & \code{bool,bool -> bool}\\
+			\midrule
+			\code{||} & Logical Or & 10 & left & \code{bool,bool -> bool}
 		\end{tabular}\\
 	
 		Consider the following example:
 		
 		The expression \code{1+18-18+'a'} is well-typed (of type \code{char}) and gets parsed as \code{((1+18)-18)+'a'} and evaluated to \code{'b'}. \code{10 - 0.0} on the other hand is not well-typed as \code{-} cannot take an \code{int} and a \code{flt} operand as arguments.
+		
+		Comparison operators work differently to other (binary) operators: Instead of comparing just two expressions, Dromedar allows chaining expressions to create one final boolean value: For example, \code{1 < 2 != 5 >= 5} holds because every single sub-expression (\code{1 < 2}, \code{2 != 5} and \code{5 >= 5}) holds. Every expression is only evaluated once for its side-effect.
+		
+		Thus, \code{A op B op C} is not necessarily semantically equivalent to \code{A op B \&\& B op C}.
 		
 	\section{Handling Whitespace}
 	
@@ -217,6 +228,15 @@
 				Bitand      ::= /&/
 				Xor         ::= /\^/
 				Bitor       ::= /\|/
+				Logand      ::= /&&/
+				Logor       ::= /\|\|/
+				
+				Equal       ::= /=/
+				NotEqual    ::= /!=/
+				Greater     ::= />/
+				Less        ::= /</
+				GreaterEq   ::= />=/
+				LessEq      ::= /<=/
 				
 				Assign      ::= /:=/
 				
@@ -312,12 +332,21 @@
 			
 				Expression       ::=
 				                 | ExprPrec30
+				
+				ExprPrec20       ::= 
+				                 | ExprPrec30
+				                 | ExprPrec30 %Equal     ExprPrec20
+				                 | ExprPrec30 %NotEqual  ExprPrec20
+				                 | ExprPrec30 %Greater   ExprPrec20
+				                 | ExprPrec30 %Less      ExprPrec20
+				                 | ExprPrec30 %GreaterEq ExprPrec20
+				                 | ExprPrec30 %LessEq    ExprPrec20
 				ExprPrec30       ::=
 				                 | ExprPrec40
-				                 | ExprPrec40 %Bitor ExprPrec40
+				                 | ExprPrec40 %Bitor ExprPrec30
 				ExprPrec40       ::=
 				                 | ExprPrec50
-				                 | ExprPrec50 %Xor ExprPrec60
+				                 | ExprPrec50 %Xor ExprPrec40
 				ExprPrec50       ::=
 				                 | ExprPrec60
 				                 | ExprPrec60 %Bitand ExprPrec50

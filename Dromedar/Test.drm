@@ -1,23 +1,8 @@
 global mut x := 12.9
 
-fn f : arg:int -> void
-    # let x := 9
-    let mut lmao : flt := 'a' ** 'b' << x
-    y := 12 & 9 | 10
-
-    if true
-    elif false
-    else
-        let x := 3
-    
-    while alpha
-        if true
-            x := 12
-        let mut lmao := 8123 ** 2 * 1 + 1
-        do
-            x := 9
-        while false
-    
-    x := '0'
-
-    return
+fn main : args:int -> int
+    let mut y:int := 13
+    while y < 10 < 12 = 8 > y && true || !false
+        let x := 9.2
+        let y := 'a'
+    return y

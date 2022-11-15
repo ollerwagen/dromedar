@@ -5,6 +5,7 @@
 #include "Parser.hpp"
 #include "PrettyPrinter.hpp"
 #include "Token.hpp"
+#include "WellFormedCheck.hpp"
 
 int main() {
 
@@ -26,6 +27,7 @@ int main() {
         stream = lexer.lex(input);
     } catch (drm::LexerError e) {
         std::cerr << "Error at " << e.index << " of length " << e.length << ": " << e.message << std::endl;
+        std::cerr << "Error is at substring '" << input.substr(e.index, e.length) << "'" << std::endl;
         return 1;
     }
 
@@ -38,13 +40,25 @@ int main() {
 
     drm::PrettyPrinter printer;
 
+    drm::Program prog;
+
     try {
-        auto prog = parser.parse();
+        prog = parser.parse();
         std::cout << printer.visitProgram(prog) << std::endl;
     } catch (const drm::ParserError &e) {
         std::cerr << "Error of " << static_cast<std::string>(e.token) << ": " << e.message << std::endl;
         return 1;
     }
+
+    drm::WellFormedCheck checker;
+    try {
+        checker.visitProgram(prog);
+    } catch (const drm::BadlyFormedError &e) {
+        std::cerr << "Error of " << static_cast<std::string>(e.token) << ": " << e.message << std::endl;
+        return 1;
+    }
+
+    std::cout << "Program is well-formed" << std::endl;
 
     return 0;
 }

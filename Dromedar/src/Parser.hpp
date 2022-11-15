@@ -20,6 +20,7 @@ namespace drm {
 
         static const std::vector<std::vector<Type>> PRECEDENCES;
         static const std::unordered_map<Type, bool> ASSOCIATIVITIES;
+        static const std::vector<Type> COMPARATORS;
 
     private:
 
@@ -31,6 +32,7 @@ namespace drm {
     private:
 
         Type peek() const;
+        Token previous() const;
         Token next() const;
         Token advance();
         void reverse();

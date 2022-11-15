@@ -73,12 +73,12 @@ namespace drm {
         }
 
         std::string visitPrimitiveTypeExpression(const PrimitiveTypeExpression *expr) override {
-            switch (expr->primitive.type) {
-                case Token::Type::KEY_INT:  return "int";
-                case Token::Type::KEY_FLT:  return "flt";
-                case Token::Type::KEY_CHAR: return "char";
-                case Token::Type::KEY_BOOL: return "bool";
-                case Token::Type::KEY_VOID: return "void";
+            switch (expr->type) {
+                case PrimitiveTypeExpression::PType::INT:  return "int";
+                case PrimitiveTypeExpression::PType::FLT:  return "flt";
+                case PrimitiveTypeExpression::PType::CHAR: return "char";
+                case PrimitiveTypeExpression::PType::BOOL: return "bool";
+                case PrimitiveTypeExpression::PType::VOID: return "void";
                 default:                    return "<not well-formed>"; // never reached in well-formed AST
             }
         }
@@ -161,10 +161,11 @@ namespace drm {
 
         std::string visitExpression(const Expression *expr) override {
             switch (expr->getType()) {
-                case Expression::Type::LITERAL: return visitLiteralExpression(static_cast<const LiteralExpression*>(expr));
-                case Expression::Type::UNARY:   return visitUnaryExpression(static_cast<const UnaryExpression*>(expr));
-                case Expression::Type::BINARY:  return visitBinaryExpression(static_cast<const BinaryExpression*>(expr));
-                default:                              return "<match fail>";
+                case Expression::Type::LITERAL:  return visitLiteralExpression(static_cast<const LiteralExpression*>(expr));
+                case Expression::Type::UNARY:    return visitUnaryExpression(static_cast<const UnaryExpression*>(expr));
+                case Expression::Type::BINARY:   return visitBinaryExpression(static_cast<const BinaryExpression*>(expr));
+                case Expression::Type::COMPLIST: return visitComparisonList(static_cast<const ComparisonList*>(expr));
+                default:                         return "<match fail>";
             }
         }
 
@@ -178,6 +179,15 @@ namespace drm {
 
         std::string visitBinaryExpression(const BinaryExpression *expr) override {
             return "(" + visitExpression(expr->lexp.get()) + expr->op.lexeme + visitExpression(expr->rexp.get()) + ")";
+        }
+
+        std::string visitComparisonList(const ComparisonList *expr) override {
+            std::stringstream stream;
+            stream << "(" << visitExpression(expr->first.get());
+            for (const auto &u : expr->comparisons)
+                stream << u.first.lexeme << visitExpression(u.second.get());
+            stream << ")";
+            return stream.str();
         }
 
     }; // class PrettyPrinter
