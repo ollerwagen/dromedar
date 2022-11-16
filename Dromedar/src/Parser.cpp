@@ -209,7 +209,23 @@ namespace drm {
                                                   t == Type::LITERAL_BOOL ||
                                                   t == Type::IDENTIFIER; },
                                                   "expected a literal or variable name");
-            return LiteralExpression::of(t);
+            if (matchStay([] (Type t) { return t == Type::LPAREN; })) {
+                return parseApplicationExpression(LiteralExpression::of(t));
+            } else {
+                return LiteralExpression::of(t);
+            }
+        }
+    }
+
+    std::shared_ptr<Expression> Parser::parseApplicationExpression(const std::shared_ptr<Expression> &lhs) {
+        if (matchStay(Type::LPAREN)) {
+            Token lparen = advance();
+            std::vector<std::shared_ptr<Expression>> args;
+            while (!match(Type::RPAREN))
+                args.push_back(parseExpression());
+            return FunctionExpression::of(lhs, lparen, args);
+        } else {
+            throw ParserError(advance(), "unexpected token in application expression");
         }
     }
 

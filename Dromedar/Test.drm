@@ -5,4 +5,5 @@ fn main : args:int -> int
     while y < 10 < 12 = 8 > y && true || !false
         let x := 9.2
         let y := 'a'
+    y := main(y)
     return y

@@ -30,10 +30,6 @@ namespace drm {
 
     private:
 
-        using FunctionType = std::pair<std::vector<std::shared_ptr<TypeExpression>>, std::shared_ptr<TypeExpression>>;
-
-    private:
-
         const std::unordered_map<Token::Type, std::vector<std::pair<std::shared_ptr<TypeExpression>, std::shared_ptr<TypeExpression>>>> UNARIES = {
             { Token::Type::DASH, {
                 { PrimitiveTypeExpression::MAKE_INT(), PrimitiveTypeExpression::MAKE_INT() },
@@ -113,8 +109,6 @@ namespace drm {
         private:
 
             std::vector<std::unordered_map<std::string, std::pair<bool, std::shared_ptr<TypeExpression>>>> data;
-
-            std::unordered_map<std::string, FunctionType> functions;
         
         public:
 
@@ -126,8 +120,6 @@ namespace drm {
                     if (u.find(name) != u.end())
                         return true;
                 }
-                if (functions.find(name) != functions.end())
-                    return true;
                 return false;
             }
 
@@ -143,23 +135,16 @@ namespace drm {
                 throw std::runtime_error("variable name not bound in context");
             }
 
-            inline const FunctionType& getFunction(const std::string &name) {
-                if (functions.find(name) == functions.end())
-                    throw std::runtime_error("function name not bound in context");
-                return functions.at(name);
-            }
-
             inline void declare(const std::string &name, bool mut, const std::shared_ptr<TypeExpression> &t) {
                 data.back()[name] = { mut, t };
-            }
-
-            inline void declare(const std::string &name, FunctionType &ftype) {
-                functions[name] = ftype;
             }
         };
 
         Context context;
-        std::string current_function;
+
+        std::shared_ptr<FunctionTypeExpression> current_function;
+        std::string current_function_name;
+        bool know_full_function_type;
 
         PrettyPrinter printer;
 
@@ -168,11 +153,13 @@ namespace drm {
         void visitTypeExpression(const TypeExpression *expr) override {
             switch (expr->getType()) {
                 case TypeExpression::Type::PRIMITIVE: visitPrimitiveTypeExpression(static_cast<const PrimitiveTypeExpression*>(expr)); break;
+                case TypeExpression::Type::FUNCTION:  visitFunctionTypeExpression(static_cast<const FunctionTypeExpression*>(expr));   break;
                 default:                              throw std::runtime_error("not well-formed AST");
             }
         }
 
         void visitPrimitiveTypeExpression(__attribute__((unused)) const PrimitiveTypeExpression *expr) override {}
+        void visitFunctionTypeExpression(__attribute__((unused)) const FunctionTypeExpression *expr) override {}
 
         std::shared_ptr<TypeExpression> visitLHS(const LHS *lhs) override {
             switch (lhs->getType()) {
@@ -183,7 +170,7 @@ namespace drm {
 
         std::shared_ptr<TypeExpression> visitVariableLHS(const VariableLHS *lhs) override {
             if (!context.contains(lhs->id.lexeme))
-                throw BadlyFormedError(lhs->id, "cannot assign a value to an undeclared variable");
+                throw BadlyFormedError(lhs->id, "cannot access an undeclared name");
             auto res = context.getVariable(lhs->id.lexeme);
             if (!res.first)
                 throw BadlyFormedError(lhs->id, "constant cannot be a left-hand side expression");
@@ -193,6 +180,7 @@ namespace drm {
         std::shared_ptr<TypeExpression> visitExpression(const Expression *expr) override {
             switch (expr->getType()) {
                 case Expression::Type::LITERAL:  return visitLiteralExpression(static_cast<const LiteralExpression*>(expr));
+                case Expression::Type::FUNCTION: return visitFunctionExpression(static_cast<const FunctionExpression*>(expr));
                 case Expression::Type::UNARY:    return visitUnaryExpression(static_cast<const UnaryExpression*>(expr));
                 case Expression::Type::BINARY:   return visitBinaryExpression(static_cast<const BinaryExpression*>(expr));
                 case Expression::Type::COMPLIST: return visitComparisonList(static_cast<const ComparisonList*>(expr));
@@ -213,6 +201,20 @@ namespace drm {
                 default:
                     throw std::runtime_error("not well-formed AST");
             }
+        }
+
+        std::shared_ptr<TypeExpression> visitFunctionExpression(const FunctionExpression *expr) override {
+            std::shared_ptr<TypeExpression> f = visitExpression(expr->function.get());
+            if (f->getType() != TypeExpression::Type::FUNCTION)
+                throw BadlyFormedError(expr->lparen, "can only apply to a function type");
+            std::shared_ptr<FunctionTypeExpression> ft = std::static_pointer_cast<FunctionTypeExpression>(f);
+            if (ft->args.size() != expr->arguments.size())
+                throw BadlyFormedError(expr->lparen, "function argument list must match definition list in length and types");
+            for (std::size_t i = 0; i < ft->args.size(); i++) {
+                if (!ft->args.at(i)->equal(visitExpression(expr->arguments.at(i).get())))
+                    throw BadlyFormedError(expr->lparen, "function argument list must match definition list in length and types");
+            }
+            return ft->rettype;
         }
 
         std::shared_ptr<TypeExpression> visitUnaryExpression(const UnaryExpression *expr) override {
@@ -308,12 +310,21 @@ namespace drm {
         }
 
         void visitReturnStatement(const ReturnStatement *stmt) override {
-            if (stmt->withVal) {
-                if (!visitExpression(stmt->expr.get())->equal(context.getFunction(current_function).second))
-                    throw BadlyFormedError(stmt->key, "return expression doesn't match function return type");
+            if (know_full_function_type) {
+                if (stmt->withVal) {
+                    if (!visitExpression(stmt->expr.get())->equal(current_function->rettype))
+                        throw BadlyFormedError(stmt->key, "return expression doesn't match function return type");
+                } else {
+                    if (!current_function->rettype->equal(PrimitiveTypeExpression::MAKE_VOID()))
+                        throw BadlyFormedError(stmt->key, "have to return an expression in non-void function");
+                }
             } else {
-                if (!context.getFunction(current_function).second->equal(PrimitiveTypeExpression::MAKE_VOID()))
-                    throw BadlyFormedError(stmt->key, "have to return an expression in non-void function");
+                know_full_function_type = true;
+                if (stmt->withVal) {
+                    current_function->rettype = visitExpression(stmt->expr.get());
+                } else {
+                    current_function->rettype = PrimitiveTypeExpression::MAKE_VOID();
+                }
             }
         }
 
@@ -348,20 +359,19 @@ namespace drm {
         }
 
         void visitGFDecl(const GFDeclStatement *stmt) override {
-            current_function = stmt->id;
-            
-            FunctionType ftype = { {}, stmt->rettype };
+            current_function_name = stmt->id.lexeme;
+            know_full_function_type = true;
+
+            current_function = std::make_shared<FunctionTypeExpression>(std::vector<std::shared_ptr<TypeExpression>>(), stmt->rettype);
+
+            for (const auto &u : stmt->args)
+                current_function->args.push_back(u.second);
+            context.declare(current_function_name, false, std::static_pointer_cast<TypeExpression>(current_function));
 
             context.push();
-            for (const auto &u : stmt->args) {
+            for (const auto &u : stmt->args)
                 context.declare(u.first.lexeme, true, u.second);
-                ftype.first.push_back(u.second);
-            }
-
-            context.declare(current_function, ftype);
-
             visitBlock(stmt->body);
-
             context.pop();
         }
 

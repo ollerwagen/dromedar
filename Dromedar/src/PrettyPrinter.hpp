@@ -68,6 +68,7 @@ namespace drm {
         std::string visitTypeExpression(const TypeExpression *expr) override {
             switch (expr->getType()) {
                 case TypeExpression::Type::PRIMITIVE: return visitPrimitiveTypeExpression(static_cast<const PrimitiveTypeExpression*>(expr));
+                case TypeExpression::Type::FUNCTION:  return visitFunctionTypeExpression(static_cast<const FunctionTypeExpression*>(expr));
                 default:                              return "<match fail>"; // never reached if all types are matched
             }
         }
@@ -81,6 +82,18 @@ namespace drm {
                 case PrimitiveTypeExpression::PType::VOID: return "void";
                 default:                    return "<not well-formed>"; // never reached in well-formed AST
             }
+        }
+
+        std::string visitFunctionTypeExpression(const FunctionTypeExpression *expr) override {
+            std::stringstream stream;
+            for (std::ptrdiff_t i = 0; i < expr->args.size() - 1; i++)
+                stream << visitTypeExpression(expr->args.at(i).get()) << ", ";
+            if (!expr->args.empty())
+                stream << visitTypeExpression(expr->args.back().get());
+            else
+                stream << "void";
+            stream << " -> " << visitTypeExpression(expr->rettype.get());
+            return stream.str();
         }
 
         std::string visitBlock(const Block &block) override {
@@ -162,6 +175,7 @@ namespace drm {
         std::string visitExpression(const Expression *expr) override {
             switch (expr->getType()) {
                 case Expression::Type::LITERAL:  return visitLiteralExpression(static_cast<const LiteralExpression*>(expr));
+                case Expression::Type::FUNCTION: return visitFunctionExpression(static_cast<const FunctionExpression*>(expr));
                 case Expression::Type::UNARY:    return visitUnaryExpression(static_cast<const UnaryExpression*>(expr));
                 case Expression::Type::BINARY:   return visitBinaryExpression(static_cast<const BinaryExpression*>(expr));
                 case Expression::Type::COMPLIST: return visitComparisonList(static_cast<const ComparisonList*>(expr));
@@ -171,6 +185,17 @@ namespace drm {
 
         std::string visitLiteralExpression(const LiteralExpression *expr) override {
             return "(" + expr->lit.lexeme + ")";
+        }
+
+        std::string visitFunctionExpression(const FunctionExpression *expr) override {
+            std::stringstream stream;
+            stream << "(" << visitExpression(expr->function.get()) << "(";
+            for (std::ptrdiff_t i = 0; i < expr->arguments.size() - 1; i++)
+                stream << visitExpression(expr->arguments.at(i).get()) << ", ";
+            if (!expr->arguments.empty())
+                stream << visitExpression(expr->arguments.back().get());
+            stream << "))";
+            return stream.str();
         }
 
         std::string visitUnaryExpression(const UnaryExpression *expr) override {

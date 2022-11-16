@@ -72,6 +72,7 @@ namespace drm {
         std::shared_ptr<Expression> parseExpression();
 
         std::shared_ptr<Expression> parseSimpleExpression();
+        std::shared_ptr<Expression> parseApplicationExpression(const std::shared_ptr<Expression> &lhs);
         std::shared_ptr<Expression> parseUnaryExpression();
         std::shared_ptr<Expression> parseBinaryExpression(const std::size_t precindex);
 

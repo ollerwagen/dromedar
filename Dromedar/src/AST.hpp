@@ -14,6 +14,7 @@
 namespace drm {
 
     struct PrimitiveTypeExpression;
+    struct FunctionTypeExpression;
 
     struct TypeExpression {
         
@@ -21,6 +22,7 @@ namespace drm {
 
         enum Type {
             PRIMITIVE,
+            FUNCTION
         };
         virtual Type getType() const = 0;
 
@@ -29,6 +31,7 @@ namespace drm {
         public:
             virtual T visitTypeExpression(const TypeExpression *expr);
             virtual T visitPrimitiveTypeExpression(const PrimitiveTypeExpression *expr);
+            virtual T visitFunctionTypeExpression(const FunctionTypeExpression *expr);
         };
 
         virtual bool equal(const std::shared_ptr<TypeExpression> &t) = 0;
@@ -79,6 +82,35 @@ namespace drm {
         inline static std::shared_ptr<TypeExpression> MAKE_VOID() { return ofTypename(Token::Type::KEY_VOID); }
     };
 
+    struct FunctionTypeExpression : public TypeExpression {
+
+        std::vector<std::shared_ptr<TypeExpression>> args;
+        std::shared_ptr<TypeExpression> rettype;
+
+        inline FunctionTypeExpression(const std::vector<std::shared_ptr<TypeExpression>> &a, const std::shared_ptr<TypeExpression> &r) { args = a; rettype = r; }
+        ~FunctionTypeExpression() {}
+
+        Type getType() const override { return FUNCTION; }
+
+        bool equal(const std::shared_ptr<TypeExpression> &t) override {
+            if (getType() != t->getType())
+                return false;
+            std::shared_ptr<FunctionTypeExpression> ft = std::static_pointer_cast<FunctionTypeExpression>(t);
+            if (args.size() != ft->args.size())
+                return false;
+            for (std::size_t i = 0; i < args.size(); i++)
+                if (!args.at(i)->equal(ft->args.at(i)))
+                    return false;
+            if (!rettype->equal(ft->rettype))
+                return false;
+            return true;
+        }
+
+        inline static std::shared_ptr<TypeExpression> of(const std::vector<std::shared_ptr<TypeExpression>> &a, const std::shared_ptr<TypeExpression> &r) {
+            return std::static_pointer_cast<TypeExpression>(std::make_shared<FunctionTypeExpression>(a, r));
+        }
+    };
+
     struct VariableLHS;
 
     struct LHS {
@@ -113,6 +145,7 @@ namespace drm {
     };
 
     struct LiteralExpression;
+    struct FunctionExpression;
     struct UnaryExpression;
     struct BinaryExpression;
     struct ComparisonList;
@@ -124,6 +157,7 @@ namespace drm {
 
         enum Type {
             LITERAL,
+            FUNCTION,
             UNARY,
             BINARY,
             COMPLIST
@@ -135,6 +169,7 @@ namespace drm {
         public:
             virtual T visitExpression(const Expression *expr);
             virtual T visitLiteralExpression(const LiteralExpression *expr);
+            virtual T visitFunctionExpression(const FunctionExpression *expr);
             virtual T visitUnaryExpression(const UnaryExpression *expr);
             virtual T visitBinaryExpression(const BinaryExpression *expr);
             virtual T visitComparisonList(const ComparisonList *expr);
@@ -152,6 +187,22 @@ namespace drm {
 
         inline static std::shared_ptr<Expression> of(const Token &lit) {
             return std::static_pointer_cast<Expression>(std::make_shared<LiteralExpression>(lit));
+        }
+    };
+
+    struct FunctionExpression : public Expression {
+
+        std::shared_ptr<Expression> function;
+        Token lparen;
+        std::vector<std::shared_ptr<Expression>> arguments;
+
+        inline FunctionExpression(const std::shared_ptr<Expression> &f, const Token &t, const std::vector<std::shared_ptr<Expression>> &a) { function = f; lparen = t; arguments = a; }
+        ~FunctionExpression() {}
+
+        Type getType() const override { return FUNCTION; }
+
+        inline static std::shared_ptr<Expression> of(const std::shared_ptr<Expression> &f, const Token &t, const std::vector<std::shared_ptr<Expression>> &a) {
+            return std::static_pointer_cast<Expression>(std::make_shared<FunctionExpression>(f, t, a));
         }
     };
 
