@@ -31,6 +31,8 @@ namespace drm {
 
     private:
 
+        std::size_t getIndex() const;
+        std::size_t getLength(std::size_t start) const;
         Type peek() const;
         Token previous() const;
         Token next() const;
@@ -50,31 +52,29 @@ namespace drm {
 
         Program parseProgram(void);
 
-        std::shared_ptr<GlobalStatement> parseGlobalStatement(void);
+        GStmtPtr parseGlobalStatement(void);
 
-        std::shared_ptr<GlobalStatement> parseGlobalDeclaration(void);
-        std::shared_ptr<GlobalStatement> parseGlobalFunctionDefinition(void);
+        GStmtPtr parseGlobalDeclaration(void);
+        GStmtPtr parseGlobalFunctionDefinition(void);
 
-        std::shared_ptr<Statement> parseStatement(void);
+        StmtPtr parseStatement(void);
 
-        std::shared_ptr<Statement> parseVarDeclaration(void);
-        std::shared_ptr<Statement> parseAssignStatement(void);
-        std::shared_ptr<Statement> parseIfStatement(Type t = Type::KEY_IF);
-        std::shared_ptr<Statement> parseWhileStatement(void);
-        std::shared_ptr<Statement> parseDoWhileStatement(void);
-        std::shared_ptr<Statement> parseReturnStatement(void);
+        StmtPtr parseVarDeclaration(void);
+        StmtPtr parseAssignOrExpressionStatement(void);
+        StmtPtr parseIfStatement(Type t = Type::KEY_IF);
+        StmtPtr parseWhileStatement(void);
+        StmtPtr parseDoWhileStatement(void);
+        StmtPtr parseReturnStatement(void);
 
-        std::shared_ptr<LHS> parseLHS(void);
+        TypePtr parseTypeExpression(bool return_type);
+        TypePtr parsePrimitiveTypeExpression(void);
 
-        std::shared_ptr<TypeExpression> parseTypeExpression(bool return_type);
-        std::shared_ptr<TypeExpression> parsePrimitiveTypeExpression(void);
+        ExprPtr parseExpression();
 
-        std::shared_ptr<Expression> parseExpression();
-
-        std::shared_ptr<Expression> parseSimpleExpression();
-        std::shared_ptr<Expression> parseApplicationExpression(const std::shared_ptr<Expression> &lhs);
-        std::shared_ptr<Expression> parseUnaryExpression();
-        std::shared_ptr<Expression> parseBinaryExpression(const std::size_t precindex);
+        ExprPtr parseSimpleExpression();
+        ExprPtr parseApplicationExpression(const ExprPtr &lhs);
+        ExprPtr parseUnaryExpression();
+        ExprPtr parseBinaryExpression(const std::size_t precindex);
 
         Block parseBlock(void);
 

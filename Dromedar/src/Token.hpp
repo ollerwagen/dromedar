@@ -131,13 +131,12 @@ namespace drm {
             stream << "[" << TYPES.at(type);
             switch (type) {
                 case LITERAL_INT: case LITERAL_FLT: case LITERAL_CHAR: case LITERAL_BOOL:
-                case IDENTIFIER:
-                case WHITESPACE:
+                case IDENTIFIER: case WHITESPACE:
                     stream << " " << l; break;
                 default:
                     break;
             }
-            stream << "]";
+            stream << " (" << start << ":" << length << ")]";
             return stream.str();
         }
 

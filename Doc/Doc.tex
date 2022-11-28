@@ -162,7 +162,7 @@
   global x := 3 		# baseline indentation of two spaces
 						# empty line -> indentation doesn't matter
   fn main : args:[string] -> int
-  			Stdio.println "Hello, World!"	# deeper indentation level
+  			Stdio.println("Hello, World!")	# deeper indentation level
   			return 0						# same indentation level
 		\end{lstlisting}
 		
@@ -184,6 +184,12 @@
 		\subsection{Global Declarations}
 		
 			Global variables are all assigned a value at the point of their declaration. This value is evaluated statically -- declaration expressions can only contain literals and global variables that were already declared previously.
+			
+	\section{Bytecode}
+	
+		Dromedar can be translated to bytecode for a stack-based virtual machine. It features the following instruction set:
+		
+		
 		
 	\section{Formal Grammar}
 	
@@ -263,10 +269,7 @@
 				                 | GFDeclaration
 				                 
 				GVDeclaration    ::=
-				                 | %Global      %Identifier             %Assign GlobalExpression
-				                 | %Global %Mut %Identifier             %Assign GlobalExpression
-				                 | %Global      %Identifier %Colon Type %Assign GlobalExpression
-				                 | %Global %Mut %Identifier %Colon Type %Assign GlobalExpression
+				                 | %Global %Identifier %Assign GlobalExpression
 				                 
 				GFDeclaration    ::=
 				                 | %Fn %Identifier                   %Arrow ReturnType Block
@@ -290,13 +293,11 @@
 				                 | IfStmt
 				                 | WhileStmt
 				                 | DoWhileStmt
+				                 | ExprStmt
 				                 | ReturnStmt
 				                 
 				VDeclaration     ::=
-				                 | %Let      %Identifier             %Assign Expression
-				                 | %Let %Mut %Identifier             %Assign Expression
-				                 | %Let      %Identifier %Colon Type %Assign Expression
-				                 | %Let %Mut %Identifier %Colon Type %Assign Expression
+				                 | %Let %Identifier %Assign Expression
 				                 
 				AssignStmt       ::=
 				                 | LHS %Assign Expression
@@ -314,6 +315,10 @@
 				
 				DoWhileStmt      ::=
 				                 | %Do Block %While Expression
+				                 
+				ExprStmt         ::=
+				                 | Expression
+				                 | Expression %Colon FArgs
 				                 
 				ReturnStmt       ::=
 				                 | %Return
@@ -376,6 +381,17 @@
 				                 | %LiteralChar
 				                 | %LiteralBool
 				                 | %Identifier
+				                 | %Identifier Application
+				                 
+				Application      ::=
+				                 | %LParen FArgs %RParen
+				
+				FArgs            ::=
+				                 | €
+				                 | NonEmptyFArgs
+				NonEmptyFArgs    ::=
+				                 | Expression
+				                 | Expression %Comma NonEmptyFArgs
 			\end{verbatim}
 	
 \end{document}

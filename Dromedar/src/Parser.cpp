@@ -49,7 +49,7 @@ namespace drm {
         return res;
     }
 
-    std::shared_ptr<GlobalStatement> Parser::parseGlobalStatement() {
+    GStmtPtr Parser::parseGlobalStatement() {
         expectIndent();
         switch (peek()) {
             case Type::KEY_GLOBAL: return parseGlobalDeclaration();
@@ -58,40 +58,36 @@ namespace drm {
         }
     }
 
-    std::shared_ptr<GlobalStatement> Parser::parseGlobalDeclaration() {
+    GStmtPtr Parser::parseGlobalDeclaration() {
+        std::size_t start = getIndex();
+
         expect(Type::KEY_GLOBAL, "global variable declaration must start with keyword 'global'");
-        bool mut = match(Type::KEY_MUT);
         Token id = expect(Type::IDENTIFIER, "expect global variable name");
-        if (match(Type::COLON)) {
-            std::shared_ptr<TypeExpression> type = parseTypeExpression(false);
-            expect(Type::ASSIGN, "global variable must be assigned a value");
-            std::shared_ptr<Expression> expr = parseExpression();
-            return GTypeVarDeclStatement::of(id, mut, type, expr);
-        } else {
-            expect(Type::ASSIGN, "global variable must be assigned a value");
-            std::shared_ptr<Expression> expr = parseExpression();
-            return GVarDeclStatement::of(id, mut, expr);
-        }
+        expect(Type::ASSIGN, "global variable must be assigned a value");
+        ExprPtr expr = parseExpression();
+        return gstmt::VDecl::of(start, getLength(start), id.lexeme, expr);
     }
 
-    std::shared_ptr<GlobalStatement> Parser::parseGlobalFunctionDefinition() {
+    GStmtPtr Parser::parseGlobalFunctionDefinition() {
+        std::size_t start = getIndex();
+
         expect(Type::KEY_FN, "global function definition must start with keyword 'fn'");
         Token id = expect(Type::IDENTIFIER, "expect function name");
-        std::vector<std::pair<Token, std::shared_ptr<TypeExpression>>> args;
+        std::vector<std::pair<std::string, TypePtr>> args;
         if (!match(Type::ARROW)) {
             expect(Type::COLON, "function argument list must start with a colon");
             do {
                 Token name = expect(Type::IDENTIFIER, "function argument must have a name");
                 expect(Type::COLON, "argument name and type are separated by a colon");
-                std::shared_ptr<TypeExpression> type = parseTypeExpression(false);
+                TypePtr type = parseTypeExpression(false);
                 if (peek() != Type::ARROW)
                     expect(Type::COMMA, "commas must separate function arguments");
                 args.push_back(std::make_pair(name, type));
             } while (!match(Type::ARROW));
         }
-        std::shared_ptr<TypeExpression> rettype = parseTypeExpression(true);
+        TypePtr rettype = parseTypeExpression(true);
         Block block = parseBlock();
-        return GFDeclStatement::of(id, args, rettype, block);
+        return gstmt::FDecl::of(start, getLength(start), id.lexeme, rettype, args, block);
     }
 
     Block Parser::parseBlock() {
@@ -103,7 +99,7 @@ namespace drm {
         return res;
     }
 
-    std::shared_ptr<Statement> Parser::parseStatement() {
+    StmtPtr Parser::parseStatement() {
         expectIndent();
         switch (peek()) {
             case Type::KEY_LET:    return parseVarDeclaration();
@@ -111,97 +107,116 @@ namespace drm {
             case Type::KEY_WHILE:  return parseWhileStatement();
             case Type::KEY_DO:     return parseDoWhileStatement();
             case Type::KEY_RETURN: return parseReturnStatement();
-            default:               return parseAssignStatement();
+            default:               return parseAssignOrExpressionStatement();
         }
     }
 
-    std::shared_ptr<Statement> Parser::parseVarDeclaration() {
+    StmtPtr Parser::parseVarDeclaration() {
+        std::size_t start = getIndex();
+
         expect(Type::KEY_LET, "local declaration must start with keyword 'let'");
-        bool mut = match(Type::KEY_MUT);
         Token id = expect(Type::IDENTIFIER, "expect variable name");
-        if (match(Type::COLON)) {
-            std::shared_ptr<TypeExpression> type = parseTypeExpression(false);
-            expect(Type::ASSIGN, "local variable must be assigned a value");
-            std::shared_ptr<Expression> expr = parseExpression();
-            return TypeVarDeclStatement::of(id, mut, type, expr);
+        expect(Type::ASSIGN, "local variable must be assigned a value");
+        ExprPtr expr = parseExpression();
+        return stmt::VDecl::of(start, getLength(start), id.lexeme, expr);
+    }
+
+    StmtPtr Parser::parseAssignOrExpressionStatement() {
+        std::size_t start = getIndex();
+
+        ExprPtr lhs = parseExpression(); // LHS is a subset of EXPR
+        
+        if (match(Type::ASSIGN)) {
+            Token op = expect(Type::ASSIGN, "assignment must use ':=' operator");
+            ExprPtr expr = parseExpression();
+            return stmt::Assn::of(start, getLength(start), lhs, expr);
         } else {
-            expect(Type::ASSIGN, "local variable must be assigned a value");
-            std::shared_ptr<Expression> expr = parseExpression();
-            return VarDeclStatement::of(id, mut, expr);
+            if (matchStay(Type::COLON)) { // special function application type
+                Token colon = advance();
+                std::vector<ExprPtr> args = { parseExpression() };
+                while (match(Type::COMMA))
+                    args.push_back(parseExpression());
+                lhs = expr::Func::of(start, getLength(start), lhs, args);
+            }
+            return stmt::Expr::of(start, getLength(start), lhs);
         }
     }
 
-    std::shared_ptr<Statement> Parser::parseAssignStatement() {
-        std::shared_ptr<LHS> lhs = parseLHS();
-        Token op = expect(Type::ASSIGN, "assignment must use ':=' operator");
-        std::shared_ptr<Expression> expr = parseExpression();
-        return AssignStatement::of(lhs, op, expr);
-    }
+    StmtPtr Parser::parseIfStatement(Type t) {
+        std::size_t start = getIndex();
 
-    std::shared_ptr<Statement> Parser::parseIfStatement(Type t) {
         Token key = expect(t, "if statement must start with keyword 'if'");
-        std::shared_ptr<Expression> condition = parseExpression();
+        ExprPtr condition = parseExpression();
         Block taken = parseBlock();
         if (matchIndentAnd(Type::KEY_ELIF)) {
             reverse();
-            return IfStatement::of(key, condition, taken, { parseIfStatement(Type::KEY_ELIF) });
+            return stmt::If::of(start, getLength(start), condition, taken, { parseIfStatement(Type::KEY_ELIF) });
         } else if (matchIndentAnd(Type::KEY_ELSE)) {
-            return IfStatement::of(key, condition, taken, parseBlock());
+            return stmt::If::of(start, getLength(start), condition, taken, parseBlock());
         } else {
-            return IfStatement::of(key, condition, taken, {});
+            return stmt::If::of(start, getLength(start), condition, taken, {});
         }
     }
 
-    std::shared_ptr<Statement> Parser::parseWhileStatement() {
+    StmtPtr Parser::parseWhileStatement() {
+        std::size_t start = getIndex();
+
         Token key = expect(Type::KEY_WHILE, "while statement must start with keyword 'while'");
-        std::shared_ptr<Expression> condition = parseExpression();
+        ExprPtr condition = parseExpression();
         Block body = parseBlock();
-        return WhileStatement::of(key, condition, body);
+        return stmt::While::of(start, getLength(start), condition, body);
     }
 
-    std::shared_ptr<Statement> Parser::parseDoWhileStatement() {
+    StmtPtr Parser::parseDoWhileStatement() {
+        std::size_t start = getIndex();
+
         expect(Type::KEY_DO, "do-while statement must start with keyword 'do'");
         Block body = parseBlock();
         if (!matchIndentAnd(Type::KEY_WHILE))
             throw ParserError(advance(), "do-while statement must end with <while %expr>");
         Token key = previous();
-        std::shared_ptr<Expression> condition = parseExpression();
-        return DoWhileStatement::of(condition, body, key);
+        ExprPtr condition = parseExpression();
+        return stmt::DoWhile::of(start, getLength(start), condition, body);
     }
 
-    std::shared_ptr<Statement> Parser::parseReturnStatement() {
+    StmtPtr Parser::parseReturnStatement() {
+        std::size_t start = getIndex();
+
         Token key = expect(Type::KEY_RETURN, "return statement must start with keyword 'start'");
         if (peek() == Type::$ || peek() == Type::WHITESPACE)
-            return ReturnStatement::of(key);
+            return stmt::Return::of(start, getLength(start));
         else
-            return ReturnStatement::of(key, parseExpression());
+            return stmt::Return::of(start, getLength(start), parseExpression());
     }
 
-    std::shared_ptr<LHS> Parser::parseLHS() {
-        return VariableLHS::of(expect(Type::IDENTIFIER, "left-hand side of assignment must be a name"));
-    }
+    TypePtr Parser::parseTypeExpression(bool return_type) {
+        std::size_t start = getIndex();
 
-    std::shared_ptr<TypeExpression> Parser::parseTypeExpression(bool return_type) {
         if (return_type && matchStay(Type::KEY_VOID))
-            return PrimitiveTypeExpression::ofTypename(advance());
+            return type::Prim::of(start, getLength(start), advance().type);
         return parsePrimitiveTypeExpression();
     }
 
-    std::shared_ptr<TypeExpression> Parser::parsePrimitiveTypeExpression() {
-        return PrimitiveTypeExpression::ofTypename(expect([] (Type t) {
-            return t == Token::Type::KEY_INT || t == Token::Type::KEY_FLT || t == Token::Type::KEY_CHAR || t == Token::Type::KEY_BOOL; },
-            "expect a primitive type"));
+    TypePtr Parser::parsePrimitiveTypeExpression() {
+        std::size_t start = getIndex();
+
+        return type::Prim::of(start, getLength(start),
+            expect([] (Type t) {
+                return t == Token::Type::KEY_INT || t == Token::Type::KEY_FLT || t == Token::Type::KEY_CHAR || t == Token::Type::KEY_BOOL; },
+                "expect a primitive type").type);
     }
 
-    std::shared_ptr<Expression> Parser::parseExpression() {
+    ExprPtr Parser::parseExpression() {
         return parseBinaryExpression(0);
     }
 
-    std::shared_ptr<Expression> Parser::parseSimpleExpression() {
+    ExprPtr Parser::parseSimpleExpression() {
+        std::size_t start = getIndex();
+
+        ExprPtr expr;
         if (match(Type::LPAREN)) {
-            auto exp = parseExpression();
+            expr = parseExpression();
             expect(Type::RPAREN, "expected ')'");
-            return exp;
         } else {
             Token t = expect([] (Type t) { return t == Type::LITERAL_INT  ||
                                                   t == Type::LITERAL_FLT  ||
@@ -209,37 +224,44 @@ namespace drm {
                                                   t == Type::LITERAL_BOOL ||
                                                   t == Type::IDENTIFIER; },
                                                   "expected a literal or variable name");
-            if (matchStay([] (Type t) { return t == Type::LPAREN; })) {
-                return parseApplicationExpression(LiteralExpression::of(t));
-            } else {
-                return LiteralExpression::of(t);
-            }
+            expr = expr::Lit::of(start, getLength(start), t.l);
         }
-    }
 
-    std::shared_ptr<Expression> Parser::parseApplicationExpression(const std::shared_ptr<Expression> &lhs) {
+        if (matchStay([] (Type t) { return t == Type::LPAREN; }))
+            return parseApplicationExpression(expr);
+        else
+            return expr;
+      }
+
+    ExprPtr Parser::parseApplicationExpression(const ExprPtr &lhs) {
+        std::size_t start = getIndex();
+
         if (matchStay(Type::LPAREN)) {
             Token lparen = advance();
-            std::vector<std::shared_ptr<Expression>> args;
+            std::vector<ExprPtr> args;
             while (!match(Type::RPAREN))
                 args.push_back(parseExpression());
-            return FunctionExpression::of(lhs, lparen, args);
+            return expr::Func::of(start, getLength(start), lhs, args);
         } else {
             throw ParserError(advance(), "unexpected token in application expression");
         }
     }
 
-    std::shared_ptr<Expression> Parser::parseUnaryExpression() {
+    ExprPtr Parser::parseUnaryExpression() {
+        std::size_t start = getIndex();
+
         if (matchStay([] (Type t) { return t == Type::BANG || t == Type::DASH; })) {
             Token op = advance();
-            auto exp = parseUnaryExpression();
-            return UnaryExpression::of(op, exp);
+            ExprPtr exp = parseUnaryExpression();
+            return expr::Uop::of(start, getLength(start), op.type, exp);
         } else {
             return parseSimpleExpression();
         }
     }
 
-    std::shared_ptr<Expression> Parser::parseBinaryExpression(const std::size_t precindex) {
+    ExprPtr Parser::parseBinaryExpression(const std::size_t precindex) {
+        std::size_t start = getIndex();
+
         if (precindex >= PRECEDENCES.size()) {
             return parseUnaryExpression();
         } else {
@@ -250,26 +272,34 @@ namespace drm {
                 Token op = advance();
                 if (std::find(COMPARATORS.begin(), COMPARATORS.end(), op.type) != COMPARATORS.end()) {
                     reverse();
-                    std::vector<std::pair<Token, std::shared_ptr<Expression>>> comparisons;
+                    std::vector<std::pair<Token::Type, ExprPtr>> cmps;
                     while (matchStay([&precindex] (Type t) {
                         return std::find(PRECEDENCES.at(precindex).begin(), PRECEDENCES.at(precindex).end(), t) != PRECEDENCES.at(precindex).end();
                     })) {
                         Token op = advance();
-                        comparisons.push_back(std::make_pair(op, parseBinaryExpression(precindex + 1)));
+                        cmps.push_back(std::make_pair(op.type, parseBinaryExpression(precindex + 1)));
                     }
-                    return ComparisonList::of(exp, comparisons);
+                    return expr::CmpList::of(start, getLength(start), exp, cmps);
                 } else {
                     if (ASSOCIATIVITIES.at(op.type)) { // left-associative
                         auto rexp = parseBinaryExpression(precindex + 1);
-                        exp = BinaryExpression::of(exp, op, rexp);
+                        exp = expr::Bop::of(start, getLength(start), op.type, exp, rexp);
                     } else {
                         auto rexp = parseBinaryExpression(precindex);
-                        return BinaryExpression::of(exp, op, rexp);
+                        return expr::Bop::of(start, getLength(start), op.type, exp, rexp);
                     }
                 }
             }
             return exp;
         }
+    }
+
+    std::size_t Parser::getIndex() const {
+        return stream.at(index).start;
+    }
+
+    std::size_t Parser::getLength(std::size_t start) const {
+        return stream.at(index).start + stream.at(index).length - start;
     }
 
     Parser::Type Parser::peek() const {

@@ -5,7 +5,6 @@
 #include "Parser.hpp"
 #include "PrettyPrinter.hpp"
 #include "Token.hpp"
-#include "WellFormedCheck.hpp"
 
 int main() {
 
@@ -38,27 +37,18 @@ int main() {
     drm::Parser parser;
     parser.load(stream);
 
-    drm::PrettyPrinter printer;
-
     drm::Program prog;
 
     try {
         prog = parser.parse();
-        std::cout << printer.visitProgram(prog) << std::endl;
     } catch (const drm::ParserError &e) {
         std::cerr << "Error of " << static_cast<std::string>(e.token) << ": " << e.message << std::endl;
         return 1;
     }
 
-    drm::WellFormedCheck checker;
-    try {
-        checker.visitProgram(prog);
-    } catch (const drm::BadlyFormedError &e) {
-        std::cerr << "Error of " << static_cast<std::string>(e.token) << ": " << e.message << std::endl;
-        return 1;
-    }
+    drm::PrettyPrinter printer;
 
-    std::cout << "Program is well-formed" << std::endl;
+    std::cout << printer.visitGStmtProgram(prog) << std::endl;
 
     return 0;
 }
