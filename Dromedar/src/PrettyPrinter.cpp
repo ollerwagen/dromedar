@@ -1,5 +1,8 @@
 #include <sstream>
 
+// debugging purposes
+#include <iostream>
+
 #include "PrettyPrinter.hpp"
 
 namespace drm {
@@ -112,7 +115,7 @@ namespace drm {
     }
 
     std::string PrettyPrinter::visitStmtReturn(stmt::Return *s) {
-        if (s->withValue)
+        if (s->with_value)
             return indent + "return " + visitExpr(s->exp.get()) + "\n";
         else
             return indent + "return\n";
@@ -147,8 +150,9 @@ namespace drm {
 
     std::string PrettyPrinter::visitGStmtProgram(const Program &prog) {
         std::stringstream stream;
-        for (const auto &u : prog)
+        for (const auto &u : prog) {
             stream << visitGStmt(u.get());
+        }
         return stream.str();
     }
 

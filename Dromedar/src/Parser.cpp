@@ -82,7 +82,7 @@ namespace drm {
                 TypePtr type = parseTypeExpression(false);
                 if (peek() != Type::ARROW)
                     expect(Type::COMMA, "commas must separate function arguments");
-                args.push_back(std::make_pair(name, type));
+                args.push_back(std::make_pair(name.lexeme, type));
             } while (!match(Type::ARROW));
         }
         TypePtr rettype = parseTypeExpression(true);
@@ -93,8 +93,9 @@ namespace drm {
     Block Parser::parseBlock() {
         Block res;
         ++indent;
-        while (matchIndentStay())
+        while (matchIndentStay()) {
             res.push_back(parseStatement());
+        }
         --indent;
         return res;
     }
@@ -224,7 +225,11 @@ namespace drm {
                                                   t == Type::LITERAL_BOOL ||
                                                   t == Type::IDENTIFIER; },
                                                   "expected a literal or variable name");
-            expr = expr::Lit::of(start, getLength(start), t.l);
+            if (t.type == Type::IDENTIFIER) {
+                expr = expr::Id::of(start, getLength(start), t.getId());
+            } else {
+                expr = expr::Lit::of(start, getLength(start), t.l);
+            }
         }
 
         if (matchStay([] (Type t) { return t == Type::LPAREN; }))

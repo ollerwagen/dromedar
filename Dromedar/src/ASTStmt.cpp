@@ -62,12 +62,15 @@ DoWhile::DoWhile(std::size_t start, std::size_t length, const ExprPtr &cond, con
 }
 
 StmtPtr DoWhile::of(std::size_t start, std::size_t length, const ExprPtr &cond, const Block &body) {
-    return as(make<While>(start, length, cond, body));
+    return as(make<DoWhile>(start, length, cond, body));
 }
 
-Return::Return(std::size_t start, std::size_t length) : Stmt(start, length) {}
+Return::Return(std::size_t start, std::size_t length) : Stmt(start, length) {
+    with_value = false;
+}
 
 Return::Return(std::size_t start, std::size_t length, const ExprPtr &exp) : Stmt(start, length) {
+    with_value = true;
     this->exp = exp;
 }
 

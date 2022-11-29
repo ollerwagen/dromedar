@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+// debugging purposes
+#include <iostream>
+
 #include "Token.hpp"
 
 namespace drm {
@@ -15,6 +18,8 @@ namespace drm {
     }
 
     struct Expr {
+        using ExprPtr = std::shared_ptr<Expr>;
+
         enum class T { ID, LIT, UOP, BOP, FUNC, CMPLIST };
         virtual T type() const = 0;
 
@@ -45,7 +50,7 @@ namespace drm {
         };
     };
 
-    using ExprPtr = std::shared_ptr<Expr>;
+    using ExprPtr = Expr::ExprPtr;
 
     namespace expr {
 
@@ -113,6 +118,8 @@ namespace drm {
     }
 
     struct Type {
+        using TypePtr = std::shared_ptr<Type>;
+
         enum class T { PRIM, FTYPE };
         virtual T type() const = 0;
 
@@ -120,10 +127,12 @@ namespace drm {
 
         Type(std::size_t start, std::size_t length);
 
+        static bool equiv(const TypePtr &a, const TypePtr &b);
+
         template<typename U>
         struct Visitor {
-            virtual U visitTypePrim(type::Prim *t);
-            virtual U visitTypeFType(type::FType *t);
+            virtual U visitTypePrim(type::Prim *t) = 0;
+            virtual U visitTypeFType(type::FType *t) = 0;
 
             inline U visitType(Type *t) {
                 switch (t->type()) {
@@ -135,14 +144,18 @@ namespace drm {
         };
     };
 
-    using TypePtr = std::shared_ptr<Type>;
+    using TypePtr = Type::TypePtr;
 
     namespace type {
 
         struct Prim : public Type {
+            static const TypePtr INT, FLT, BOOL, CHAR, VOID;
+
             Token::Type t;
 
             T type() const final override { return T::PRIM; }
+
+            static bool eq(Prim *a, Prim *b);
 
             Prim(std::size_t start, std::size_t length, Token::Type t);
             static TypePtr of(std::size_t start, std::size_t length, Token::Type t);
@@ -153,6 +166,8 @@ namespace drm {
             std::vector<TypePtr> argts;
 
             T type() const final override { return T::FTYPE; }
+
+            static bool eq(FType *a, FType *b);
 
             FType(std::size_t start, std::size_t length, const TypePtr &rty, const std::vector<TypePtr> &argts);
             static TypePtr of(std::size_t start, std::size_t length, const TypePtr &rty, const std::vector<TypePtr> &argts);
@@ -176,13 +191,13 @@ namespace drm {
 
         template<typename U>
         struct Visitor {
-            virtual U visitStmtVDecl(stmt::VDecl *s);
-            virtual U visitStmtAssn(stmt::Assn *s);
-            virtual U visitStmtExpr(stmt::Expr *s);
-            virtual U visitStmtIf(stmt::If *s);
-            virtual U visitStmtWhile(stmt::While *s);
-            virtual U visitStmtDoWhile(stmt::DoWhile *s);
-            virtual U visitStmtReturn(stmt::Return *s);
+            virtual U visitStmtVDecl(stmt::VDecl *s) = 0;
+            virtual U visitStmtAssn(stmt::Assn *s) = 0;
+            virtual U visitStmtExpr(stmt::Expr *s) = 0;
+            virtual U visitStmtIf(stmt::If *s) = 0;
+            virtual U visitStmtWhile(stmt::While *s) = 0;
+            virtual U visitStmtDoWhile(stmt::DoWhile *s) = 0;
+            virtual U visitStmtReturn(stmt::Return *s) = 0;
 
             inline U visitStmt(Stmt *s) {
                 switch (s->type()) {
@@ -197,7 +212,7 @@ namespace drm {
                 }
             }
 
-            virtual U visitStmtBlock(const Block &block);
+            virtual U visitStmtBlock(const Block &block) = 0;
         };
     };
 
@@ -265,7 +280,7 @@ namespace drm {
         };
 
         struct Return : public Stmt {
-            bool withValue;
+            bool with_value;
             ExprPtr exp;
 
             T type() const final override { return T::RETURN; }
@@ -294,8 +309,8 @@ namespace drm {
 
         template<typename U>
         struct Visitor {
-            virtual U visitGStmtFDecl(gstmt::FDecl *gs);
-            virtual U visitGStmtVDecl(gstmt::VDecl *gs);
+            virtual U visitGStmtFDecl(gstmt::FDecl *gs) = 0;
+            virtual U visitGStmtVDecl(gstmt::VDecl *gs) = 0;
 
             inline U visitGStmt(GStmt *gs) {
                 switch (gs->type()) {
@@ -305,7 +320,7 @@ namespace drm {
                 }
             }
 
-            virtual U visitGStmtProgram(const Program &prog);
+            virtual U visitGStmtProgram(const Program &prog) = 0;
         };
     };
 

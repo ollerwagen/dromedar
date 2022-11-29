@@ -1,6 +1,0 @@
-. function calls
-. statement expressions (including non-function-calls?)
-
-* solve problem of pre-declared globals? // so far no mutual recursion
-* unoptimized bytecode translation of simple language
-* arrays, strings -> garbage collection?

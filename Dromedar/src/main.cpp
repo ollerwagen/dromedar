@@ -5,6 +5,7 @@
 #include "Parser.hpp"
 #include "PrettyPrinter.hpp"
 #include "Token.hpp"
+#include "TypeChecker.hpp"
 
 int main() {
 
@@ -30,9 +31,9 @@ int main() {
         return 1;
     }
 
-    for (std::size_t i = 0; i < stream.size(); i++)
-        std::cout << static_cast<std::string>(stream.at(i)) << std::endl;
-    std::cout << std::endl;
+    // for (std::size_t i = 0; i < stream.size(); i++)
+    //     std::cout << static_cast<std::string>(stream.at(i)) << std::endl;
+    // std::cout << std::endl;
     
     drm::Parser parser;
     parser.load(stream);
@@ -47,8 +48,25 @@ int main() {
     }
 
     drm::PrettyPrinter printer;
-
     std::cout << printer.visitGStmtProgram(prog) << std::endl;
+
+    drm::TypeChecker type_checker;    
+    std::string errors = "";
+
+    try {
+        type_checker.visitGStmtProgram(prog);
+        errors = type_checker.errorMessages();
+    } catch (std::exception &e) {
+        std::cout << "Typechecking Exception: " << e.what() << std::endl;
+        return 1;
+    }
+
+    if (errors.empty()) {
+        std::cout << "Well-formed Program" << std::endl;
+    } else {
+        std::cout << "Program not well-formed:\n" << errors << std::endl;
+        return 1;
+    }
 
     return 0;
 }

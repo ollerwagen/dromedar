@@ -150,8 +150,23 @@ namespace drm {
             Int operator()(__attribute__((unused)) Id   i) const { return 0; }
         };
 
+        class IdVisitor : public boost::static_visitor<Id> {
+        public:
+
+            Id operator()(Id i) const { return i; }
+
+            Id operator()(__attribute__((unused)) Int  i) const { return ""; }
+            Id operator()(__attribute__((unused)) Flt  f) const { return ""; }
+            Id operator()(__attribute__((unused)) Char c) const { return ""; }
+            Id operator()(__attribute__((unused)) Bool b) const { return ""; }
+        };
+
         Int getInt() const {
             return boost::apply_visitor(IntVisitor(), l);
+        }
+
+        Id getId() const {
+            return boost::apply_visitor(IdVisitor(), l);
         }
 
     }; // struct Token

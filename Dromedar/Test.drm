@@ -1,12 +1,17 @@
-global x := 12.9
+global x := 12
+
+fn lmao -> bool
+    return true
 
 fn main : args:int -> int
     let y := 9
-    if x
-     let x := 9
+    if true || 2 > 0 > -2 <= 29 != y
+        main: 2
     else
-                                                            let z := 2.0 - 'a'
+        main: 1
+    while true
+        return 0
     do
-    while false
-
-    return a
+        return -1
+    while true || lmao()
+    return x + y

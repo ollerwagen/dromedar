@@ -1,8 +1,8 @@
 SHELL = /bin/bash
 
-CFLAGS = -std=c++2a
+CFLAGS = -std=c++17
 WFLAGS = -Wall -Wpedantic -Wextra
-OFLAGS = -O3
+OFLAGS = 
 
 compile:
 	g++ -c src/*.cpp $(CFLAGS) $(WFLAGS) $(OFLAGS)

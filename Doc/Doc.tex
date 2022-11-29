@@ -1,6 +1,6 @@
 \documentclass{article}
 
-\usepackage{listings, xcolor, enumitem, hyperref, multicol, booktabs, longtable, titlesec, amssymb}
+\usepackage{listings, xcolor, enumitem, hyperref, multicol, booktabs, longtable, titlesec, amssymb, amsmath}
 
 \usepackage{sourcecodepro}
 \usepackage[T1]{fontenc}
@@ -10,9 +10,9 @@
 \DeclareFontShape{OT1}{cmtt}{bx}{n}{<5><6><7><8><9><10><10.95><12><14.4><17.28><20.74><24.88>cmttb10}{}
 
 \lstdefinelanguage{Dromedar}{
-	morekeywords = [1]{int,flt,char,bool},
+	morekeywords = [1]{int,flt,char,bool,void,fn},
 	morekeywords = [2]{true,false},
-	morekeywords = [3]{},
+	morekeywords = [3]{return,if,else,while,do},
 	morekeywords = [4]{},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
@@ -41,6 +41,8 @@
 
 \renewcommand{\c}[1]{\texttt{#1}}
 \newcommand{\code}[1]{\lstinline[columns=fixed]{#1}}
+
+\newcommand{\drmrule}[5]{\frac{#1}{#2\vdash_{\mathsf{#3}}#4}\textsc{\small{#5}}}
 
 \newcommand{\parw}{9cm}
 
@@ -185,11 +187,312 @@
 		
 			Global variables are all assigned a value at the point of their declaration. This value is evaluated statically -- declaration expressions can only contain literals and global variables that were already declared previously.
 			
-	\section{Bytecode}
+			Functions are also declared globally.
+		
+	\section{Formal Typing Rules}
 	
-		Dromedar can be translated to bytecode for a stack-based virtual machine. It features the following instruction set:
+		A typing rule takes the following shape: $$ \drmrule{\mathrm{Hypotheses}}{S,\dots}{}{\textnormal{\code{grammar spec}}}{name} $$
 		
+		Here, $S$ represents a stack of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), and $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}).
 		
+		The symbol $\in$ is defined as follows: $s\in S \Leftrightarrow \textnormal{$s$ is contained in \textit{any} layer of $S$}$, whereas $\in_0$ is true only if the symbol is at the top level of the symbol stack (i.e. defined in the same block). The operator $\cup$ on $S$ adds another binding to the top layer of the stack, whereas $\sqcup$ adds another layer to the stack.
+		
+		The following are the typing rules for Dromedar programs:
+		
+		\subsection{Builtin Operators}
+		
+			Many builtin operators are overloaded, providing functionality for multiple input types.
+			
+			\subsubsection{Unary Operators}
+			
+				\subsubsubsection{Arithmetic Negation}
+				
+					\begin{align*}
+						\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{int \to int}}{TyUopNeg},\ \ 
+						\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{flt \to flt}}{TyUopNeg}
+					\end{align*}
+				
+				\subsubsubsection{Logical Negation}
+
+					\begin{align*}
+						\drmrule{}{}{O}{\textnormal{\code{!}} :: \mathsf{bool \to bool}}{TyUopNot}
+					\end{align*}
+			
+			\subsubsection{Binary Operators}
+			
+				\subsubsubsection{Power}
+				
+					\begin{align*}
+						\drmrule{}{}{O}{\textnormal{\code{**}} :: \mathsf{(int,int) \to int}}{TyBopPow},\ \ 
+						\drmrule{}{}{O}{\textnormal{\code{**}} :: \mathsf{(flt,flt) \to flt}}{tyBopPow}
+					\end{align*}
+				
+				\subsubsubsection{Multiplication}
+				
+					\begin{align*}
+						\drmrule{}{}{O}{\textnormal{\code{*}} :: \mathsf{(int,int) \to int}}{TyBopMul},\ \ 
+						\drmrule{}{}{O}{\textnormal{\code{*}} :: \mathsf{(flt,flt) \to flt}}{TyBopMul}
+					\end{align*}
+				
+				\subsubsubsection{Addition and Subtraction}
+				
+					\begin{itemize}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(int,int) \to int}}{TyBopAdd},\ \ &
+								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(flt,flt) \to flt}}{TyBopAdd},\\
+								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(int,char) \to char}}{TyBopAdd},\ \ &
+								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(char,int) \to char}}{TyBopAdd}
+							\end{align*}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(int,int) \to int}}{TyBopSub},\ \ &
+								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(flt,flt) \to flt}}{TyBopSub},\\
+								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(int,char) \to char}}{TyBopSub},\ \ &
+								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(char,int) \to char}}{TyBopSub}
+							\end{align*}
+					\end{itemize}
+				
+				\subsubsubsection{Shift Operators}
+				
+					\begin{itemize}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{<<}} :: \mathsf{(int,int) \to int}}{TyBopLShift}
+							\end{align*}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{>>}} :: \mathsf{(int,int) \to int}}{TyBopBitRShift}
+							\end{align*}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{>>>}} :: \mathsf{(int,int) \to int}}{TyBopBitAShift}
+							\end{align*}
+					\end{itemize}
+				
+				\subsubsubsection{Bitwise Operators}
+				
+					\begin{itemize}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{\&}} :: \mathsf{(int,int) \to int}}{TyBopBitAnd}
+							\end{align*}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{^}} :: \mathsf{(int,int) \to int}}{TyBopXor},\ \ &
+								\drmrule{}{}{O}{\textnormal{\code{^}} :: \mathsf{(bool,bool) \to bool}}{TyBopXor}
+							\end{align*}
+						\item
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{|}} :: \mathsf{(int,int) \to int}}{TyBopBitOr}
+							\end{align*}
+					\end{itemize}
+				
+				\subsubsubsection{Logical Operators}
+				
+					\begin{itemize}
+						\item 
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{\&\&}} :: \mathsf{(bool,bool) \to bool}}{TyBopLogAnd}
+							\end{align*}
+						\item 
+							\begin{align*}
+								\drmrule{}{}{O}{\textnormal{\code{||}} :: \mathsf{(bool,bool) \to bool}}{TyBopLogOr}
+							\end{align*}
+					\end{itemize}
+				
+				\subsubsubsection{Comparison Operators}
+				
+					\begin{align*}
+						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[int] \to bool}}{TyCmpList},\ \ &
+						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[flt] \to bool}}{TyCmpList},\\
+						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[char] \to bool}}{TyCmpList},\ \ &
+					\end{align*}
+					
+					
+		\subsection{Expressions}
+		
+			\subsubsection{Assignability}
+			
+				The rule $\vdash_A$ defines when an expression can be assigned a value.
+				
+				\begin{align*}
+					\frac{(\textnormal{\code{id}},\mathsf{t})\in S}{S\vdash_A\textnormal{\code{id}}}\textsc{\small{ExpAssn}}
+				\end{align*}
+				
+			\subsubsection{Global Expressions}
+			
+				The rule $\vdash_G$ describes global expressions, which are restricted in a way that they can be computed at compile time.
+				
+				Copied rules always use $\vdash_G$ instead of $\vdash_E$
+				
+				\subsubsubsection{Literals}
+				
+					\begin{itemize}
+						\item \textsc{GExpLitInt} $:=$ \textsc{ExpLitInt}
+						\item \textsc{GExpLitFlt} $:=$ \textsc{ExpLitFlt}
+						\item \textsc{GExpLitChar} $:=$ \textsc{ExpLitChar}
+						\item \textsc{GExpLitBool} $:=$ \textsc{ExpLitBool}
+					\end{itemize}
+				
+				\subsubsubsection{Other Rules}
+				
+					\begin{itemize}
+						\item \textsc{GExpId} $:=$ \textsc{ExpId}
+						\item \textsc{GExpUop} $:=$ \textsc{ExpUop}
+						\item \textsc{GExpBop} $:=$ \textsc{ExpBop}
+						\item \textsc{GExpCmpList} $:=$ \textsc{ExpCmpList}
+					\end{itemize}
+				
+					Note that global variable declarations cannot feature function calls.
+		
+			\subsubsection{Literals}
+			
+				\begin{itemize}
+					\item
+						\begin{align*}
+							\drmrule{}{}{E}{n :: \textnormal{\code{int}}}{ExpLitInt}
+						\end{align*}
+					\item
+						\begin{align*}
+							\drmrule{}{}{E}{f :: \textnormal{\code{flt}}}{ExpLitFlt}
+						\end{align*}
+					\item
+						\begin{align*}
+							\drmrule{}{}{E}{c :: \textnormal{\code{char}}}{ExpLitChar}
+						\end{align*}
+					\item
+						\begin{align*}
+							\drmrule{}{}{E}{\textnormal{\code{true}} :: \textnormal{\code{bool}}}{ExpLitBool},\ \ 
+							\drmrule{}{}{E}{\textnormal{\code{true}} :: \textnormal{\code{bool}}}{ExpLitBool}
+						\end{align*}
+				\end{itemize}
+			
+			\subsubsection{Identifiers}
+			
+				\begin{align*}
+					\drmrule{(id,\mathsf{t})\in S}{S}{E}{\textnormal{\code{id}} :: \mathsf{t}}{ExpId}
+				\end{align*}
+			
+			\subsubsection{Unary Operations}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t'}\ \ S\vdash\textnormal{\code{op}} :: \mathsf{t' \to t}}{S}{E}{\textnormal{\code{op exp}} :: \mathsf{t}}{ExpUop}
+				\end{align*}
+			
+			\subsubsection{Binary Operations}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{e1}} :: \mathsf{t1}\ \ S\vdash\textnormal{\code{e2}} :: \mathsf{t2}\ \ S\vdash\textnormal{\code{op}} :: \mathsf{(t1,t2) \to t}}{S}{E}{\textnormal{\code{e1 op e2}} :: \mathsf{t}}{ExpBop}
+				\end{align*}
+			
+			\subsubsection{Function Calls}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{f}} :: \mathsf{(t1,...,tn) \to rt}\ \ S\vdash\textnormal{\code{e1}} :: \mathsf{t1},\ \dots,\ S\vdash\textnormal{\code{en}} :: \mathsf{tn}}{S}{E}{\textnormal{\code{f(e1,...,en)}} :: \mathsf{rt}}{ExpFunc}
+				\end{align*}
+			
+			\subsubsection{Comparison Lists}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{e0}} :: \mathsf{t0},\ \dots,\ S\vdash\textnormal{\code{en}} :: \mathsf{tn}\ \ S\vdash\textnormal{\code{op1}} :: \mathsf{(t0,t1) \to t},\ \dots,\ S\vdash\textnormal{\code{opn}} :: \mathsf{(t(n-1),tn) \to t}}{S}{E}{\textnormal{\code{e0 op1 ... opn en}} :: \mathsf{t}}{ExpCmpList}
+				\end{align*}
+				
+		\subsection{Statements}
+		
+			In the statement typing rules, a statement rule produces a tuple $(S,r)$ where $S$ stands for the newly updates context, and $r\in\{\bot,\top\}$, where $\bot$ means that a statement might not return and $\top$ means that a statement might return.
+			
+			To prevent potential mistakes, the typechecker prevents statements which are deemed unreachable at compile time. Logical operators like $\wedge$ operate as if $\bot\equiv0$ and $\top\equiv1$.
+		
+			\subsubsection{Local Variable Declarations}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}}{S,\mathsf{rt}}{S}{\textnormal{\code{let id := exp}} \Rightarrow (S \cup (\textnormal{\code{id}},\mathsf{t})),\bot}{StmtVDecl}
+				\end{align*}
+			
+			\subsubsection{Assignments}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}\ \ S\vdash\textnormal{\code{lhs}} :: \mathsf{t}\ \ S\vdash_A\textnormal{\code{lhs}}}{S,\mathsf{rt}}{S}{\textnormal{\code{lhs := exp}} \Rightarrow S,\bot}{StmtAssn}
+				\end{align*}
+			
+			\subsubsection{Expression Statements}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}}{S,\mathsf{rt}}{S}{\textnormal{\code{exp}} \Rightarrow S,\bot}{StmtExpr}
+				\end{align*}
+			
+			\subsubsection{If Statements}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b1}}\Rightarrow S_1,R_1\ \ S,\mathsf{rt}\vdash\textnormal{\code{b2}}\Rightarrow S_2,R_2}{S,\mathsf{rt}}{S}{\textnormal{\code{if c b1 else b2}} \Rightarrow S,R_1\wedge R_2}{StmtIf}
+				\end{align*}
+			
+			\subsubsection{While Statements}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b}}\Rightarrow S',R}{S,\mathsf{rt}}{S}{\textnormal{\code{while c b}} \Rightarrow S,\bot}{StmtWhile}
+				\end{align*}
+			
+			\subsubsection{Do-While Statements}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b}}\Rightarrow S',R}{S,\mathsf{rt}}{S}{\textnormal{\code{do b while c}} \Rightarrow S,R}{StmtDoWhile}
+				\end{align*}
+			
+			\subsubsection{Return Statements}
+			
+				\begin{align*}
+					\drmrule{S\vdash\textnormal{\code{exp}}::\mathsf{rt}}{S,\mathsf{rt}}{\textnormal{\code{return exp}} \Rightarrow S,\top}{StmtReturn},\ \ \drmrule{}{S,\textnormal{\code{void}}}{S}{\textnormal{\code{return}}\Rightarrow S,\top}{StmtReturn}
+				\end{align*}
+				
+			\subsubsection{Blocks}
+			
+				\begin{align*}
+					\drmrule{S\sqcup\{\},\mathsf{rt}\vdash\textnormal{\code{s1}} \Rightarrow S_1,\bot,\ \ S_1,\mathsf{rt}\vdash\textnormal{\code{s2}} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mathsf{rt}\vdash\textnormal{\code{sn}} \Rightarrow S_n,R}{S,\mathsf{rt}}{S}{\textnormal{\code{s1 ... sn}} \Rightarrow S_n,R}{StmtBlock}
+				\end{align*}
+		
+		\subsection{Global Statements}
+		
+			\subsubsection{Global Function Declaration}
+			
+				\begin{align*}
+					\drmrule{S\sqcup\{(\textnormal{\code{a1}},\textnormal{\code{t1}}),\dots,(\textnormal{\code{an}},\textnormal{\code{tn}})\},\textnormal{\code{rt}} \vdash \textnormal{\code{b}},\top}{S}{G}{\textnormal{\code{fn id : a1:t1, ..., an:tn -> rt b}} \Rightarrow S}{GStmtFDecl}
+				\end{align*}
+			
+			\subsubsection{Global Variable Declaration}
+			
+				\begin{align*}
+					\drmrule{(\textnormal{\code{id}},any) \not\in S\ \ S\vdash_G\textnormal{\code{exp}} :: \mathsf{t}}{S}{G}{\textnormal{\code{global id := exp}} \Rightarrow S\cup\{(\textnormal{\code{id}},\mathsf{t})\}}{GStmtVDecl}
+				\end{align*}
+			
+			\subsubsection{Program}
+			
+				\begin{align*}
+					\drmrule{S_0 \vdash \textnormal{\code{gs1}} \Rightarrow S_1,\ \dots,\ S_{n-1} \vdash \textnormal{\code{gsn}} \Rightarrow S_n}{S_0 := \{\} \sqcup \{\}}{G}{\textnormal{\code{gs1 ... gsn}} \Rightarrow S_n}{GStmtProgram}
+				\end{align*}
+				
+		\subsection{Context Type-Checking}
+		
+			\subsubsection{Global Function Declaration}
+			
+				\begin{align*}
+					\drmrule{(\textnormal{\code{id}},any) \not\in S}{S}{GCF}{\textnormal{\code{fn id : a1:t1, ..., an:tn -> rt b}} \Rightarrow S \cup (\textnormal{\code{id}}, (\textnormal{\code{t1}},\dots,\textnormal{\code{tn}}) \to \textnormal{\code{rt}})}{GStmtCtxtFDecl}
+				\end{align*}\begin{align*}
+					\drmrule{}{S}{GCF}{\textnormal{\code{let id := exp}} \Rightarrow S}{GStmtCtxtFDecl}
+				\end{align*}
+			
+			\subsubsection{Program: Functions}
+			
+				\begin{align*}
+					\drmrule{S_0 \vdash_{\mathsf{GCF}} \textnormal{\code{gs1}} \Rightarrow S_1,\ \dots,\ S_{n-1} \vdash_{\mathsf{GCF}} \textnormal{\code{gs(n-1)}} \Rightarrow S_n}{S_0}{GC}{\textnormal{\code{gs1 ... gsn}} \Rightarrow S_n}{GStmtCtxtFuncs}
+				\end{align*}
+			
+			\subsubsection{Program}
+			
+				\begin{align*}
+					\drmrule{\{\}\sqcup\{\} \vdash_{\mathsf{GCF}} \mathsf{prog} \Rightarrow S' \ \ S' \vdash_{\mathsf{G}} \mathsf{prog} \Rightarrow S}{}{G}{\mathsf{prog} \Rightarrow S}{Prog}
+				\end{align*}
 		
 	\section{Formal Grammar}
 	
