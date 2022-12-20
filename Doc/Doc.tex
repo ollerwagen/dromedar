@@ -10,10 +10,11 @@
 \DeclareFontShape{OT1}{cmtt}{bx}{n}{<5><6><7><8><9><10><10.95><12><14.4><17.28><20.74><24.88>cmttb10}{}
 
 \lstdefinelanguage{Dromedar}{
-	morekeywords = [1]{int,flt,char,bool,void,fn},
-	morekeywords = [2]{true,false},
+	morekeywords = [1]{int,flt,char,bool,void,fn,string},
+	morekeywords = [2]{true,false,null},
 	morekeywords = [3]{return,if,else,while,do},
-	morekeywords = [4]{},
+	morekeywords = [4]{let,mut,global},
+	morekeywords = [5]{of},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -42,7 +43,10 @@
 \renewcommand{\c}[1]{\texttt{#1}}
 \newcommand{\code}[1]{\lstinline[columns=fixed]{#1}}
 
-\newcommand{\drmrule}[5]{\frac{#1}{#2\vdash_{\mathsf{#3}}#4}\textsc{\small{#5}}}
+\newcommand{\drmrule}[5]{\frac{#1}{#2\vdash_{\mathsf{#3}}#4}\textsc{\ \small{#5}}}
+
+\newcommand{\ruleapp}[1]{\vdash_{\mathsf{#1}}}
+\newcommand{\mc}[1]{\textnormal{\code{#1}}}
 
 \newcommand{\parw}{9cm}
 
@@ -92,9 +96,28 @@
 		
 		\subsection{Reference Types}
 		
-			Reference Types of type \code{t} come in two shapes: \code{t}, a strictly non-\code{null} reference; and \code{t?}, a reference that may be \code{null}, where \code{t} is considered a subtype of \code{t?}.
+			Reference types represent data structures that are laid over pointers to objects stored in the heap. References come in two types: Maybe-\code{null} and Definitely-not-\code{null} types. Operations like array subscript access are only possible with non-\code{null} types to ensure \code{null} safety.
 			
-			Splitting up references that way has two advantages: On one hand, it enforces a good coding style and helps find Null pointer bugs before they even appear; on the other hand it accelerates the execution environment by allowing it to skip Null checks when dereferencing an object if it is of a strictly non-\code{null} type.
+			With a non-null-type \code{t}, the type \code{t?} represents a reference type that allows \code{null} values. Primitives are non-nullable, as are \code{string}s.
+			
+			The following are reference types:
+			
+			\begin{itemize}
+				\item \code{string} represents lists of characters.
+				\item \code{[t]} represents a list of type \code{t}.
+			\end{itemize}
+		
+			Thus, e.g. \code{[[int]?]} represents a two-dimensional array of integers which is definitely non-\code{null}, whereas its rows may be \code{null}.
+		
+		\subsection{Mutability}
+		
+			In general, variables declared with the \code{let} keyword are immutable, whereas \code{mut} declarations allow mutable variables.
+			
+			For references, there are different notions of mutability: Allowing the object to point to new objects is handled with the \code{mut} declaration. However, even immutable objects are allowed to call methods which alter their internal state -- for example changing an array's element.
+			
+		\subsection{Subtyping}
+		
+			Generally, variables and objects can be assigned values of \textit{subtypes}. Every type is a subtype of itself, and e.g. \code{t} is a subtype of \code{t?}. Generally, a subtype is a restricted value set of its supertype -- any subtype expression can be assigned to a variable of its supertype.
 		
 	\section{Expressions}
 	
@@ -187,17 +210,107 @@
 		
 			Global variables are all assigned a value at the point of their declaration. This value is evaluated statically -- declaration expressions can only contain literals and global variables that were already declared previously.
 			
-			Functions are also declared globally.
+			Functions are also declared globally. They can call each other and themselves recursively within their respective function bodies.
+			
+		\subsection{Builtin Functions}
+		
+			The Dromedar standard library includes the following functions:
+			
+			\subsubsection{String Operations}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{string_of_int} & \code{int -> string} & transforms an integer into a string \\
+					\code{string_of_flt} & \code{flt -> string} & transforms a decimal number into a string \\
+					\code{string_concat} & \code{(string,string) -> string} & concatenates two strings
+				\end{longtable}
+			
+			\subsubsection{Printing}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{io_print} & \code{string -> void} & prints a string to the standard output
+				\end{longtable}
 		
 	\section{Formal Typing Rules}
 	
-		A typing rule takes the following shape: $$ \drmrule{\mathrm{Hypotheses}}{S,\dots}{}{\textnormal{\code{grammar spec}}}{name} $$
+		A typing rule takes the following shape: $$ \drmrule{\mathrm{Hypotheses}}{S,\dots}{type}{\mc{grammar spec}}{name} $$
 		
-		Here, $S$ represents a stack of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), and $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}).
+		Here, $S$ represents a stack of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type} \times \{c,m\})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}), and $\{c,m\}$ to the mutability of the object: $c$ represents an immutable value (as declared by \code{let}), and $m$ a mutable one (declared by \code{mut}).
 		
 		The symbol $\in$ is defined as follows: $s\in S \Leftrightarrow \textnormal{$s$ is contained in \textit{any} layer of $S$}$, whereas $\in_0$ is true only if the symbol is at the top level of the symbol stack (i.e. defined in the same block). The operator $\cup$ on $S$ adds another binding to the top layer of the stack, whereas $\sqcup$ adds another layer to the stack.
 		
 		The following are the typing rules for Dromedar programs:
+		
+		\subsection{Subtyping Rules}
+		
+			\subsubsection{Trivial Rule}
+			
+				\begin{align*}
+					\drmrule{}{}{T}{\mc{t} \preceq \mc{t}}{SubTyTrivial}
+				\end{align*}
+				
+			\subsubsection{References}
+			
+				\begin{align*}
+					\drmrule{\ruleapp{T}\mc{t1} \preceq \mc{t2}}{}{T}{\mc{t1} \preceq \mc{t2?}}{SubTyRefs},\ \ 
+					\drmrule{\ruleapp{T}\mc{t1}\preceq\mc{t2}}{}{T}{\mc{t1?} \preceq \mc{t2?}}{SubTyRefs}
+				\end{align*}
+				
+			\subsubsection{Arrays}
+			
+				\begin{align*}
+					\drmrule{\ruleapp{T}\mc{t1}\preceq\mc{t2}}{}{T}{\mc{[t1]}\preceq\mc{[t2]}}{SubTyFuns}
+				\end{align*}
+		
+			\subsubsection{Functions}
+			
+				\begin{align*}
+					\drmrule{\ruleapp{T}\mc{u1}\preceq\mc{t1},\ \dots,\ \ruleapp{T}\mc{un}\preceq\mc{tn}\ \ \ruleapp{T}\mc{rt}\preceq\mc{ru}}{}{T}{\mc{(t1,...,tn)->rt} \preceq \mc{(u1,...,un)->ru}}{SubTyFuncs}
+				\end{align*}
+				
+			\subsubsection{Subtypes and Supertypes}
+			
+				The functions $\mathsf{subtys}$ and $\mathsf{suptys}$ of $\mathsf{types}\to\mathcal{P}(\mathsf{types})$ compute the sub- and supertype set of the input type, respectively.
+				
+				They are used -- among others -- in the \textsc{ExpLitArr} rule.
+				
+				\begin{align*}
+					\mathsf{subtys} &:=
+						\left\{
+							\begin{array}{lll}
+								\mc{int} & \mapsto & \{\mc{int}\}\\
+								\mc{flt} & \mapsto & \{\mc{flt}\}\\
+								\mc{char} & \mapsto & \{\mc{char}\}\\
+								\mc{bool} & \mapsto & \{\mc{bool}\}\\
+								\mc{string} & \mapsto & \{\mc{string}\}\\
+								\mc{t?} & \mapsto & \{\mc{u},\mc{u?} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
+								\mc{[t]} & \mapsto & \{\mc{[u]} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
+								\mc{(t1...tn)->rt} & \mapsto &
+									\{\mc{(u1...un)->st} \;\mid\; \mc{u1...un}\in\mathsf{suptys}(\mc{t1...tn}),\mc{st}\in\mathsf{subtys}(\mc{rt})\}
+							\end{array}
+						\right.\\
+					\mathsf{suptys} &:=
+						\left\{
+							\begin{array}{lll}
+								\mc{int} & \mapsto & \{\mc{int}\}\\
+								\mc{flt} & \mapsto & \{\mc{flt}\}\\
+								\mc{char} & \mapsto & \{\mc{char}\}\\
+								\mc{bool} & \mapsto & \{\mc{bool}\}\\
+								\mc{string} & \mapsto & \{\mc{string},\mc{string?}\}\\
+								\mc{t?} & \mapsto & \{\mc{u?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
+								\mc{[t]} & \mapsto & \{\mc{[u]}, \mc{[u]?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
+								\mc{(t1...tn)->rt} & \mapsto &
+									\left[
+									\begin{array}{l}
+										\{\mc{(u1...un)->st},\mc{((u1...un)->st)?} \\\ \ \;\mid\; \mc{u1...un}\in\mathsf{subtys}(\mc{t1...tn}),\mc{st}\in\mathsf{suptys}(\mc{rt})\}
+									\end{array}
+									\right.
+							\end{array}
+						\right.
+				\end{align*}
 		
 		\subsection{Builtin Operators}
 		
@@ -208,14 +321,14 @@
 				\subsubsubsection{Arithmetic Negation}
 				
 					\begin{align*}
-						\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{int \to int}}{TyUopNeg},\ \ 
-						\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{flt \to flt}}{TyUopNeg}
+						\drmrule{}{}{O}{\mc{-} :: \mc{int->int}}{TyUopNegInt},\ \ 
+						\drmrule{}{}{O}{\mc{-} :: \mc{flt->flt}}{TyUopNegInt}
 					\end{align*}
 				
 				\subsubsubsection{Logical Negation}
 
 					\begin{align*}
-						\drmrule{}{}{O}{\textnormal{\code{!}} :: \mathsf{bool \to bool}}{TyUopNot}
+						\drmrule{}{}{O}{\mc{!} :: \mc{bool->bool}}{TyUopNot}
 					\end{align*}
 			
 			\subsubsection{Binary Operators}
@@ -223,15 +336,15 @@
 				\subsubsubsection{Power}
 				
 					\begin{align*}
-						\drmrule{}{}{O}{\textnormal{\code{**}} :: \mathsf{(int,int) \to int}}{TyBopPow},\ \ 
-						\drmrule{}{}{O}{\textnormal{\code{**}} :: \mathsf{(flt,flt) \to flt}}{tyBopPow}
+						\drmrule{}{}{O}{\mc{**} :: \mc{(int,int)->int}}{TyBopPowInt},\ \ 
+						\drmrule{}{}{O}{\mc{**} :: \mc{(flt,flt)->flt}}{tyBopPowFlt}
 					\end{align*}
 				
 				\subsubsubsection{Multiplication}
 				
 					\begin{align*}
-						\drmrule{}{}{O}{\textnormal{\code{*}} :: \mathsf{(int,int) \to int}}{TyBopMul},\ \ 
-						\drmrule{}{}{O}{\textnormal{\code{*}} :: \mathsf{(flt,flt) \to flt}}{TyBopMul}
+						\drmrule{}{}{O}{\mc{*} :: \mc{(int,int)->int}}{TyBopMulInt},\ \ 
+						\drmrule{}{}{O}{\mc{*} :: \mc{(flt,flt)->flt}}{TyBopMulInt}
 					\end{align*}
 				
 				\subsubsubsection{Addition and Subtraction}
@@ -239,17 +352,17 @@
 					\begin{itemize}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(int,int) \to int}}{TyBopAdd},\ \ &
-								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(flt,flt) \to flt}}{TyBopAdd},\\
-								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(int,char) \to char}}{TyBopAdd},\ \ &
-								\drmrule{}{}{O}{\textnormal{\code{+}} :: \mathsf{(char,int) \to char}}{TyBopAdd}
+								\drmrule{}{}{O}{\mc{+} :: \mc{(int,int)->int}}{TyBopAddInt},\ \ &
+								\drmrule{}{}{O}{\mc{+} :: \mc{(flt,flt)->flt}}{TyBopAddFlt},\\
+								\drmrule{}{}{O}{\mc{+} :: \mc{(int,char)->char}}{TyBopAddCharR},\ \ &
+								\drmrule{}{}{O}{\mc{+} :: \mc{(char,int)->char}}{TyBopAddCharL}
 							\end{align*}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(int,int) \to int}}{TyBopSub},\ \ &
-								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(flt,flt) \to flt}}{TyBopSub},\\
-								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(int,char) \to char}}{TyBopSub},\ \ &
-								\drmrule{}{}{O}{\textnormal{\code{-}} :: \mathsf{(char,int) \to char}}{TyBopSub}
+								\drmrule{}{}{O}{\mc{-} :: \mc{(int,int)->int}}{TyBopSubInt},\ \ &
+								\drmrule{}{}{O}{\mc{-} :: \mc{(flt,flt)->flt}}{TyBopSubFlt},\\
+								\drmrule{}{}{O}{\mc{-} :: \mc{(int,char)->char}}{TyBopSubCharR},\ \ &
+								\drmrule{}{}{O}{\mc{-} :: \mc{(char,int)->char}}{TyBopSubCharL}
 							\end{align*}
 					\end{itemize}
 				
@@ -258,15 +371,15 @@
 					\begin{itemize}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{<<}} :: \mathsf{(int,int) \to int}}{TyBopLShift}
+								\drmrule{}{}{O}{\mc{<<} :: \mc{(int,int)->int}}{TyBopLShift}
 							\end{align*}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{>>}} :: \mathsf{(int,int) \to int}}{TyBopBitRShift}
+								\drmrule{}{}{O}{\mc{>>} :: \mc{(int,int)->int}}{TyBopBitRShift}
 							\end{align*}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{>>>}} :: \mathsf{(int,int) \to int}}{TyBopBitAShift}
+								\drmrule{}{}{O}{\mc{>>>} :: \mc{(int,int)->int}}{TyBopBitAShift}
 							\end{align*}
 					\end{itemize}
 				
@@ -275,16 +388,15 @@
 					\begin{itemize}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{\&}} :: \mathsf{(int,int) \to int}}{TyBopBitAnd}
+								\drmrule{}{}{O}{\mc{\&} :: \mc{(int,int)->int}}{TyBopBitAnd}
 							\end{align*}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{^}} :: \mathsf{(int,int) \to int}}{TyBopXor},\ \ &
-								\drmrule{}{}{O}{\textnormal{\code{^}} :: \mathsf{(bool,bool) \to bool}}{TyBopXor}
+								\drmrule{}{}{O}{\mc{^} :: \mc{(int,int)->int}}{TyBopXor}
 							\end{align*}
 						\item
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{|}} :: \mathsf{(int,int) \to int}}{TyBopBitOr}
+								\drmrule{}{}{O}{\mc{|} :: \mc{(int,int)->int}}{TyBopBitOr}
 							\end{align*}
 					\end{itemize}
 				
@@ -293,38 +405,52 @@
 					\begin{itemize}
 						\item 
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{\&\&}} :: \mathsf{(bool,bool) \to bool}}{TyBopLogAnd}
+								\drmrule{}{}{O}{\mc{\&\&} :: \mc{(bool,bool)->bool}}{TyBopLogAnd}
 							\end{align*}
 						\item 
 							\begin{align*}
-								\drmrule{}{}{O}{\textnormal{\code{||}} :: \mathsf{(bool,bool) \to bool}}{TyBopLogOr}
+								\drmrule{}{}{O}{\mc{\^\^} :: \mc{(bool,bool)->bool}}{TyBopLogXor}
+							\end{align*}
+						\item 
+							\begin{align*}
+								\drmrule{}{}{O}{\mc{||} :: \mc{(bool,bool)->bool}}{TyBopLogOr}
 							\end{align*}
 					\end{itemize}
 				
 				\subsubsubsection{Comparison Operators}
 				
 					\begin{align*}
-						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[int] \to bool}}{TyCmpList},\ \ &
-						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[flt] \to bool}}{TyCmpList},\\
-						\drmrule{}{}{O}{\{\textnormal{\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=}}\} :: \mathsf{[char] \to bool}}{TyCmpList},\ \ &
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(int,...,int)->bool}}{TyCmpListInt},\\
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(flt,...,flt)->bool}}{TyCmpListFlt},\\
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(char,...,char)->bool}}{TyCmpListChar},\\
 					\end{align*}
 					
 					
 		\subsection{Expressions}
 		
-			\subsubsection{Assignability}
+			\subsubsection{Subtyping Expression Rule}
 			
-				The rule $\vdash_A$ defines when an expression can be assigned a value.
+				To reduce tree rules, we define the following rules:
 				
 				\begin{align*}
-					\frac{(\textnormal{\code{id}},\mathsf{t})\in S}{S\vdash_A\textnormal{\code{id}}}\textsc{\small{ExpAssn}}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{ET}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubLocal},\ \ 
+					\drmrule{S\ruleapp{G}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{GT}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubGlobal}
+				\end{align*}
+		
+			\subsubsection{Assignability}
+			
+				The rule $\ruleapp{A}$ defines when an expression can be assigned a value.
+				
+				\begin{align*}
+					\drmrule{(\mc{id},\_,m)\in S}{S}{A}{\mc{id}}{ExpAssnId},\ \ 
+					\drmrule{}{S}{A}{\mc{e1[e2]}}{ExpAssnSub}
 				\end{align*}
 				
 			\subsubsection{Global Expressions}
 			
-				The rule $\vdash_G$ describes global expressions, which are restricted in a way that they can be computed at compile time.
+				The rule $\vdash_G$ describes global expressions, which are restricted in a way that they can be computed at compile time. Global variables are also strictly non-\code{null}.
 				
-				Copied rules always use $\vdash_G$ instead of $\vdash_E$
+				The following copied rules use $\vdash_G$ instead of $\vdash_E$
 				
 				\subsubsubsection{Literals}
 				
@@ -344,112 +470,147 @@
 						\item \textsc{GExpCmpList} $:=$ \textsc{ExpCmpList}
 					\end{itemize}
 				
-					Note that global variable declarations cannot feature function calls.
+					Note that global variable declarations cannot feature function calls or \code{null} declarations.
 		
 			\subsubsection{Literals}
 			
 				\begin{itemize}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{n :: \textnormal{\code{int}}}{ExpLitInt}
+							\drmrule{}{}{E}{n :: \mc{int}}{ExpLitInt}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{f :: \textnormal{\code{flt}}}{ExpLitFlt}
+							\drmrule{}{}{E}{f :: \mc{flt}}{ExpLitFlt}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{c :: \textnormal{\code{char}}}{ExpLitChar}
+							\drmrule{}{}{E}{c :: \mc{char}}{ExpLitChar}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{\textnormal{\code{true}} :: \textnormal{\code{bool}}}{ExpLitBool},\ \ 
-							\drmrule{}{}{E}{\textnormal{\code{true}} :: \textnormal{\code{bool}}}{ExpLitBool}
+							\drmrule{}{}{E}{\mc{true} :: \mc{bool}}{ExpLitBoolTrue},\ \ 
+							\drmrule{}{}{E}{\mc{false} :: \mc{bool}}{ExpLitBoolFalse}
 						\end{align*}
+					\item
+						\begin{align*}
+							\drmrule{}{}{E}{s :: \mc{string}}{ExpLitString}
+						\end{align*}
+					\item
+						In arrays, the typechecker looks for the common subtypes of all array literal elements and looks for the one type \code{t} that is a supertype of all elements and which is a subtype of all other such subtypes (the minimum of the subtypes given the $\preceq$ relation on types).
+						\begin{align*}
+							\drmrule{S\ruleapp{E}\mc{e1}::\mc{t1},\ \dots,\ S\ruleapp{E}\mc{en}::\mc{tn}\ \ \mc{t} = \min_\preceq (\bigcap_{\mc{i}=\mc{1}}^{\mc{n}}\mathsf{suptys}(\mc{ti}))}{S}{E}{\mc{[e1,...,en]} :: \mc{[t]}}{ExpLitArr}
+						\end{align*}
+						
+						Because the graph connecting types and subtypes is a forest of trees, if the intersection of supertypes is nonempty there is a unique solution \code{t}.
 				\end{itemize}
+			
+			\subsubsection{Null}
+			
+				\begin{align*}
+					\drmrule{\textnormal{\code{t} is a non-null ref. type}}{S}{E}{\mc{null of t} :: \mc{t?}}{ExpNull}
+				\end{align*}
 			
 			\subsubsection{Identifiers}
 			
 				\begin{align*}
-					\drmrule{(id,\mathsf{t})\in S}{S}{E}{\textnormal{\code{id}} :: \mathsf{t}}{ExpId}
+					\drmrule{(id,\mc{t},\_)\in S}{S}{E}{\mc{id} :: \mc{t}}{ExpId}
 				\end{align*}
 			
 			\subsubsection{Unary Operations}
 			
+				Unary and Binary Operations do not need to do subtype checking, as they operate only on primitives.
+			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t'}\ \ S\vdash\textnormal{\code{op}} :: \mathsf{t' \to t}}{S}{E}{\textnormal{\code{op exp}} :: \mathsf{t}}{ExpUop}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1}\ \ \ruleapp{O}\mc{op}::\mc{t1->t}}{S}{E}{\mc{op exp}::\mc{t}}{ExpUop}
 				\end{align*}
 			
 			\subsubsection{Binary Operations}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{e1}} :: \mathsf{t1}\ \ S\vdash\textnormal{\code{e2}} :: \mathsf{t2}\ \ S\vdash\textnormal{\code{op}} :: \mathsf{(t1,t2) \to t}}{S}{E}{\textnormal{\code{e1 op e2}} :: \mathsf{t}}{ExpBop}
+					\drmrule{S\ruleapp{E}\mc{e1}::\mc{t1}\ \ S\ruleapp{ET}\mc{e2}::\mc{t2}\ \ \ruleapp{O}\mc{op}::\mc{(t1,t2)->t}}{S}{E}{\mc{e1 op e2} :: \mc{t}}{ExpBop}
 				\end{align*}
 			
 			\subsubsection{Function Calls}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{f}} :: \mathsf{(t1,...,tn) \to rt}\ \ S\vdash\textnormal{\code{e1}} :: \mathsf{t1},\ \dots,\ S\vdash\textnormal{\code{en}} :: \mathsf{tn}}{S}{E}{\textnormal{\code{f(e1,...,en)}} :: \mathsf{rt}}{ExpFunc}
+					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\ \ \mc{rt}\not\equiv\mc{void}\ \  S\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}}{S}{E}{\mc{f(e1,...,en)}::\mc{rt}}{ExpFunc}´
 				\end{align*}
+				
+			\subsubsection{Subscript Access}
+			
+				\begin{itemize}
+					\item
+						\begin{align*}
+							\drmrule{S\ruleapp{E}\mc{s}::\mc{string}\ \ S\ruleapp{E}\mc{i}::\mc{int}}{S}{E}{\mc{s[i]} :: \mc{char}}{ExpArrSub}
+						\end{align*}
+					\item
+						\begin{align*}
+							\drmrule{S\ruleapp{E}\mc{e}::\mc{[t]}\ \ S\ruleapp{E}\mc{i}::\mc{int}}{S}{E}{\mc{e[i]} :: \mc{t}}{ExpArrSub}
+						\end{align*}
+				\end{itemize}
 			
 			\subsubsection{Comparison Lists}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{e0}} :: \mathsf{t0},\ \dots,\ S\vdash\textnormal{\code{en}} :: \mathsf{tn}\ \ S\vdash\textnormal{\code{op1}} :: \mathsf{(t0,t1) \to t},\ \dots,\ S\vdash\textnormal{\code{opn}} :: \mathsf{(t(n-1),tn) \to t}}{S}{E}{\textnormal{\code{e0 op1 ... opn en}} :: \mathsf{t}}{ExpCmpList}
+					\drmrule{\ruleapp{O}\mc{op1}::\mc{(t0,t1)->t},\ \dots,\ \ruleapp{O}\mc{opn}::\mc{(t(n-1),tn)->t}\ \ S\ruleapp{ET}\mc{e0}\trianglelefteq\mc{t0},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}}{S}{E}{\mc{e0 op1 ... opn en} :: \mc{t}}{ExpCmpList}
 				\end{align*}
 				
 		\subsection{Statements}
 		
-			In the statement typing rules, a statement rule produces a tuple $(S,r)$ where $S$ stands for the newly updates context, and $r\in\{\bot,\top\}$, where $\bot$ means that a statement might not return and $\top$ means that a statement might return.
+			In the statement typing rules, a statement rule produces a tuple $(S,r)$ where $S$ stands for the newly updated context, and $r\in\{\bot,\top\}$, where $\bot$ means that a statement might not return and $\top$ means that a statement definitely returns.
 			
-			To prevent potential mistakes, the typechecker prevents statements which are deemed unreachable at compile time. Logical operators like $\wedge$ operate as if $\bot\equiv0$ and $\top\equiv1$.
+			To prevent potential mistakes, the typechecker prevents statements which are deemed unreachable at compile time. The logical operators $\vee$ and $\wedge$ operate as if $\bot\equiv0$ and $\top\equiv1$.
 		
 			\subsubsection{Local Variable Declarations}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}}{S,\mathsf{rt}}{S}{\textnormal{\code{let id := exp}} \Rightarrow (S \cup (\textnormal{\code{id}},\mathsf{t})),\bot}{StmtVDecl}
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}}{S,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}}{S,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
 				\end{align*}
 			
 			\subsubsection{Assignments}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}\ \ S\vdash\textnormal{\code{lhs}} :: \mathsf{t}\ \ S\vdash_A\textnormal{\code{lhs}}}{S,\mathsf{rt}}{S}{\textnormal{\code{lhs := exp}} \Rightarrow S,\bot}{StmtAssn}
+					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t}}{S,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
 				\end{align*}
 			
 			\subsubsection{Expression Statements}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{exp}} :: \mathsf{t}}{S,\mathsf{rt}}{S}{\textnormal{\code{exp}} \Rightarrow S,\bot}{StmtExpr}
+					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,\mc{rt}}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
 				\end{align*}
 			
 			\subsubsection{If Statements}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b1}}\Rightarrow S_1,R_1\ \ S,\mathsf{rt}\vdash\textnormal{\code{b2}}\Rightarrow S_2,R_2}{S,\mathsf{rt}}{S}{\textnormal{\code{if c b1 else b2}} \Rightarrow S,R_1\wedge R_2}{StmtIf}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,\mc{rt}\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,\mc{rt}}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
 				\end{align*}
 			
 			\subsubsection{While Statements}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b}}\Rightarrow S',R}{S,\mathsf{rt}}{S}{\textnormal{\code{while c b}} \Rightarrow S,\bot}{StmtWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{while c b} \Rightarrow S,\bot}{StmtWhile}
 				\end{align*}
 			
 			\subsubsection{Do-While Statements}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{c}} :: \textnormal{\code{bool}}\ \ S,\mathsf{rt}\vdash\textnormal{\code{b}}\Rightarrow S',R}{S,\mathsf{rt}}{S}{\textnormal{\code{do b while c}} \Rightarrow S,R}{StmtDoWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
 				\end{align*}
 			
 			\subsubsection{Return Statements}
 			
 				\begin{align*}
-					\drmrule{S\vdash\textnormal{\code{exp}}::\mathsf{rt}}{S,\mathsf{rt}}{\textnormal{\code{return exp}} \Rightarrow S,\top}{StmtReturn},\ \ \drmrule{}{S,\textnormal{\code{void}}}{S}{\textnormal{\code{return}}\Rightarrow S,\top}{StmtReturn}
+					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
 				\end{align*}
 				
 			\subsubsection{Blocks}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{\},\mathsf{rt}\vdash\textnormal{\code{s1}} \Rightarrow S_1,\bot,\ \ S_1,\mathsf{rt}\vdash\textnormal{\code{s2}} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mathsf{rt}\vdash\textnormal{\code{sn}} \Rightarrow S_n,R}{S,\mathsf{rt}}{S}{\textnormal{\code{s1 ... sn}} \Rightarrow S_n,R}{StmtBlock}
+					\drmrule{S\sqcup\{\},\mc{rt}\ruleapp{S}\mc{s1} \Rightarrow S_1,\bot,\ \ S_1,\mc{rt}\ruleapp{S}\mc{s2} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mc{rt}\ruleapp{S}\mc{sn} \Rightarrow S_n,R}{S,\mc{rt}}{S}{\mc{s1 ... sn} \Rightarrow S_n,R}{StmtBlock}
 				\end{align*}
 		
 		\subsection{Global Statements}
@@ -457,42 +618,61 @@
 			\subsubsection{Global Function Declaration}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{(\textnormal{\code{a1}},\textnormal{\code{t1}}),\dots,(\textnormal{\code{an}},\textnormal{\code{tn}})\},\textnormal{\code{rt}} \vdash \textnormal{\code{b}},\top}{S}{G}{\textnormal{\code{fn id : a1:t1, ..., an:tn -> rt b}} \Rightarrow S}{GStmtFDecl}
+					\drmrule{S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},\mc{rt} \ruleapp{S} \mc{b} \Rightarrow S',\top \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S}{GStmtFDecl}
 				\end{align*}
 			
 			\subsubsection{Global Variable Declaration}
 			
 				\begin{align*}
-					\drmrule{(\textnormal{\code{id}},any) \not\in S\ \ S\vdash_G\textnormal{\code{exp}} :: \mathsf{t}}{S}{G}{\textnormal{\code{global id := exp}} \Rightarrow S\cup\{(\textnormal{\code{id}},\mathsf{t})\}}{GStmtVDecl}
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\}}{GStmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\}}{GStmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}
 				\end{align*}
 			
 			\subsubsection{Program}
 			
 				\begin{align*}
-					\drmrule{S_0 \vdash \textnormal{\code{gs1}} \Rightarrow S_1,\ \dots,\ S_{n-1} \vdash \textnormal{\code{gsn}} \Rightarrow S_n}{S_0 := \{\} \sqcup \{\}}{G}{\textnormal{\code{gs1 ... gsn}} \Rightarrow S_n}{GStmtProgram}
+					\drmrule{S_0 \ruleapp{G} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{G} \mc{gsn} \Rightarrow S_n}{S_0}{G}{\mc{gs1 ... gsn} \Rightarrow S_n}{GStmtProgram}
 				\end{align*}
 				
-		\subsection{Context Type-Checking}
+		\subsection{Context Buildup}
 		
-			\subsubsection{Global Function Declaration}
+			\subsubsection{Global Function Declarations}
 			
 				\begin{align*}
-					\drmrule{(\textnormal{\code{id}},any) \not\in S}{S}{GCF}{\textnormal{\code{fn id : a1:t1, ..., an:tn -> rt b}} \Rightarrow S \cup (\textnormal{\code{id}}, (\textnormal{\code{t1}},\dots,\textnormal{\code{tn}}) \to \textnormal{\code{rt}})}{GStmtCtxtFDecl}
-				\end{align*}\begin{align*}
-					\drmrule{}{S}{GCF}{\textnormal{\code{let id := exp}} \Rightarrow S}{GStmtCtxtFDecl}
+					\drmrule{(\mc{id},\_) \not\in S}{S}{GCF}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S \cup (\mc{id}, \mc{(t1,...,tn)->rt}, c)}{GStmtFCtxtFDecl}
+				\end{align*}
+				\begin{align*}
+					\drmrule{}{S}{GCF}{\mc{global id := exp} \Rightarrow S}{GStmtFCtxtVDeclConst}\\
+					\drmrule{}{S}{GCF}{\mc{global id:t := exp} \Rightarrow S}{GStmtFCtxtVTDeclConst}\\
+					\drmrule{}{S}{GCF}{\mc{global mut id := exp} \Rightarrow S}{GStmtFCtxtVDeclMut}\\
+					\drmrule{}{S}{GCF}{\mc{global mut id:t := exp} \Rightarrow S}{GStmtFCtxtVTDeclMut}
 				\end{align*}
 			
 			\subsubsection{Program: Functions}
 			
 				\begin{align*}
-					\drmrule{S_0 \vdash_{\mathsf{GCF}} \textnormal{\code{gs1}} \Rightarrow S_1,\ \dots,\ S_{n-1} \vdash_{\mathsf{GCF}} \textnormal{\code{gs(n-1)}} \Rightarrow S_n}{S_0}{GC}{\textnormal{\code{gs1 ... gsn}} \Rightarrow S_n}{GStmtCtxtFuncs}
+					\drmrule{S_0 \ruleapp{GCF} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{GCF} \mc{gsn} \Rightarrow S_n}{S_0}{GC}{\mc{gs1 ... gsn} \Rightarrow S_n}{GStmtCtxtFuncs}
 				\end{align*}
 			
-			\subsubsection{Program}
+		\subsection{Rule for Program Typechecking}
+		
+			Let $S^\star$ be the starting context which contains the builtin context. It looks as follows:
 			
-				\begin{align*}
-					\drmrule{\{\}\sqcup\{\} \vdash_{\mathsf{GCF}} \mathsf{prog} \Rightarrow S' \ \ S' \vdash_{\mathsf{G}} \mathsf{prog} \Rightarrow S}{}{G}{\mathsf{prog} \Rightarrow S}{Prog}
-				\end{align*}
+			\begin{align*}
+				S^\star := \{\}\sqcup \left\{
+					\begin{array}{lll}
+						(\mc{string\_of\_int},&\mc{int -> string},&c),\\ (\mc{string\_of\_flt},&\mc{flt -> string},&c),\\
+						(\mc{string\_concat},&\mc{(string,string) -> string},&c),\\
+						(\mc{io\_print},&\mc{string -> void},&c)
+					\end{array}
+				\right\}
+			\end{align*}
+		
+			\begin{align*}
+				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
+			\end{align*}
 		
 	\section{Formal Grammar}
 	
@@ -501,61 +681,70 @@
 			The Lexer Grammar is specified using \textbf{regular expressions}:
 			
 			\begin{verbatim}
-				LiteralInt  ::= /[1-9]\d*/
-				LiteralFlt  ::= /\d+\.\d+/
-				LiteralChar ::= /'([^'\\]|(\\[\\nrt']))'/
-				LiteralBool ::= /true|false/
+				LiteralInt   ::= /[1-9]\d*/
+				LiteralFlt   ::= /\d+\.\d+/
+				LiteralChar  ::= /'([^'\\]|(\\[\\nrt']))'/
+				LiteralBool  ::= /true|false/
+				LiteralStr   ::= /"([^"\\]|(\\[\\nrt"]))*"/
 				
-				Identifier  ::= /[a-zA-Z][a-zA-Z0-9_]*/
+				Identifier   ::= /[a-zA-Z][a-zA-Z0-9_]*/
 				
-				global      ::= /global/
-				fn          ::= /fn/
-				let         ::= /let/
-				mut         ::= /mut/
+				global       ::= /global/
+				fn           ::= /fn/
+				let          ::= /let/
+				mut          ::= /mut/
 				
-				int         ::= /int/
-				flt         ::= /flt/
-				char        ::= /char/
-				bool        ::= /bool/
-				void        ::= /void/
+				int          ::= /int/
+				flt          ::= /flt/
+				char         ::= /char/
+				bool         ::= /bool/
+				string       ::= /string/
+				void         ::= /void/
 				
-				if          ::= /if/
-				elif        ::= /elif/
-				else        ::= /else/
-				do          ::= /do/
-				while       ::= /while/
+				null         ::= /null/
+				of           ::= /of/
 				
-				return      ::= /return/
+				if           ::= /if/
+				elif         ::= /elif/
+				else         ::= /else/
+				do           ::= /do/
+				while        ::= /while/
+				 
+				return       ::= /return/
 				
-				Dash        ::= /\-/
-				Bang        ::= /!/
-				Star        ::= /\*/
-				Plus        ::= /\+/
-				LShift      ::= /<</
-				RShift      ::= />>/
-				AShift      ::= />>>/
-				Bitand      ::= /&/
-				Xor         ::= /\^/
-				Bitor       ::= /\|/
-				Logand      ::= /&&/
-				Logor       ::= /\|\|/
+				Dash         ::= /\-/
+				Bang         ::= /!/
+				Star         ::= /\*/
+				Plus         ::= /\+/
+				LShift       ::= /<</
+				RShift       ::= />>/
+				AShift       ::= />>>/
+				Bitand       ::= /&/
+				Xor          ::= /\^/
+				Bitor        ::= /\|/
+				Logand       ::= /&&/
+				Logor        ::= /\|\|/
 				
-				Equal       ::= /=/
-				NotEqual    ::= /!=/
-				Greater     ::= />/
-				Less        ::= /</
-				GreaterEq   ::= />=/
-				LessEq      ::= /<=/
+				Equal        ::= /=/
+				NotEqual     ::= /!=/
+				Greater      ::= />/
+				Less         ::= /</
+				GreaterEq    ::= />=/
+				LessEq       ::= /<=/
 				
-				Assign      ::= /:=/
+				Assign       ::= /:=/
 				
-				Colon       ::= /:/
-				Arrow       ::= /\->/
+				Colon        ::= /:/
+				Arrow        ::= /\->/
 				
-				Comma       ::= /\,/
+				Comma        ::= /\,/
 				
-				LParen      ::= /\(/
-				RParen      ::= /\)/
+				LParen       ::= /\(/
+				RParen       ::= /\)/
+				LBrack       ::= /\[/
+				RBrack       ::= /\]/
+				
+				QuestionMark ::= /\?/
 			\end{verbatim}
 			
 		\subsection{Parser Grammar}
@@ -572,7 +761,10 @@
 				                 | GFDeclaration
 				                 
 				GVDeclaration    ::=
-				                 | %Global %Identifier %Assign GlobalExpression
+				                 | %Global      %Identifier             %Assign GlobalExpression
+				                 | %Global      %Identifier %Colon Type %Assign GlobalExpression
+				                 | %Global %Mut %Identifier             %Assign GlobalExpression
+				                 | %Global %Mut %Identifier %Colon Type %Assign GlobalExpression
 				                 
 				GFDeclaration    ::=
 				                 | %Fn %Identifier                   %Arrow ReturnType Block
@@ -600,7 +792,10 @@
 				                 | ReturnStmt
 				                 
 				VDeclaration     ::=
-				                 | %Let %Identifier %Assign Expression
+				                 | %Let %Identifier             %Assign Expression
+				                 | %Let %Identifier %Colon Type %Assign Expression
+				                 | %Mut %Identifier             %Assign Expression
+				                 | %Mut %Identifier %Colon Type %Assign Expression
 				                 
 				AssignStmt       ::=
 				                 | LHS %Assign Expression
@@ -635,10 +830,18 @@
 				                 | %Flt
 				                 | %Char
 				                 | %Bool
+				                 | RefType
+				                 | RefType %QuestionMark
+				                 
+				RefType          ::=
+				                 | %Str
+				                 | %LBrack Type %RBrack
 				                 
 				GlobalExpression ::= Expression*
 			
 				Expression       ::=
+	                             | %Null %Of RefType
+	                             | %LBrack %RBrack %Of Type
 				                 | ExprPrec30
 				
 				ExprPrec20       ::= 
@@ -677,24 +880,31 @@
 				                 | SimpleExpression
 				                 | %Dash ExprPrec100
 				                 | %Bang ExprPrec100
+				                 
 				SimpleExpression ::=
+				                 | BaseExpression Application
+				                 | BaseExpression
+				
+				BaseExpression   ::=
 				                 | %LParen Expression %RParen
+				                 | %LBrack CommaExpList %RBrack
 				                 | %LiteralInt
 				                 | %LiteralFlt
 				                 | %LiteralChar
 				                 | %LiteralBool
+				                 | %LiteralStr
 				                 | %Identifier
-				                 | %Identifier Application
 				                 
 				Application      ::=
-				                 | %LParen FArgs %RParen
+				                 | %LParen CommaExpListNE %RParen
+				                 | %LBrack Expression %RBrack
 				
-				FArgs            ::=
+				CommaExpList     ::=
 				                 | €
-				                 | NonEmptyFArgs
-				NonEmptyFArgs    ::=
+				                 | CommaExpListNE
+				CommaExpListNE   ::=
 				                 | Expression
-				                 | Expression %Comma NonEmptyFArgs
+				                 | Expression %Comma CommaExpListNE
 			\end{verbatim}
 	
 \end{document}

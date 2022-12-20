@@ -1,0 +1,10 @@
+Lexer.cmo : \
+    Token.cmo
+Lexer.cmx : \
+    Token.cmx
+Main.cmo : \
+    Lexer.cmo
+Main.cmx : \
+    Lexer.cmx
+Token.cmo :
+Token.cmx :

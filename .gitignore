@@ -1,1 +1,14 @@
-Dromedar/.vscode
+Doc/Doc.aux
+Doc/Doc.log
+Doc/Doc.out
+Doc/Doc.synctex.gz
+Doc/Doc.toc
+TODO.txt
+Droml/_build/
+Droml/.vscode/
+Droml/a.out
+Droml/droml
+Droml/Out.ll
+Droml/Out.s
+Droml/Test.ll
+Droml/Test.drm
