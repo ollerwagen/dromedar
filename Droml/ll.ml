@@ -37,13 +37,24 @@ type bop =
   | Or
   | Xor
 
+type cmpop =
+  | Eq
+  | Neq
+  | Greater
+  | GreaterEq
+  | Less
+  | LessEq
+
 type term =
   | Ret of (llty * operand) option
   | Br  of string
   | Cbr of operand * string * string
 
+type cmp_op_type = | ICmp | FCmp
+
 type instr =
   | Binop  of string        * bop * llty * operand * operand
+  | Cmp    of string        * cmp_op_type * cmpop * llty * operand * operand
   | Alloca of string        * llty
   | Load   of string        * llty * operand
   | Store  of                 llty * operand * operand
@@ -55,6 +66,7 @@ type block = string * instr list * term
 
 type ginstr =
   | FDecl of string * llty * (llty * string) list * (firstblock * block list)
+  | GDecl of string * llty * operand
   
 let rec print_llty (t:llty) : string =
   begin match t with
@@ -81,7 +93,7 @@ let rec print_operand (op:operand) : string =
     | Null      -> "null"
   end
 
-let op_to_string : (bop * string) list =
+let binop_to_string : (bop * string) list =
   [ Add,  "add"
   ; FAdd, "fadd"
   ; Sub,  "sub"
@@ -96,11 +108,37 @@ let op_to_string : (bop * string) list =
   ; Xor,  "xor"
   ]
 
+let icmpop_to_string : (cmpop * string) list =
+  [ Eq,        "eq"
+  ; Neq,       "ne"
+  ; Greater,   "sgt"
+  ; GreaterEq, "sge"
+  ; Less,      "slt"
+  ; LessEq,    "sle"
+  ]
+
+let fcmpop_to_string : (cmpop * string) list =
+  [ Eq,        "oeq"
+  ; Neq,       "une"
+  ; Greater,   "ogt"
+  ; GreaterEq, "oge"
+  ; Less,      "olt"
+  ; LessEq,    "ole"
+  ]
+
 let print_instr (i:instr) : string =
   begin match i with
     | Binop (wt,op,t,e1,e2) ->
-        let opstr, tstr, e1s, e2s = List.assoc op op_to_string, print_llty t, print_operand e1, print_operand e2 in
+        let opstr, tstr, e1s, e2s = List.assoc op binop_to_string, print_llty t, print_operand e1, print_operand e2 in
         Printf.sprintf "%%%s = %s %s %s, %s" wt opstr tstr e1s e2s
+    | Cmp (wt,opt,op,t,e1,e2) ->
+        let opname, opstr =
+          begin match opt with
+            | ICmp -> "icmp", List.assoc op icmpop_to_string
+            | FCmp -> "fcmp", List.assoc op fcmpop_to_string
+          end in
+        let tstr, e1s, e2s = print_llty t, print_operand e1, print_operand e2 in
+        Printf.sprintf "%%%s = %s %s %s %s, %s" wt opname opstr tstr e1s e2s
     | Alloca (wt,t) ->
         let tstr = print_llty t in
         Printf.sprintf "%%%s = alloca %s" wt tstr
@@ -146,8 +184,14 @@ let print_ginstr (gi:ginstr) : string =
           (String.concat ", " (List.map (fun (t,e) -> Printf.sprintf "%s %%%s" (print_llty t) e) a))
           (Printf.sprintf "%s%s" (String.concat "" (List.map (fun i -> Printf.sprintf "  %s\n" (print_instr i)) (fst fb))) (Printf.sprintf "  %s\n" (print_term (snd fb))))
           (String.concat "" (List.map (fun (l,is,t) -> Printf.sprintf "%s:\n%s%s" l (String.concat "" (List.map (fun i -> Printf.sprintf "  %s\n" (print_instr i)) is)) (Printf.sprintf "  %s\n" (print_term t))) bs))
+    | GDecl (id,t,init) ->
+        Printf.sprintf "@%s = global %s %s\n"
+          id
+          (print_llty t)
+          (print_operand init)
   end
 
 let print_llprog (p : ginstr list) : string =
+  (readall "intrinsics.ll") ^ "\n\n" ^
   (readall "builtindecls.ll") ^ "\n\n" ^
   (String.concat "\n" (List.map print_ginstr p))

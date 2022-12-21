@@ -99,16 +99,24 @@ module Translator = struct
       [ (TInt, TInt), (TInt, "pow_ii")
       ; (TFlt, TFlt), (TFlt, "pow_ff")
       ] in
+    
+    let cmpop_to_ll : (Ast.cmpop * Ll.cmpop) list =
+      [ Eq,        Eq
+      ; Neq,       Neq
+      ; Greater,   Greater
+      ; GreaterEq, GreaterEq
+      ; Less,      Less
+      ; LessEq,    LessEq
+      ] in
 
     begin match e.t with
       | Ast.Id      id ->
           let op,t,llt,s = cmp_lhs c e in
           begin match llt with
             | Ptr (Func _) -> op, t, llt, s (* do not dereference functions *)
-            | Ptr llt' ->
+            | llt' ->
                 let idsym = gensym id in
                 Id idsym, t, llt', Ll.[ I (Load (idsym, llt', op)) ]
-            | _ -> Stdlib.failwith "bad cmp_lhs"
           end
       | Ast.LitInt  i  -> Ll.IConst i, Ast.TInt, cmp_ty Ast.TInt, []
       | Ast.LitFlt  f  -> Ll.FConst f, Ast.TFlt, cmp_ty Ast.TFlt, []
@@ -121,8 +129,28 @@ module Translator = struct
             | Pow ->
                 let rt,fname = List.assoc (t1,t2) pow_ts in
                 Id rsym, rt, cmp_ty rt, s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1; llt2, op2 ])) ]
-            | Logand -> Stdlib.failwith "logical and (short circuit eval) unimplemented"
-            | Logor  -> Stdlib.failwith "logical or (short circuit eval) unimplemented"
+            | Logand | Logor ->
+                let shortcircuiteval, shortcircuitstore =
+                  if op = Logand then 0L, 0L else 1L, 1L in
+                let cmpres = gensym "and" in
+                let shortcircuit, evalboth, logend = gensym "shortcircuit", gensym "evalboth", gensym "logend" in
+                let resstack = gensym "logstack" in
+                Id rsym, TBool, cmp_ty TBool,
+                [ E (Alloca (resstack, I1)) ] @
+                s1 @
+                [ I (Cmp (cmpres, ICmp, Eq, I1, op1, IConst shortcircuiteval))
+                ; T (Cbr (Id cmpres, shortcircuit, evalboth))
+                ; L shortcircuit
+                ; I (Store (I1, IConst shortcircuitstore, Id resstack))
+                ; T (Br logend)
+                ; L evalboth
+                ] @
+                s2 @
+                [ I (Store (I1, op2, Id resstack))
+                ; T (Br logend)
+                ; L logend
+                ; I (Load (rsym, I1, Id resstack))
+                ]
             | _ ->
                 let rt,llop = List.assoc (op,t1,t2) bop_ts in
                 Id rsym, rt, cmp_ty rt, s1 @ s2 @ [ I (Binop (rsym, llop, cmp_ty rt, op1, op2))]
@@ -132,6 +160,31 @@ module Translator = struct
           let rsym = gensym "uop" in
           let rt,llop,argop = List.assoc (op,t) uop_ts in
           Id rsym, rt, cmp_ty rt, s @ [ I (Binop (rsym, llop, cmp_ty rt, argop, eop)) ]
+      | Ast.Cmps (f,rs) ->
+          let res, resstack = gensym "cmp", gensym "cmp" in
+          let fop,ft,_,fs = cmp_exp c f in
+          let fstlbl, lblfalse, lblend = gensym "cmplbl", gensym "cmpfalse", gensym "cmpend" in
+          let _,_,lastlbl,s =
+            List.fold_left
+              (fun (lop,lt,lbl,s) (op,rexp) ->
+                let rop,rt,rllt,rs = cmp_exp c rexp in
+                let nextlbl, nextres = gensym "cmplbl", gensym "cmp" in
+                let cmpty =
+                  begin match lt with
+                    | TFlt -> FCmp
+                    | _    -> ICmp (* ints and chars, faulty types removed by typechecker *)
+                  end in
+                let cmpop = List.assoc op cmpop_to_ll in
+                rop, rt, nextlbl,
+                s @ [ L lbl ] @ rs @
+                [ I (Cmp (nextres, cmpty, cmpop, rllt, lop, rop)) ; T (Cbr (Id nextres, nextlbl, lblfalse)) ]
+              )
+              (fop,ft,fstlbl,[]) rs in
+          Id res, TBool, cmp_ty TBool,
+          [ E (Alloca (resstack, cmp_ty TBool)) ] @ fs @ [ T (Br fstlbl) ] @ s @
+          [ L lastlbl ; I (Store (cmp_ty TBool, IConst 1L, Id resstack)) ; T (Br lblend) ;
+            L lblfalse ; I (Store (cmp_ty TBool, IConst 0L, Id resstack)) ; T (Br lblend) ;
+            L lblend ; I (Load (res, cmp_ty TBool, Id resstack)) ]
       | Ast.FApp (f,a) ->
           let getstream (_,_,_,s) = s in
           let getlltandop (op,_,llt,_) = llt, op in
@@ -174,7 +227,7 @@ module Translator = struct
           let llid = gensym id in
           (* alloca and store expression result -> does this ever need a bitcast from ellt to vllt? *)
           (* store variables as pointers in context *)
-          Ctxt.add_binding c (id, (vt, Ptr vllt, Id llid)),
+          Ctxt.add_binding c (id, (vt, vllt, Id llid)),
           s @ [ E (Alloca (llid, vllt)) ; I (Store (ellt, op, Id llid)) ]
       | Assn (l,r) ->
           let (lop,lt,lllt,ls), (rop,rt,rllt,rs) = cmp_lhs c l, cmp_exp c r in
@@ -218,45 +271,62 @@ module Translator = struct
     List.fold_left (fun (c,s) st -> let c',sta = cmp_stmt rt c st in c',s@sta) (c,[]) b
   
   let make_cfg (s : stream) : ginstr list * (Ll.firstblock * Ll.block list) =
-    (*
-     * Global Instructions:        ginstr list
-     * Entry Block Instructions:   instr list
-     * Entry Block Terminator:     term option
-     * Current Block Label:        string option
-     * Current Block Instructions: instr list
-     * Block List:                 block list
-     *)
-    let g,ei,et,cbl,cbi,bs =
+    let g,ei,et,cl,ci,bs =
       List.fold_left
-        ( fun (g,ei,et,cbl,cbi,bs) i ->
-            begin match i with
-              | I is -> if et = None then g,ei@[is],et,cbl,cbi,bs else g,ei,et,cbl,cbi@[is],bs
-              | E is -> g,ei@[is],et,cbl,cbi,bs
-              | L s  -> if et = None || List.length cbi > 0 then
-                          Stdlib.failwith "bad place for a label"
-                        else
-                          g,ei,et,Some s,[],bs
-              | T t  -> if et = None then g,ei,Some t,cbl,cbi,bs
-                        else
-                          begin match cbl with
-                            | None   -> g,ei,et,None,[],bs (* multiple terminators: ignore the following ones -> easier implementation of while loops*)
-                            | Some l -> g,ei,et,None,[],bs@[l,cbi,t]
-                          end
-              | G gi -> g@[gi],ei,et,cbl,cbi,bs
-            end
+        (fun (g,ei,et,cl,ci,bs) strelem ->
+          begin match strelem with
+            | I is -> g,ei,et,cl,ci@[is],bs
+            | G gi -> g@[gi],ei,et,cl,ci,bs
+            | E is -> g,ei@[is],et,cl,ci,bs
+            | L s  ->
+                begin match et with
+                  | None -> Stdlib.failwith "entry block has no terminator"
+                  | _    -> g,ei,et,Some s,[],bs
+                end
+            | T t  ->
+                begin match et with
+                  | None -> g,ei@ci,Some t,cl,[],bs
+                  | _    ->
+                      begin match cl with
+                        | None   -> g,ei,et,None,[],bs@[gensym "tmn",[],t]
+                        | Some l -> g,ei,et,None,[],bs@[l,ci,t]
+                      end
+                end
+          end
         )
         ([],[],None,None,[],[]) s in
-    (* et is not None (need >= 1 term); cbl is None, cbi is empty *)
-    if true || cbl = None && List.length cbi = 0 then
-      begin match et with
-        | None   -> Stdlib.failwith "bad cfg"
-        | Some t -> g,((ei,t),bs)
-      end
-    else
-      Stdlib.failwith "bad cfg"
+
+    begin match et with
+      | None   -> Stdlib.failwith "entry block has no terminator"
+      | Some t ->
+          begin match cl with
+            | None   -> g,((ei,t),bs)
+            | Some l -> g,((ei,t),bs@[l,ci,Br l])
+          end
+    end
+    
+  let cmp_gexp (c : Ctxt.t) (e : Ast.exp node) : operand * Ast.ty * Ll.llty * ginstr list =
+    begin match e.t with
+      | LitInt  i -> IConst i, TInt, cmp_ty TInt, []
+      | LitFlt  f -> FConst f, TFlt, cmp_ty TFlt, []
+      | LitBool b -> IConst (if b then 1L else 0L), TBool, cmp_ty TBool, []
+      | LitChar c -> IConst (Int64.of_int (Char.code c)), TChar, cmp_ty TChar, []
+      | _ -> Stdlib.failwith "bad AST: cannot have these expressions in global scope"
+    end
   
   let cmp_gstmt (c : Ctxt.t) (gs : Ast.gstmt node) : Ctxt.t * ginstr list =
     begin match gs.t with
+      | GVDecl (id,_,t,e) ->
+          let op,et,ellt,s = cmp_gexp c e in
+          let vt =
+            begin match t with
+              | None   -> et
+              | Some t -> t.t
+            end in
+          let vllt = cmp_ty vt in
+          let llid = gensym id in
+          Ctxt.add_binding c (id, (vt, Ptr vllt, Gid llid)),
+          s @ [ GDecl (llid, vllt, op) ]
       | GFDecl (id,args,rt,b) ->
           (* allocate a stack slot for all variables *)
           let create_fstart (args : (string * ty node) list) : Ctxt.t * stream =
@@ -279,7 +349,6 @@ module Translator = struct
             , cfg
             )
           ]
-      | _ -> Stdlib.failwith "global statements unimplemented"
     end
   
   let create_fctxt (prog : Ast.program) : Ctxt.t =

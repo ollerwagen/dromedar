@@ -12,7 +12,7 @@
 \lstdefinelanguage{Dromedar}{
 	morekeywords = [1]{int,flt,char,bool,void,fn,string},
 	morekeywords = [2]{true,false,null},
-	morekeywords = [3]{return,if,else,while,do},
+	morekeywords = [3]{return,if,else,while,do,for},
 	morekeywords = [4]{let,mut,global},
 	morekeywords = [5]{of},
 	comment = [l]{\#},
@@ -600,6 +600,15 @@
 				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
 				\end{align*}
+				
+			\subsubsection{For Statements}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart ... eend b} \Rightarrow S,\bot}{StmtForIncluding}
+				\end{align*}
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart ..| eend b} \Rightarrow S,\bot}{StmtForIncluding}
+				\end{align*}
 			
 			\subsubsection{Return Statements}
 			
@@ -709,6 +718,7 @@
 				else         ::= /else/
 				do           ::= /do/
 				while        ::= /while/
+				for          ::= /for/
 				 
 				return       ::= /return/
 				
@@ -738,6 +748,9 @@
 				Arrow        ::= /\->/
 				
 				Comma        ::= /\,/
+				
+				Dots         ::= /\.\.\./
+				DotsPipe     ::= /\.\.\|/
 				
 				LParen       ::= /\(/
 				RParen       ::= /\)/
@@ -788,6 +801,7 @@
 				                 | IfStmt
 				                 | WhileStmt
 				                 | DoWhileStmt
+				                 | ForStmt
 				                 | ExprStmt
 				                 | ReturnStmt
 				                 
@@ -813,6 +827,10 @@
 				
 				DoWhileStmt      ::=
 				                 | %Do Block %While Expression
+				                 
+				ForStmt          ::=
+				                 | %For %Id %Assign Expr %Dots     Expr Block
+				                 | %For %Id %Assign Expr %DotsPipe Expr Block
 				                 
 				ExprStmt         ::=
 				                 | Expression
@@ -840,8 +858,8 @@
 				GlobalExpression ::= Expression*
 			
 				Expression       ::=
-	                             | %Null %Of RefType
-	                             | %LBrack %RBrack %Of Type
+				                 | %Null %Of RefType
+				                 | %LBrack %RBrack %Of Type
 				                 | ExprPrec30
 				
 				ExprPrec20       ::= 

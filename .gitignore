@@ -12,3 +12,4 @@ Droml/Out.ll
 Droml/Out.s
 Droml/Test.ll
 Droml/Test.drm
+LLVMTest/

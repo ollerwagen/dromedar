@@ -36,7 +36,9 @@ let () =
   let llfile = Stdlib.open_out "Out.ll" in
   Printf.fprintf llfile "%s\n" llstring;
   Printf.printf "\n%s\n" (Ast.print_program program);
+  (*
   Printf.printf "\n%s\n" llstring;
+  *)
   Stdlib.close_out llfile;
   
 
@@ -44,4 +46,6 @@ let () =
     -v to see full linker output
     -lm to add math.h library because apparently that is necessary
    *)
-  let _ = Sys.command "clang -o a.out Out.ll runtime.c -lm" in ()
+  let _ = Sys.command "clang -S Out.ll -O3" in
+  let _ = Sys.command "clang -o a.out Out.ll runtime.c -lm -O3" in
+  ()
