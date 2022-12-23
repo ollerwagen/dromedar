@@ -8,3 +8,4 @@ intrinsics:
 
 all: gc intrinsics
 	ocamlbuild -pkg num main.native
+	mv main.native droml
