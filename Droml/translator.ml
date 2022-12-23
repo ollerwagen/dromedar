@@ -48,18 +48,21 @@ module Translator = struct
 
   let rec cmp_ty (t : Ast.ty) : Ll.llty =
     begin match t with
-      | Ast.TInt                     -> Ll.I64
-      | Ast.TFlt                     -> Ll.Double
-      | Ast.TChar                    -> Ll.I8
-      | Ast.TBool                    -> Ll.I1
-      | Ast.TRef (Ast.TFun (args,Ast.Void)) ->
-          Ll.Ptr (Ll.Func (List.map cmp_ty args, Ll.Void))
-      | Ast.TRef (Ast.TFun (args,Ast.Ret t)) ->
-          Ll.Ptr (Ll.Func (List.map cmp_ty args, cmp_ty t))
-      | Ast.TRef t | Ast.TNullRef t  -> Stdlib.failwith "references unimplemented"
+      | TInt                     -> I64
+      | TFlt                     -> Double
+      | TChar                    -> I8
+      | TBool                    -> I1
+      | TRef rt | TNullRef rt    -> Ptr (cmp_rty rt)
+    end
+
+  and cmp_rty (rt : Ast.rty) : Ll.llty =
+    begin match rt with
+      | TStr        -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
+      | TArr t      -> Struct [ I64 ; Ptr (cmp_ty t) ]
+      | TFun (a,rt) -> Func ((List.map cmp_ty a), cmp_retty rt)
     end
   
-  let cmp_retty (t : Ast.retty) : Ll.llty =
+  and cmp_retty (t : Ast.retty) : Ll.llty =
     begin match t with
       | Ast.Void  -> Ll.Void
       | Ast.Ret t -> cmp_ty t
@@ -96,8 +99,8 @@ module Translator = struct
       ] in
     
     let pow_ts : ((Ast.ty * Ast.ty) * (Ast.ty * string)) list =
-      [ (TInt, TInt), (TInt, "pow_ii")
-      ; (TFlt, TFlt), (TFlt, "pow_ff")
+      [ (TInt, TInt), (TInt, "_pow_ii")
+      ; (TFlt, TFlt), (TFlt, "_pow_ff")
       ] in
     
     let cmpop_to_ll : (Ast.cmpop * Ll.cmpop) list =
@@ -108,6 +111,21 @@ module Translator = struct
       ; Less,      Less
       ; LessEq,    LessEq
       ] in
+    
+    let allocate (size : Ll.operand) (t : Ll.llty) (name : string) : stream =
+      let ptrsym = gensym "malloc" in
+      [ I (Call (Some ptrsym, Ptr I8, Gid "_allocate", [ I64, size ]))
+      ; I (Bitcast (name, Ptr I8, Id ptrsym, t))
+      ]
+    in
+
+    let addchild (from : llty * operand) (to_op : llty * operand) : stream =
+      let bc1sym, bc2sym = gensym "addchild", gensym "addchild" in
+      [ I (Bitcast (bc1sym, fst from, snd from, Ptr I8))
+      ; I (Bitcast (bc2sym, fst to_op, snd to_op, Ptr I8))
+      ; I (Call (None, Void, Gid "_addchild", [Ptr I8, Id bc1sym ; Ptr I8, Id bc2sym]))
+      ]
+    in
 
     begin match e.t with
       | Ast.Id      id ->
@@ -122,6 +140,39 @@ module Translator = struct
       | Ast.LitFlt  f  -> Ll.FConst f, Ast.TFlt, cmp_ty Ast.TFlt, []
       | Ast.LitChar c  -> Ll.IConst (Int64.of_int @@ Char.code c), Ast.TChar, cmp_ty Ast.TChar, []
       | Ast.LitBool b  -> Ll.IConst (if b then 1L else 0L), Ast.TBool, cmp_ty Ast.TBool, []
+      | Ast.LitStr  s  ->
+          let strlen = Int64.of_int (String.length s + 1) in
+          let str_obj_ty, str_ty = cmp_ty (TRef TStr), Ptr I8 in
+          let rsym, strsym = gensym "str", gensym "str" in
+          let gsym, gsym_t = gensym "gstr", Array (strlen, I8) in
+          let lsym = gensym "lstr" in
+          let size_ptr, str_ptr = gensym "arrsize", gensym "arrdata" in
+          let alloc_obj = allocate (IConst 2L) str_obj_ty rsym in
+          let alloc_str = allocate (IConst strlen) str_ty strsym in
+
+          Id rsym, TRef TStr, str_obj_ty,
+
+          (* allocate memory space for string structure and char array *)
+          alloc_obj @ alloc_str @        
+          (* add GC child from string structure to char array *)
+          addchild (str_obj_ty, Id rsym) (str_ty, Id strsym) @
+            (* create global string symbol *)
+          [ G (GDecl (gsym, gsym_t, Str s))
+            (* cast global char array to char pointer *)
+          ; I (Bitcast (lsym, Ptr gsym_t, Gid gsym, Ptr I8))
+            (* size_ptr points to size field in string structure *)
+          ; I (Gep (size_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 0L ]))
+            (* str_ptr points to string field in string structure *)
+          ; I (Gep (str_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 1L ]))
+            (* copy char array into string symbol *)
+          ; I (Call (None, Void, Gid "_memcpy", [str_ty, Id lsym ; str_ty, Id strsym ; I64, IConst strlen]))
+            (* store that pointer in the string pointer in the char structure *)
+          ; I (Store (str_ty, Id strsym, Id str_ptr))
+            (* store the size in the size field in the string structure *)
+          ; I (Store (I64, IConst strlen, Id size_ptr))
+            (* remove GC reference to child string *)
+          ; I (Call (None, Void, Gid "_removeref", [str_ty, Id strsym]))
+          ]
       | Ast.Bop     (op,l,r) ->
           let (op1,t1,llt1,s1), (op2,t2,llt2,s2) = cmp_exp c l, cmp_exp c r in
           let rsym = gensym "binop" in
@@ -262,6 +313,21 @@ module Translator = struct
           let _,s = cmp_block rt c b in
           let lblstart, lblend = gensym "dowhile_lbl", gensym "dowhile_lbl" in
           c, [ T (Br lblstart) ; L lblstart ] @ s @ cs @ [ T (Cbr (cop, lblstart, lblend)) ; L lblend ]
+      | For (id,s,incl,e,b) ->
+          let (sop,_,_,ss), (eop,_,_,es) = cmp_exp c s, cmp_exp c e in
+          let idsym, cmpres, cmp_var = gensym id, gensym "for_cmp", gensym "for_cmp" in
+          let i_var, i_inc_var = gensym "for_var", gensym "for_var" in
+          let lblstart, lblbody, lblend = gensym "for_lbl", gensym "for_lbl", gensym "for_end" in
+          let c' = Ctxt.add_binding c (id, (TInt, cmp_ty TInt, Id idsym)) in
+          let _,bs = cmp_block rt c' b in
+          c,
+          ss @ es @
+          [ E (Alloca (idsym, I64)) ; I (Store (I64, sop, Id idsym)) ; T (Br lblstart)
+          ; L lblstart ; I (Load (cmp_var, I64, Id idsym))
+          ; I (Cmp (cmpres, ICmp, (if incl = Incl then LessEq else Less), I64, Id cmp_var, eop))
+          ; T (Cbr (Id cmpres, lblbody, lblend))
+          ; L lblbody
+          ] @ bs @ [ I (Load (i_var, I64, Id idsym)) ; I (Binop (i_inc_var, Add, I64, Id i_var, IConst 1L)) ; I (Store (I64, Id i_inc_var, Id idsym)) ; T (Br lblstart) ; L lblend ]
       | Return None     -> c, [ T (Ll.Ret None) ]
       | Return (Some e) ->
           (* does this need a bitcast? *)

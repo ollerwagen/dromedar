@@ -36,6 +36,8 @@ module Lexer = struct
     ; "[",   LBrack
     ; "]",   RBrack
     ; "?",   QuestionMark
+    ; "...", Dots
+    ; "..|", DotsPipe
     ]
 
   let simple_regexes : (Str.regexp * token) list =
@@ -61,6 +63,7 @@ module Lexer = struct
     ; "elif",   KElif
     ; "else",   KElse
     ; "while",  KWhile
+    ; "for",    KFor
     ; "do",     KDo
     ; "return", KReturn
     ; "true",   LBool true
@@ -179,6 +182,16 @@ module Lexer = struct
       end
     in
 
+    let remove_trailing_whitespace (prog : token node list) =
+      let rec aux (prog : token node list) =
+        begin match prog with
+          | {t=Whitespace _;start=_;length=_}::ps -> aux ps
+          | p -> p
+        end
+      in
+      List.rev (aux (List.rev prog))
+    in
+
     (* assumes prog[startindex-1] contains the starting '"' or the previous string part *)
     let rec lex_string (prog : string) (carry : string) (startindex : int) : string * int =
       if startindex >= String.length prog then raise @@ LexError { t = "Unterminated String"; start = startindex-1; length = 1 } else ();
@@ -254,11 +267,12 @@ module Lexer = struct
     in
     let matches = aux [] 0 file in
     let matches' = remove_multiple_whitespaces matches in
-    if List.length matches > 0 then
-      begin match (List.hd matches').t with
-        | Whitespace _ -> matches'
-        | _                  -> { t = Whitespace 0 ; start = 0; length = 0 } :: matches'
-      end @ [ { t = EOF ; start = (let last = (List.hd (List.rev matches')) in last.start + last.length); length = 0 } ]
+    let matches'' = remove_trailing_whitespace matches' in
+    if List.length matches'' > 0 then
+      begin match (List.hd matches'').t with
+        | Whitespace _ -> matches''
+        | _            -> { t = Whitespace 0 ; start = 0; length = 0 } :: matches''
+      end @ [ { t = EOF ; start = (let last = (List.hd (List.rev matches'')) in last.start + last.length); length = 0 } ]
     else
       [ { t = EOF ; start = 0 ; length = 0 } ]
 end

@@ -42,6 +42,8 @@ type token =
   | LBrack
   | RBrack
   | QuestionMark
+  | Dots
+  | DotsPipe
   | EOF
   | Whitespace of int
   | KGlobal
@@ -61,6 +63,7 @@ type token =
   | KElse
   | KWhile
   | KDo
+  | KFor
   | KReturn
 
 let print_token (t:token) : string =
@@ -74,7 +77,7 @@ let print_token (t:token) : string =
     ; RShift,    ">>"
     ; AShift,    ">>>"
     ; Bitand,    "&"
-    ; Bitxor,       "^"
+    ; Bitxor,    "^"
     ; Bitor,     "|"
     ; Logand,    "&&"
     ; Logxor,    "^^"
@@ -103,6 +106,8 @@ let print_token (t:token) : string =
     | LBrack       -> "[LBrack]"
     | RBrack       -> "[RBrack]"
     | QuestionMark -> "[QuestionMark]"
+    | Dots         -> "[Dots]"
+    | DotsPipe     -> "[DotsPipe]"
     | EOF          -> "[EOF]"
     | Whitespace i -> Printf.sprintf "[Whitespace %d]" i
     | KGlobal      -> "[global]"
@@ -122,5 +127,6 @@ let print_token (t:token) : string =
     | KElse        -> "[else]"
     | KWhile       -> "[while]"
     | KDo          -> "[do]"
+    | KFor         -> "[for]"
     | KReturn      -> "[return]"
   end

@@ -1,5 +1,10 @@
 SHELL = /bin/bash
 
-all:
+gc:
+	clang -fpic -shared cutils/gc.cpp -o cutils/gc.so -O3
+
+intrinsics:
+	clang -c cutils/runtime.c -o cutils/runtime.o -O3
+
+all: gc intrinsics
 	ocamlbuild -pkg num main.native
-	mv main.native droml

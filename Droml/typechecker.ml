@@ -176,7 +176,7 @@ module TypeChecker = struct
     begin match e.t with
       | Id id ->
           if Ctxt.has c id then fst (Ctxt.get c id)
-          else raise @@ TypeError (ofnode "Variable not declared" e)
+          else raise @@ TypeError (ofnode (Printf.sprintf "Variable '%s' not declared" id) e)
       | LitInt  _   -> TInt
       | LitFlt  _   -> TFlt
       | LitChar _   -> TChar
@@ -252,7 +252,7 @@ module TypeChecker = struct
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match") s)
             end
-      | Assn (l,r)        ->
+      | Assn (l,r) ->
           let lt,rt = check_exp c l, check_exp c r in
           if is_assignable c l then
             if subtype lt rt then
@@ -261,7 +261,7 @@ module TypeChecker = struct
               raise @@ TypeError (ofnode (Printf.sprintf "expression type doesn't match assignment target") r)
           else
             raise @@ TypeError (ofnode ("left-hand side expression cannot be written to") l)
-      | Expr e           ->
+      | Expr e ->
           begin match e.t with
             | FApp (f,args) ->
                 let argts = List.map (check_exp c) args in
@@ -276,28 +276,35 @@ module TypeChecker = struct
                 end
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
           end
-      | If (cd,t,n)       ->
+      | If (cd,t,n) ->
           let ct = check_exp c cd in
           if ct = TBool then
             let (_,r1),(_,r2) = check_stmt_block rt c t, check_stmt_block rt c n in c, r1 && r2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
-      | While (cd,b)      ->
+      | While (cd,b) ->
           let ct = check_exp c cd in
           if ct = TBool then
             let _ = check_stmt_block rt c b in c, false
           else
             raise @@ TypeError (ofnode "while condition must be of type bool" cd)
-      | DoWhile (cd,b)    ->
+      | DoWhile (cd,b) ->
           let ct = check_exp c cd in
           if ct = TBool then
             let _,r = check_stmt_block rt c b in c, r
           else
             raise @@ TypeError (ofnode "do-while condition must be of type bool" cd)
-      | Return None      ->
+      | For (id,exps,_,expe,b) ->
+          let sty, ety = check_exp c exps, check_exp c expe in
+          if sty=TInt && ety=TInt then
+            let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(TInt,Const)) in
+            let _ = check_stmt_block rt c' b in c, false
+          else
+            raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
+      | Return None ->
           if rt = Void then c, true
           else raise @@ TypeError (ofnode "cannot return without expression in non-void function" s)
-      | Return (Some e)  ->
+      | Return (Some e) ->
           let et = check_exp c e in
           begin match rt with
             | Void  -> raise @@ TypeError (ofnode "cannot return with expression in void function" s)

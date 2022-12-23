@@ -44,6 +44,10 @@ type mutability =
   | Const
   | Mut
 
+type inclusion =
+  | Incl
+  | Excl
+
 type ty =
   | TInt | TFlt | TChar | TBool
   | TRef of rty
@@ -79,6 +83,7 @@ type stmt =
   | If      of exp node * stmt node list * stmt node list
   | While   of exp node * stmt node list
   | DoWhile of exp node * stmt node list
+  | For     of string * exp node * inclusion * exp node * stmt node list
   | Return  of exp node option
 
 type gstmt =
@@ -130,17 +135,19 @@ let rec print_exp (e : exp node) : string =
 let rec print_stmt (indent : int) (s : stmt node) : string =
   let ind = String.make (2*indent) ' ' in
   begin match s.t with
-    | VDecl   (id,Const,None,e)   -> Printf.sprintf "%slet %s := %s\n"       ind id (print_exp e)
-    | VDecl   (id,Const,Some t,e) -> Printf.sprintf "%slet %s:%s := %s\n"    ind id (print_ty t) (print_exp e)
-    | VDecl   (id,Mut,None,e)     -> Printf.sprintf "%smut %s := %s\n"       ind id (print_exp e)
-    | VDecl   (id,Mut,Some t,e)   -> Printf.sprintf "%smut %s:%s := %s\n"    ind id (print_ty t) (print_exp e)
-    | Assn    (l,r)               -> Printf.sprintf "%s%s := %s\n"           ind (print_exp l) (print_exp r)
-    | Expr    e                   -> Printf.sprintf "%s%s\n"                 ind (print_exp e)
-    | If      (c,t,n)             -> Printf.sprintf "%sif %s\n%s%selse\n%s"  ind (print_exp c) (print_block (indent+1) t) ind (print_block (indent+1) n)
-    | While   (c,b)               -> Printf.sprintf "%swhile %s\n%s"         ind (print_exp c) (print_block (indent+1) b)
-    | DoWhile (c,b)               -> Printf.sprintf "%sdo\n%s\n%swhile %s\n" ind (print_block (indent+1) b) ind (print_exp c)
-    | Return  None                -> Printf.sprintf "%sreturn\n"             ind
-    | Return  (Some e)            -> Printf.sprintf "%sreturn %s\n"          ind (print_exp e)
+    | VDecl   (id,Const,None,e)   -> Printf.sprintf "%slet %s := %s\n"          ind id (print_exp e)
+    | VDecl   (id,Const,Some t,e) -> Printf.sprintf "%slet %s:%s := %s\n"       ind id (print_ty t) (print_exp e)
+    | VDecl   (id,Mut,None,e)     -> Printf.sprintf "%smut %s := %s\n"          ind id (print_exp e)
+    | VDecl   (id,Mut,Some t,e)   -> Printf.sprintf "%smut %s:%s := %s\n"       ind id (print_ty t) (print_exp e)
+    | Assn    (l,r)               -> Printf.sprintf "%s%s := %s\n"              ind (print_exp l) (print_exp r)
+    | Expr    e                   -> Printf.sprintf "%s%s\n"                    ind (print_exp e)
+    | If      (c,t,n)             -> Printf.sprintf "%sif %s\n%s%selse\n%s"     ind (print_exp c) (print_block (indent+1) t) ind (print_block (indent+1) n)
+    | While   (c,b)               -> Printf.sprintf "%swhile %s\n%s"            ind (print_exp c) (print_block (indent+1) b)
+    | DoWhile (c,b)               -> Printf.sprintf "%sdo\n%s\n%swhile %s\n"    ind (print_block (indent+1) b) ind (print_exp c)
+    | For     (i,s,Incl,e,b)      -> Printf.sprintf "%sfor %s := %s ... %s\n%s" ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
+    | For     (i,s,Excl,e,b)      -> Printf.sprintf "%sfor %s := %s ..| %s\n%s" ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
+    | Return  None                -> Printf.sprintf "%sreturn\n"                ind
+    | Return  (Some e)            -> Printf.sprintf "%sreturn %s\n"             ind (print_exp e)
   end
 and print_block (indent : int) (b : stmt node list) : string =
   (String.concat "" (List.map (print_stmt (indent+1)) b))

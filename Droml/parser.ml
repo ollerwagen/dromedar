@@ -361,6 +361,26 @@ module Parser = struct
       let c,s''''' = parse_exp s'''' in
       { t = DoWhile (c,b) ; start = start ; length = (peek s''''').start - start }, s'''''
 
+    and parse_for_stmt (s : state) (indent : int) : stmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KFor in
+      let id,s'' =
+        begin match (peek s').t with
+          | Token.Id i -> i, snd @@ advance s'
+          | _          -> raise @@ ParseError (ofnode "For loop requires loop variable" (fst @@ advance s'))
+        end in
+      let s''' = expect s'' Token.Assign in
+      let startexp,s'''' = parse_exp s''' in
+      let incl,s''''' =
+        begin match (peek s'''').t with
+          | Token.Dots     -> Incl, snd @@ advance s''''
+          | Token.DotsPipe -> Excl, snd @@ advance s''''
+          | _              -> raise @@ ParseError (ofnode "expect a range indicator in for header" (fst @@ advance s''''))
+        end in
+      let endexp,s'''''' = parse_exp s''''' in
+      let b,s''''''' = parse_block s'''''' (indent+1) in
+      { t = For (id,startexp,incl,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
+
     and parse_return_stmt (s : state) (indent : int) : stmt node * state =
       let start = (peek s).start in
       let s' = expect s Token.KReturn in
@@ -380,6 +400,7 @@ module Parser = struct
       | Token.KIf               -> parse_if_stmt           s' indent Token.KIf
       | Token.KWhile            -> parse_while_stmt        s' indent
       | Token.KDo               -> parse_dowhile_stmt      s' indent
+      | Token.KFor              -> parse_for_stmt          s' indent
       | Token.KReturn           -> parse_return_stmt       s' indent
       | _                       -> parse_expr_or_assn_stmt s' indent
     end

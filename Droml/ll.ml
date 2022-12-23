@@ -7,7 +7,7 @@ type llty =
   | Namedt of string
   | Struct of llty list
   | Func of llty list * llty
-  | Array of int * llty
+  | Array of int64 * llty
   | I1
   | I8
   | I64
@@ -17,6 +17,7 @@ type llty =
 type operand =
   | Id  of string
   | Gid of string
+  | Str of string
   | IConst of int64
   | FConst of float
   | SConst of (llty * operand) list
@@ -53,20 +54,21 @@ type term =
 type cmp_op_type = | ICmp | FCmp
 
 type instr =
-  | Binop  of string        * bop * llty * operand * operand
-  | Cmp    of string        * cmp_op_type * cmpop * llty * operand * operand
-  | Alloca of string        * llty
-  | Load   of string        * llty * operand
-  | Store  of                 llty * operand * operand
-  | Call   of string option * llty * operand * (llty * operand) list
-  | Gep    of string        * llty * operand * (llty * operand) list
+  | Binop   of string        * bop * llty * operand * operand
+  | Cmp     of string        * cmp_op_type * cmpop * llty * operand * operand
+  | Alloca  of string        * llty
+  | Load    of string        * llty * operand
+  | Store   of                 llty * operand * operand
+  | Call    of string option * llty * operand * (llty * operand) list
+  | Gep     of string        * llty * operand * operand list
+  | Bitcast of string        * llty * operand * llty
 
 type firstblock = instr list * term
 type block = string * instr list * term
 
 type ginstr =
-  | FDecl of string * llty * (llty * string) list * (firstblock * block list)
-  | GDecl of string * llty * operand
+  | FDecl    of string * llty * (llty * string) list * (firstblock * block list)
+  | GDecl    of string * llty * operand
   
 let rec print_llty (t:llty) : string =
   begin match t with
@@ -74,7 +76,7 @@ let rec print_llty (t:llty) : string =
     | Namedt s     -> "%s"
     | Struct ts    -> Printf.sprintf "{%s}" (String.concat ", " (List.map print_llty ts))
     | Func   (a,r) -> Printf.sprintf "%s(%s)" (print_llty r) (String.concat ", " (List.map print_llty a))
-    | Array  (s,t) -> Printf.sprintf "[%d x %s]" s (print_llty t)
+    | Array  (s,t) -> Printf.sprintf "[%Ld x %s]" s (print_llty t)
     | I1           -> "i1"
     | I8           -> "i8"
     | I64          -> "i64"
@@ -83,9 +85,26 @@ let rec print_llty (t:llty) : string =
   end
 
 let rec print_operand (op:operand) : string =
+  let escape_llvm : string -> string =
+    String.fold_left
+      (fun res c ->
+        res ^
+        begin match c with
+          | '\n' -> "\\0A"
+          | '\r' -> "\\0D"
+          | '\t' -> "\\09"
+          | '\'' -> "\\27"
+          | '\"' -> "\\22"
+          | '\\' -> "\\5C"
+          | _    -> String.make 1 c
+        end
+      )
+      ""
+  in
   begin match op with
     | Id     id -> Printf.sprintf "%%%s" id
     | Gid    id -> Printf.sprintf "@%s" id
+    | Str    s  -> Printf.sprintf "c\"%s\\00\"" (escape_llvm s)
     | IConst i  -> Printf.sprintf "%Ld" i
     | FConst f  -> Printf.sprintf "%f" f
     | SConst os -> Printf.sprintf "{%s}" (String.concat ", " (List.map (fun (t,o) -> Printf.sprintf "%s %s" (print_llty t) (print_operand o)) os))
@@ -157,8 +176,17 @@ let print_instr (i:instr) : string =
           end in
         Printf.sprintf "%scall %s %s(%s)" wtstr tstr fstr (String.concat ", " args)
     | Gep (wt,t,e,is) ->
-        let tstr, es, isstr = print_llty t, print_operand e, List.map (fun (t,e) -> Printf.sprintf "%s %s" (print_llty t) (print_operand e)) is in
-        Printf.sprintf "getelementptr %s, %s%s" tstr es (String.concat "" (List.map (String.cat ", ") isstr))
+        let dptr (t : llty) : llty =
+          begin match t with
+            | Ptr t -> t
+            | _     -> Stdlib.failwith "expected pointer type"
+          end
+        in
+        let dptrtstr, tstr, es, isstr = print_llty (dptr t), print_llty t, print_operand e, List.map (fun e -> Printf.sprintf "i32 %s" (print_operand e)) is in
+        Printf.sprintf "%%%s = getelementptr %s, %s %s%s" wt dptrtstr tstr es (String.concat "" (List.map (String.cat ", ") isstr))
+    | Bitcast (wt,tf,o,tt) ->
+        let startt, ostr, endt = print_llty tf, print_operand o, print_llty tt in
+        Printf.sprintf "%%%s = bitcast %s %s to %s" wt startt ostr endt
   end
 
 let print_term (t:term) : string =
@@ -192,6 +220,6 @@ let print_ginstr (gi:ginstr) : string =
   end
 
 let print_llprog (p : ginstr list) : string =
-  (readall "intrinsics.ll") ^ "\n\n" ^
-  (readall "builtindecls.ll") ^ "\n\n" ^
+  (readall "cutils/intrinsics.ll") ^ "\n\n" ^
+  (readall "cutils/builtindecls.ll") ^ "\n\n" ^
   (String.concat "\n" (List.map print_ginstr p))
