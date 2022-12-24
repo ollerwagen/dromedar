@@ -371,15 +371,17 @@ module Parser = struct
         end in
       let s''' = expect s'' Token.Assign in
       let startexp,s'''' = parse_exp s''' in
-      let incl,s''''' =
+      let incl1,incl2,s''''' =
         begin match (peek s'''').t with
-          | Token.Dots     -> Incl, snd @@ advance s''''
-          | Token.DotsPipe -> Excl, snd @@ advance s''''
+          | Token.Dots        -> Incl, Incl, snd @@ advance s''''
+          | Token.DotsPipe    -> Incl, Excl, snd @@ advance s''''
+          | Token.PipeDots    -> Excl, Incl, snd @@ advance s''''
+          | Token.PipeDotPipe -> Excl, Excl, snd @@ advance s''''
           | _              -> raise @@ ParseError (ofnode "expect a range indicator in for header" (fst @@ advance s''''))
         end in
       let endexp,s'''''' = parse_exp s''''' in
       let b,s''''''' = parse_block s'''''' (indent+1) in
-      { t = For (id,startexp,incl,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
+      { t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
 
     and parse_return_stmt (s : state) (indent : int) : stmt node * state =
       let start = (peek s).start in

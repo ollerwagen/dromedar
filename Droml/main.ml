@@ -24,9 +24,9 @@ let () =
        Stdlib.failwith "Parser Error. Aborting.")
   in
   let program = List.fold_left (@) [] parses in
-  (* Printf.printf "\n%s\n" (Ast.print_program program) *)
+  let () = Printf.printf "\n%s\n" (Ast.print_program program) in
 
-  let () =
+  let annt_prog =
     try TypeChecker.check_program program
     with TypeChecker.TypeError ({t=m;start=s;length=l}) ->
       (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
@@ -34,7 +34,7 @@ let () =
   in
   (* Printf.printf "\n%s\n" (Ast.print_program program); *)
   
-  let llstring = Translator.cmp_to_llvm program in
+  let llstring = Translator.cmp_to_llvm annt_prog in
   let llfile = Stdlib.open_out "Out.ll" in
   Printf.fprintf llfile "%s\n" llstring;
   (* Printf.printf "\n%s\n" (Ast.print_program program); *)

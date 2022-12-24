@@ -70,6 +70,17 @@ type ginstr =
   | FDecl    of string * llty * (llty * string) list * (firstblock * block list)
   | GDecl    of string * llty * operand
   
+let rec size_ty (t:llty) : int =
+  begin match t with
+    | Void         -> 0
+    | Namedt s     -> Stdlib.failwith "named types unimplemented"
+    | Struct ts    -> List.fold_left (+) 0 @@ List.map size_ty ts
+    | Array  (s,t) -> Int64.to_int s * size_ty t
+    | I1 | I8      -> 1
+    | I64 | Double | Ptr _ -> 8
+    | Func   _     -> 0 (* functions w/o pointers shouldn't exist in AST->translation anywhere *)
+  end
+
 let rec print_llty (t:llty) : string =
   begin match t with
     | Void         -> "void"
@@ -120,7 +131,7 @@ let binop_to_string : (bop * string) list =
   ; Mul,  "mul"
   ; FMul, "fmul"
   ; Shl,  "shl"
-  ; Shr,  "lsrh"
+  ; Shr,  "lshr"
   ; Sha,  "ashr"
   ; And,  "and"
   ; Or,   "or"
@@ -182,11 +193,18 @@ let print_instr (i:instr) : string =
             | _     -> Stdlib.failwith "expected pointer type"
           end
         in
-        let dptrtstr, tstr, es, isstr = print_llty (dptr t), print_llty t, print_operand e, List.map (fun e -> Printf.sprintf "i32 %s" (print_operand e)) is in
+        let dptrtstr, tstr, es, isstr = print_llty (dptr t), print_llty t, print_operand e, List.map (fun e -> Printf.sprintf "%s %s" (begin match e with | Gid _ | Id _ -> "i64" | _ -> "i32" end) (print_operand e)) is in
         Printf.sprintf "%%%s = getelementptr %s, %s %s%s" wt dptrtstr tstr es (String.concat "" (List.map (String.cat ", ") isstr))
     | Bitcast (wt,tf,o,tt) ->
         let startt, ostr, endt = print_llty tf, print_operand o, print_llty tt in
-        Printf.sprintf "%%%s = bitcast %s %s to %s" wt startt ostr endt
+        let opcode =
+          begin match tf, tt with
+            | Ptr _, Ptr _ -> "bitcast"
+            | Ptr _, _     -> "ptrtoint"
+            | _    , Ptr _ -> "inttoptr"
+            | _    , _     -> "bitcast"
+          end in
+        Printf.sprintf "%%%s = %s %s %s to %s" wt opcode startt ostr endt
   end
 
 let print_term (t:term) : string =

@@ -38,6 +38,8 @@ module Lexer = struct
     ; "?",   QuestionMark
     ; "...", Dots
     ; "..|", DotsPipe
+    ; "|..", PipeDots
+    ; "|.|", PipeDotPipe
     ]
 
   let simple_regexes : (Str.regexp * token) list =

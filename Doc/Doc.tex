@@ -751,6 +751,8 @@
 				
 				Dots         ::= /\.\.\./
 				DotsPipe     ::= /\.\.\|/
+				PipeDots     ::= /\|\.\./
+				PipeDotPipe  ::= /\|\.\|/
 				
 				LParen       ::= /\(/
 				RParen       ::= /\)/
@@ -829,8 +831,10 @@
 				                 | %Do Block %While Expression
 				                 
 				ForStmt          ::=
-				                 | %For %Id %Assign Expr %Dots     Expr Block
-				                 | %For %Id %Assign Expr %DotsPipe Expr Block
+				                 | %For %Id %Assign Expr %Dots        Expr Block
+				                 | %For %Id %Assign Expr %DotsPipe    Expr Block
+				                 | %For %Id %Assign Expr %PipeDots    Expr Block
+				                 | %For %Id %Assign Expr %PipeDotPipe Expr Block
 				                 
 				ExprStmt         ::=
 				                 | Expression

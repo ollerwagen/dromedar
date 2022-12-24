@@ -44,6 +44,8 @@ type token =
   | QuestionMark
   | Dots
   | DotsPipe
+  | PipeDots
+  | PipeDotPipe
   | EOF
   | Whitespace of int
   | KGlobal
@@ -108,6 +110,8 @@ let print_token (t:token) : string =
     | QuestionMark -> "[QuestionMark]"
     | Dots         -> "[Dots]"
     | DotsPipe     -> "[DotsPipe]"
+    | PipeDots     -> "[PipeDots]"
+    | PipeDotPipe  -> "[PipeDotPipe]"
     | EOF          -> "[EOF]"
     | Whitespace i -> Printf.sprintf "[Whitespace %d]" i
     | KGlobal      -> "[global]"

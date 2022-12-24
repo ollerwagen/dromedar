@@ -6,4 +6,4 @@ declare void @print_int(i64)
 declare void @print_flt(double)
 
 ; print strings
-declare void @print_str({i64,i8*}*)
+declare void @print_str({i64, [0 x i8]*}*)
