@@ -6,6 +6,8 @@ gc:
 intrinsics:
 	clang -c cutils/runtime.c -o cutils/runtime.o -O3
 
-all: gc intrinsics
+compiler:
 	ocamlbuild -pkg num main.native
 	mv main.native droml
+
+all: gc intrinsics compiler

@@ -17,5 +17,8 @@ declare i8* @_allocate(i64)
 ; removes a reference to an object in memory
 declare void @_removeref(i8*)
 
+; adds a program reference to an object in memory
+declare void @_addref(i8*)
+
 ; adds a child to an address
 declare void @_addchild(i8*, i8*)

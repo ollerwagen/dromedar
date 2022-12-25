@@ -1,3 +1,7 @@
+#define __DEBUG__ 1
+
+
+
 #include <vector>
 #include <unordered_map>
 
@@ -38,12 +42,12 @@ static void mark_reachable(GCEntry &ge) {
 
 static std::string print_table() {
     std::stringstream stream;
-    stream << "BASE               PREFS    CHILDREN\n";
+    stream << "BASE                   PREFS    CHILDREN\n";
     for (const auto &it : table) {
         stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(it.first)
             << std::dec << std::setfill(' ') << " -> " << std::setw(6) << it.second.prefs << " -> ";
         for (const ptr a : it.second.children)
-            stream << a << ", ";
+            stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(a) << std::dec << std::setfill(' ') << ", ";
         stream << "\n";
     }
     return stream.str();
@@ -72,7 +76,9 @@ static void gcrun() {
         }
     }
 
-    // printf("After the GC Run:\n%s\n", print_table().c_str());
+#if __DEBUG__
+    printf("After the GC Run:\n%s\n", print_table().c_str());
+#endif
 }
 
 
@@ -82,10 +88,22 @@ static void gcrun() {
 extern "C" {
 
     void _removeref(ptr p) {
+#if __DEBUG__
+        printf("removeref(%p)\n", p);
+#endif
+
+        if (p == NULL)
+            return;
         table[p].prefs--;
+
+        gcrun();
     }
 
     ptr _allocate(size s) {
+#if __DEBUG__
+        printf("allocate(%llu)\n", s);
+#endif
+
         ptr res = (ptr)malloc(s);
         table[res].prefs++;
 
@@ -96,36 +114,22 @@ extern "C" {
         return res;
     }
 
+    void _addref(ptr p) {
+#if __DEBUG__
+        printf("addref(%p)\n", p);
+#endif
+
+        table[p].prefs++;
+        gcrun();
+    }
+
     void _addchild(ptr base, ptr child) {
+#if __DEBUG__
+        printf("addchild(%p -> %p)\n", base, child);
+#endif
+
         table[base].children.push_back(child);
+        gcrun();
     }
 
 }
-
-
-/*
-int main() {
-
-    Addr a = drmalloc(1000);
-    Addr b = drmalloc(2000);
-    Addr c = drmalloc(5000);
-
-    drmaddchild(a, b);
-    drmaddchild(b, c);
-    drmaddchild(c, a);
-
-    drmfree(b);
-    drmfree(c);
-
-    gcrun(); // this gc run should not remove anything
-
-    std::cout << print_table() << std::endl;
-
-    drmfree(a);
-
-    gcrun(); // this gc run should remove a, b and c (clear the table)
-
-    std::cout << print_table() << std::endl;
-
-    return 0;
-}*/

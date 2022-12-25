@@ -159,7 +159,7 @@ module TypeChecker = struct
           List.map (fun (fta,ftr) -> TRef (TFun (fta,ftr))) fts
     end
   
-  let is_assignable (c:Ctxt.t) (e:exp node) : bool =
+  let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
     begin match e.t with
       | Id id       ->
           if Ctxt.has c id then
@@ -169,8 +169,8 @@ module TypeChecker = struct
             end
           else
             false
-      | Subscript _ -> true
-      | _           -> false
+      | Subscript (b,o) -> is_assignable c b
+      | _               -> false
     end    
   
   let rec check_exp (c:Ctxt.t) (e:exp node) : annt_exp =

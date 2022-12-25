@@ -10,6 +10,7 @@ extern "C" {
 
     void  _removeref(ptr);
     ptr   _allocate(size);
+    void  _addref(ptr);
     void  _addchild(ptr,ptr);
 
 #ifdef __cplusplus
