@@ -105,6 +105,12 @@ module TypeChecker = struct
     ; TInt, TFlt  ; TFlt,  TInt
     ; TChar,TChar
     ]
+  
+  let rec crosstype (t1:ty) (t2:ty) : bool =
+    begin match t1,t2 with
+      | TInt,TFlt | TFlt,TInt -> true
+      | _                     -> false
+    end
 
   let rec subtype (t1:ty) (t2:ty) : bool =
     begin match t1,t2 with
@@ -232,14 +238,17 @@ module TypeChecker = struct
           let argts = List.map (check_exp c) args in
           begin match check_exp c f with
             | f', TRef (TFun (a,rt)) ->
-                let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode "Argument list length mismatch" e) else () in
-                if List.for_all2 subtype (List.map snd argts) a then
-                  begin match rt with
-                    | Void  -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
-                    | Ret t -> FApp ((f', TRef (TFun (a,rt))), argts), t 
-                  end
-                else
-                  raise @@ TypeError (ofnode (Printf.sprintf "Function argument type mismatch(es)") e)
+                let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                let () = List.iter2
+                  (fun (aexp,pt) fet ->
+                    if subtype pt fet then ()
+                    else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (print_ty (ofnode pt e)) (print_ty (ofnode fet f))) e)  
+                  )
+                  argts a in
+                begin match rt with
+                  | Void  -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
+                  | Ret t -> FApp ((f', TRef (TFun (a,rt))), argts), t 
+                end
             | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (print_ty (ofnode (snd t) f))) f)
           end
       | Subscript (l,r) ->
@@ -260,15 +269,15 @@ module TypeChecker = struct
             begin match t with
               | None   -> VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
               | Some t ->
-                  if subtype (snd et) t.t then
+                  if subtype (snd et) t.t || crosstype (snd et) t.t then
                     VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false
                   else
-                    raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match") s)
+                    raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (print_ty t) (print_ty (ofnode (snd et) e))) s)
             end
       | Assn (l,r) ->
           let lt,rt = check_exp c l, check_exp c r in
           if is_assignable c l then
-            if subtype (snd lt) (snd rt) then
+            if subtype (snd rt) (snd lt) || crosstype (snd lt) (snd rt) then
               Assn (lt,rt), c, false
             else
               raise @@ TypeError (ofnode (Printf.sprintf "expression type doesn't match assignment target") r)
@@ -295,6 +304,15 @@ module TypeChecker = struct
             let (t',_,r1),(n',_,r2) = check_stmt_block rt c t, check_stmt_block rt c n in If (ct,t',n'), c, r1 && r2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
+      | Denull (id,e,t,n) ->
+          let e',et = check_exp c e in
+          begin match et with
+            | TNullRef r ->
+                let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (TRef r, Const)) in
+                let (t',_,r1), (n',_,r2) = check_stmt_block rt c' t, check_stmt_block rt c n in
+                Denull (id,(e',et),t',n'), c, r1 && r2
+            | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
+          end
       | While (cd,b) ->
           let ct = check_exp c cd in
           if snd ct = TBool then

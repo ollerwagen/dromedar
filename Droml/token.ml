@@ -64,6 +64,7 @@ type token =
   | KIf
   | KElif
   | KElse
+  | KDenull
   | KWhile
   | KDo
   | KFor
@@ -131,6 +132,7 @@ let print_token (t:token) : string =
     | KIf          -> "[if]"
     | KElif        -> "[elif]"
     | KElse        -> "[else]"
+    | KDenull      -> "[denull]"
     | KWhile       -> "[while]"
     | KDo          -> "[do]"
     | KFor         -> "[for]"

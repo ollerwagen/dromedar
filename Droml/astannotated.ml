@@ -22,6 +22,7 @@ type annt_stmt =
   | Assn    of annt_exp * annt_exp
   | Expr    of exp' * ty option
   | If      of annt_exp * annt_stmt list * annt_stmt list
+  | Denull  of string * annt_exp * annt_stmt list * annt_stmt list
   | While   of annt_exp * annt_stmt list
   | DoWhile of annt_exp * annt_stmt list
   | For     of string * annt_exp * inclusion * inclusion * annt_exp * annt_stmt list

@@ -65,6 +65,7 @@ module Lexer = struct
     ; "if",     KIf
     ; "elif",   KElif
     ; "else",   KElse
+    ; "denull", KDenull
     ; "while",  KWhile
     ; "for",    KFor
     ; "do",     KDo

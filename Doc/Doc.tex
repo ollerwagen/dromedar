@@ -12,7 +12,7 @@
 \lstdefinelanguage{Dromedar}{
 	morekeywords = [1]{int,flt,char,bool,void,fn,string},
 	morekeywords = [2]{true,false,null},
-	morekeywords = [3]{return,if,else,while,do,for},
+	morekeywords = [3]{return,if,else,while,do,for,denull},
 	morekeywords = [4]{let,mut,global},
 	morekeywords = [5]{of},
 	comment = [l]{\#},
@@ -279,6 +279,16 @@ fn main -> void
 		
 		\subsection{Subtyping Rules}
 		
+			\subsubsection{Cross-Typing}
+			
+				Cross types are types which aren't related by the subtype relation $\preceq$ but still allow for some typesafe interaction -- e.g. by assigning variables of one type to variables of another.
+				
+				The crosstype relation, denoted by the $\asymp$ operator, commutes.
+				\begin{align*}
+					\drmrule{}{}{T}{\mc{int} \asymp \mc{flt}}{CrossTyIntFlt},\ \ 
+					\drmrule{}{}{T}{\mc{flt} \asymp \mc{int}}{CrossTyFltInt}
+				\end{align*}
+		
 			\subsubsection{Trivial Rule}
 			
 				\begin{align*}
@@ -472,11 +482,14 @@ fn main -> void
 		
 			\subsubsection{Subtyping Expression Rule}
 			
-				To reduce tree rules, we define the following rules:
+				To reduce proof rule size, define the following rules:
 				
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{ET}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubLocal},\ \ 
-					\drmrule{S\ruleapp{G}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{GT}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubGlobal}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{ET}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubLocal},\ \ &
+					\drmrule{S\ruleapp{G}\mc{exp}::\mc{t1}\ \ \ruleapp{T}\mc{t1}\preceq\mc{t}}{S}{GT}{\mc{exp} \trianglelefteq \mc{t}}{ExpSubGlobal}\\
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1},\ \ \ruleapp{T}\mc{t1}\asymp\mc{t}}{S}{ET}{\mc{exp}\bowtie\mc{t}}{ExpCrossLocal}\ \ &
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t1},\ \
+					\ruleapp{T}\mc{t1}\asymp\mc{t}}{S}{GT}{\mc{exp}\bowtie\mc{t}}{ExpCrossGlobal}
 				\end{align*}
 		
 			\subsubsection{Assignability}
@@ -613,15 +626,15 @@ fn main -> void
 			
 				\begin{align*}
 					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}}{S,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
 					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}}{S,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
 				\end{align*}
 			
 			\subsubsection{Assignments}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t}}{S,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
+					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t} \vee \mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
 				\end{align*}
 			
 			\subsubsection{Expression Statements}
@@ -634,6 +647,12 @@ fn main -> void
 			
 				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,\mc{rt}\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,\mc{rt}}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
+				\end{align*}
+				
+			\subsubsection{Checked Null Casts}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t?}\ \ S\cup\{(\mc{r},\mc{t},c)\},\mc{rt} \ruleapp{S} \mc{b1} \Rightarrow S',R_1\ \ S,\mc{rt} \ruleapp{S}\mc{b2}\Rightarrow S'',R_2}{S,\mc{rt}}{S}{\mc{denull r := exp b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtNullCast}
 				\end{align*}
 			
 			\subsubsection{While Statements}
@@ -755,6 +774,8 @@ fn main -> void
 				void         ::= /void/
 				
 				null         ::= /null/
+				denull       ::= /denull/
+				
 				of           ::= /of/
 				
 				if           ::= /if/
@@ -845,6 +866,7 @@ fn main -> void
 				                 | VDeclaration
 				                 | AssignStmt
 				                 | IfStmt
+				                 | NullCastStmt
 				                 | WhileStmt
 				                 | DoWhileStmt
 				                 | ForStmt
@@ -867,6 +889,10 @@ fn main -> void
 				                 | %Elif Expression Block ElifStmt
 				                 | %Else Block
 				                 | €
+				                 
+				NullCastStmt     ::=
+				                 | %Denull %Id %Assign Expression Block
+				                 | %Denull %Id %Assign Expression Block %Else Block
 				                 
 				WhileStmt        ::=
 				                 | %While Expression Block

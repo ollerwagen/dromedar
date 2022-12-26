@@ -115,19 +115,3 @@ string* int_to_str(i64 num) {
 
     return res;
 }
-
-
-/*
-#include <stdio.h>
-int main() {
-
-    ptr a = _allocate(10);
-    ptr b = _allocate(20);
-
-    _removeref(b);
-
-    _allocate(50);
-
-    return 0;
-}
-*/

@@ -415,20 +415,31 @@ module Translator = struct
   
   (* string list is list of all variables that need to be gc'd at a return statement *)
   let rec cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list =
+    
+    let cross_cast (et : ty) (lt,lllt,lop : ty * llty * operand) : (llty * operand) * stream =
+      begin match et,lt with
+        | TInt,TFlt | TFlt,TInt ->
+            let rsym, c_et = gensym "crosscast", cmp_ty et in
+            (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
+        | _ -> (lllt,lop), []
+      end
+    in
+    
     begin match s with
       | VDecl (id, _, t, e) ->
           let op,ellt,s,gc = cmp_exp c e in
-          let vt =
+          let vt, ((ellt,op),crosscaststream) =
             begin match t with
-              | None   -> snd e
-              | Some t -> t
+              | None   -> snd e, ((ellt,op),[])
+              | Some t -> t,     cross_cast t (snd e, ellt, op)
             end in
           let vllt = cmp_ty vt in
           let llid = gensym id in
+
           (* alloca and store expression result -> does this ever need a bitcast from ellt to vllt? *)
           (* store variables as pointers in context *)
           Ctxt.add_binding c (id, (vt, vllt, Id llid)),
-          s @ [ E (Alloca (llid, vllt)) ; I (Store (ellt, op, Id llid)) ] @
+          s @ crosscaststream @ [ E (Alloca (llid, vllt)) ; I (Store (ellt, op, Id llid)) ] @
             begin match vt,gc with
               | TRef _, false -> addref (ellt,op)
               | _             -> []
@@ -440,14 +451,15 @@ module Translator = struct
           (* add pref and remove it from %op: cancel each other out *)
       | Assn (l,r) ->
           let (lop,lllt,ls), (rop,rllt,rs,rgc) = cmp_lhs c l, cmp_exp c r in
+          let (rllt,rop),crosscaststream = cross_cast (snd l) (snd r, rllt, rop) in
           let gc_prevval =
             begin match snd l with
               | TRef _ ->
                   let gcobj, lllt' = gensym "gc_prevval", deptr lllt in
-                  [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt',Id gcobj)
+                  [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt',Id gcobj) @ (if rgc then [] else addref (rllt, rop))
               | _ -> [] (* do not attempt to gc primitives *)
             end in
-          c, ls @ rs @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ (if rgc then [] else addref (rllt, rop)), refvars
+          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ], refvars
       | Expr (e,t) ->
           begin match e with
             | FApp (f,a) ->
@@ -478,6 +490,15 @@ module Translator = struct
           let (_,s1), (_,s2) = cmp_block rt c refvars t, cmp_block rt c refvars nt in
           let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "lbl_end" in
           c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
+      | Denull (id,e,t,nt) ->
+          let nnsym, cmpres = gensym id, gensym "cmpres" in
+          let ifnonnull, ifnull, lblend = gensym "denull_lbl_nonnull", gensym "denull_lbl_null", gensym "denull_end" in
+          let eop,ellt,es,egc = cmp_exp c e in
+          let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (snd e, ellt, Id nnsym)) in
+          let (_,s1), (_,s2) = cmp_block rt c' refvars t, cmp_block rt c refvars nt in
+          c,
+          es @ [ E (Alloca (nnsym, ellt)) ; I (Cmp (cmpres, ICmp, Eq, ellt, eop, Null)) ; T (Cbr (Id cmpres, ifnull, ifnonnull)) ; L ifnonnull ; I (Store (ellt, eop, Id nnsym)) ] @
+            s1 @ [ T (Br lblend) ; L ifnull ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
       | While (cnd,b) ->
           let cop,_,cs,_ = cmp_exp c cnd in
           let _,s = cmp_block rt c refvars b in
@@ -561,7 +582,7 @@ module Translator = struct
             | None   -> c, free_vars @ [ T (Ll.Ret None) ], refvars
             | Some e ->
                 let op,lt,s,gc = cmp_exp c e in
-                c, s @ (if gc then [] else addref (lt,op)) @ free_vars @ [ T (Ret (Some (cmp_retty rt, op))) ], refvars
+                c, s @ (if gc then [] else maybe_addref (snd e) (lt,op)) @ free_vars @ [ T (Ret (Some (cmp_retty rt, op))) ], refvars
           end
     end
   and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (b : annt_stmt list) : Ctxt.t * stream =

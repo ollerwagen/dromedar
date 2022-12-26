@@ -345,6 +345,24 @@ module Parser = struct
       else
         { t = If (e, b, []) ; start = start ; length = (peek s''').start - start }, s'''
 
+    and parse_denull_stmt (s : state) (indent : int) : stmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KDenull in
+      let id,s'' =
+        begin match (peek s').t with
+          | Id id -> id, snd @@ advance s'
+          | _     -> raise @@ ParseError (ofnode "Expected an identifier" (fst @@ advance s'))
+        end in
+      let s''' = expect s'' Token.Assign in
+      let e,s'''' = parse_exp s''' in
+      let b,s''''' = parse_block s'''' (indent+1) in
+      if matches_indent_and s''''' indent Token.KElse then
+        let s'''''' = snd @@ advance @@ snd @@ advance s''''' in
+        let b',s''''''' = parse_block s'''''' (indent+1) in
+        { t = Denull (id, e, b, b') ; start = start ; length = (peek s''''''').start - start }, s'''''''
+      else
+        { t = Denull (id, e, b, []) ; start = start ; length = (peek s''''').start - start }, s'''''
+
     and parse_while_stmt (s : state) (indent : int) : stmt node * state = 
       let start = (peek s).start in
       let s' = expect s Token.KWhile in
@@ -400,6 +418,7 @@ module Parser = struct
     begin match (peek s').t with
       | Token.KLet | Token.KMut -> parse_vdecl_stmt        s' indent
       | Token.KIf               -> parse_if_stmt           s' indent Token.KIf
+      | Token.KDenull           -> parse_denull_stmt       s' indent
       | Token.KWhile            -> parse_while_stmt        s' indent
       | Token.KDo               -> parse_dowhile_stmt      s' indent
       | Token.KFor              -> parse_for_stmt          s' indent
