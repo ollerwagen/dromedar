@@ -145,7 +145,7 @@ module Translator = struct
 
     let bop_cast ((lt,lllt,lop) : ty * llty * operand) ((rt,rllt,rop) : ty * llty * operand) : (ty * llty * operand) * (ty * llty * operand) * stream =
       begin match lt,rt with
-        | TInt,TInt | TFlt,TFlt | TBool,TBool -> (lt,lllt,lop), (rt,rllt,rop), []
+        | TInt,TInt | TFlt,TFlt | TBool,TBool | TChar,TChar -> (lt,lllt,lop), (rt,rllt,rop), []
         | TInt,TChar ->
             let charcastop = gensym "charcast" in
             (rt, rllt, Id charcastop), (rt,rllt,rop), [ I (Bitcast (charcastop, lllt, lop, rllt)) ]
@@ -334,6 +334,7 @@ module Translator = struct
               (fun (lop,lt,lbl,s) (op,rexp) ->
                 (* ignore gc as all inputs are primitives *)
                 let rop,rllt,rs,gc = cmp_exp c rexp in
+                let (lt,lllt,lop), (rt,rllt,rop), caststream = bop_cast (lt,cmp_ty lt,lop) (snd rexp,rllt,rop) in
                 let nextlbl, nextres = gensym "cmplbl", gensym "cmp" in
                 let cmpty =
                   begin match lt with
@@ -342,7 +343,7 @@ module Translator = struct
                   end in
                 let cmpop = List.assoc op cmpop_to_ll in
                 rop, snd rexp, nextlbl,
-                s @ [ L lbl ] @ rs @
+                s @ [ L lbl ] @ rs @ caststream @ 
                 [ I (Cmp (nextres, cmpty, cmpop, rllt, lop, rop)) ; T (Cbr (Id nextres, nextlbl, lblfalse)) ]
               )
               (fop,snd f,fstlbl,[]) rs in

@@ -101,7 +101,10 @@ module TypeChecker = struct
   
   (* cmp ops, all of the same type, all return bool *)
   let cmpop_types : (ty * ty) list =
-    [ TInt, TInt ; TFlt, TFlt ; TChar, TChar ]
+    [ TInt, TInt  ; TFlt,  TFlt
+    ; TInt, TFlt  ; TFlt,  TInt
+    ; TChar,TChar
+    ]
 
   let rec subtype (t1:ty) (t2:ty) : bool =
     begin match t1,t2 with
