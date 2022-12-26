@@ -12,7 +12,8 @@ declare {i64,[0 x i8]*}* @_strmul_1({i64,[0 x i8]*}*, i64)
 declare {i64,[0 x i8]*}* @_strmul_2(i64, {i64,[0 x i8]*}*)
 
 declare i64 @_strcmp({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
-declare i64 @_arrcmp({i64,i8*}*, {i64,i8*}*, i64)
+
+declare {i64,[0 x i8]*}* @_arrconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*, i64, i1)
 
 ;
 ; Garbage Collection Functions

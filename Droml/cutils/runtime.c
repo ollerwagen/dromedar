@@ -8,6 +8,7 @@
 
 typedef int64_t i64;
 typedef char    i8;
+typedef _Bool   i1;
 
 typedef struct string { i64 size ; i8 *base; } string;
 typedef struct blindarr { i64 size ; i8 * base; } blindarr;
@@ -76,8 +77,25 @@ i64 _strcmp(string *a, string *b) {
     return strcmp(a->base, b->base);
 }
 
-i64 _arrcmp(blindarr *a, blindarr *b, i64 elemsize) {
-    return 0;
+blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
+    i64 realasize = a->size * elemsize, realbsize = b->size * elemsize;
+
+    blindarr *res = (blindarr*) _allocate(sizeof(blindarr));
+    res->base = _allocate(realasize + realbsize);
+    _addchild((i8*) res, (i8*) res->base);
+    _removeref((i8*) res->base);
+
+    memcpy(res->base, a->base, realasize);
+    memcpy(res->base + realasize, b->base, realbsize);
+
+    if (areptrs) {
+        for (i64 i = 0; i < a->size; i++)
+            _addchild((i8*) res, (i8*) (a->base + i * elemsize));
+        for (i64 i = 0; i < b->size; i++)
+            _addchild((i8*) res, (i8*) (b->base + i * elemsize));
+    }
+
+    return res;
 }
 
 

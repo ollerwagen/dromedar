@@ -308,6 +308,21 @@ module Translator = struct
                 Id rsym, cmp_ty rt,
                 s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1 ; llt2, op2 ]))] @
                   (if gc1 then removeref (llt1,op1) else []) @ (if gc2 then removeref (llt2,op2) else []), true
+            | TRef (TArr t1), TRef (TArr t2) ->
+                let elemsize =
+                  begin match llt1 with
+                    | Ptr (Struct [_; Ptr (Array (_, llt))]) -> size_ty llt
+                    | _ -> Stdlib.failwith "bad AST: not array return type"
+                  end in
+                let reduced1, reduced2, concatres = gensym "arrcatredop", gensym "arrcatredop", gensym "concat_arr" in
+                let reduced_t = cmp_ty (TRef (TArr TChar)) in
+                Id rsym, cmp_ty t,
+                s1 @ s2 @
+                  [ I (Bitcast (reduced1, llt1, op1, reduced_t)) ; I (Bitcast (reduced2, llt2, op2, reduced_t))
+                  ; I (Call (Some concatres, reduced_t, Gid "_arrconcat", [ reduced_t, Id reduced1 ; reduced_t, Id reduced2 ; I64, IConst (Int64.of_int elemsize) ; I1, IConst (begin match t1 with | TRef _ -> 1L | _ -> 0L end) ]))
+                  ; I (Bitcast (rsym, reduced_t, Id concatres, cmp_ty t))
+                  ],
+                true
             | _ ->
                 let (lt,llt1,op1), (rt,llt2,op2), caststream = bop_cast (snd l,llt1,op1) (snd r,llt2,op2) in
                 begin match op with

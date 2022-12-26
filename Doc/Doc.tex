@@ -408,8 +408,11 @@ fn main -> void
 								\drmrule{}{}{O}{\mc{+} :: \mc{(int,flt)->flt}}{TyBopAddIntFlt},\ \ & 
 								\drmrule{}{}{O}{\mc{+} :: \mc{(flt,int)->flt}}{TyBopAddFltInt}\\
 								\drmrule{}{}{O}{\mc{+} :: \mc{(int,char)->char}}{TyBopAddCharR},\ \ &
-								\drmrule{}{}{O}{\mc{+} :: \mc{(char,int)->char}}{TyBopAddCharL}\\
+								\drmrule{}{}{O}{\mc{+} :: \mc{(char,int)->char}}{TyBopAddCharL}
+							\end{align*}\begin{align*}
 								\drmrule{}{}{O}{\mc{+} :: \mc{(string,string)->string}}{TyBopAddString}
+							\end{align*}\begin{align*}
+								\drmrule{\mc{t}=\min_\preceq(\mathsf{suptys}(\mc{t1})\cup\mathsf{suptys}(\mc{t2}))}{}{O}{\mc{+} :: \mc{([t1],[t2])->[t]}}{TyBopAddArr}
 							\end{align*}
 						\item
 							\begin{align*}

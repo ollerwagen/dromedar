@@ -220,9 +220,17 @@ module TypeChecker = struct
       | Bop (op,l,r) ->
           let opts = List.assoc op bop_types in
           let lt,rt = check_exp c l, check_exp c r in
-          begin match List.assoc_opt (snd lt, snd rt) opts with
-            | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (print_ty (ofnode (snd lt) l)) (print_ty (ofnode (snd rt) l))) e)
-            | Some t -> Bop (op, lt, rt), t
+          begin match snd lt, snd rt with
+            | TRef (TArr t1), TRef (TArr t2) ->
+                begin match intersect_single (suptys t1) (suptys t2) with
+                  | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
+                  | t::ts -> Bop (op,lt,rt), TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
+                end
+            | _ ->
+                begin match List.assoc_opt (snd lt, snd rt) opts with
+                  | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (print_ty (ofnode (snd lt) l)) (print_ty (ofnode (snd rt) l))) e)
+                  | Some t -> Bop (op, lt, rt), t
+                end
           end
       | Cmps (x,xs) ->
           let first_exp = check_exp c x in
