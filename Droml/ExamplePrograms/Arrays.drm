@@ -1,0 +1,7 @@
+fn main -> void
+    let a := getarr()
+    print_int(a[2][2]) # prints '5'
+    println()
+
+fn getarr -> [[int]]
+    return [[1],[2],[3,4,5],[6,7]]

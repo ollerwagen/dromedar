@@ -160,6 +160,13 @@ module TypeChecker = struct
     end
   
   let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
+    let rec is_assignable_with_const (e:exp node) : bool =
+      begin match e.t with
+        | Id id           -> Ctxt.has c id
+        | Subscript (b,o) -> is_assignable_with_const b
+        | _               -> false
+      end
+    in
     begin match e.t with
       | Id id       ->
           if Ctxt.has c id then
@@ -169,7 +176,7 @@ module TypeChecker = struct
             end
           else
             false
-      | Subscript (b,o) -> is_assignable c b
+      | Subscript (b,o) -> is_assignable_with_const b
       | _               -> false
     end    
   

@@ -1,8 +1,9 @@
-#define __DEBUG__ 1
+#define __DEBUG__ 0
 
 
 
 #include <vector>
+#include <unordered_set>
 #include <unordered_map>
 
 // malloc and free
@@ -15,7 +16,7 @@
 
 
 struct GCEntry {
-    std::vector<ptr> children;
+    std::unordered_set<ptr> children;
     uint16_t prefs = 0;
     bool reachable;
 };
@@ -28,11 +29,11 @@ static GCTable table;
 
 static void mark_reachable(GCEntry &ge) {
     if (ge.reachable)
-        return; // has alreaddy been marked
+        return; // has already been marked
 
     ge.reachable = true;
-    for (std::size_t i = 0; i < ge.children.size(); i++)
-        mark_reachable(table[ge.children.at(i)]);
+    for (const auto &u : ge.children)
+        mark_reachable(table[u]);
 }
 
 #include <string>
@@ -128,7 +129,7 @@ extern "C" {
         printf("addchild(%p -> %p)\n", base, child);
 #endif
 
-        table[base].children.push_back(child);
+        table[base].children.insert(child);
         gcrun();
     }
 

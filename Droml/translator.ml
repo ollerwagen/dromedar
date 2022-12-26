@@ -338,17 +338,9 @@ module Translator = struct
           end
 
       | Subscript (l,i), t ->
-          let (lop,lllt,ls), (iop,illt,is) = cmp_exp c l, cmp_exp c i in
-          let rsym, arr_ptr, arr_op, elem_ptr = gensym "subscript", gensym "sub_arr_ptr", gensym "sub_arr_op", gensym "sub_elem_ptr" in
-          let c_t, c_et = cmp_ty (snd l), cmp_ty t in
-          
-          Id rsym, cmp_ty t,
-          ls @ is @
-          [ I (Gep (arr_ptr, c_t, lop, [ IConst 0L ; IConst 1L ]))
-          ; I (Load (arr_op, Ptr (Array (0L, c_et)), Id arr_ptr))
-          ; I (Gep (elem_ptr, Ptr (Array (0L, c_et)), Id arr_op, [ IConst 0L ; iop ]))
-          ; I (Load (rsym, c_et, Id elem_ptr))
-          ] @ maybe_addref t (cmp_ty t, Id rsym) @ removeref (lllt,lop)
+          let ptrop, pllt, s = cmp_lhs c (Subscript (l,i), t) in
+          let rsym = gensym "subscript" in
+          Id rsym, cmp_ty t, s @ [ I (Load (rsym, cmp_ty t, ptrop)) ] @ maybe_addref t (cmp_ty t, Id rsym)
     end
   
   and cmp_lhs (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream =
@@ -356,6 +348,18 @@ module Translator = struct
       | Id id, t ->
           let t,llt,op = Ctxt.get c id in
           op, Ptr llt, []
+
+      | Subscript (b,o), t ->
+          let (bop,bllt,bs), (oop,ollt,os) = cmp_exp c b, cmp_exp c o in
+          let c_t, c_et = cmp_ty (snd b), cmp_ty t in
+          let rsym, arr_ptr, arr_op = gensym "subscript", gensym "sub_arr_ptr", gensym "sub_arr_op" in
+          Id rsym, Ptr (cmp_ty t),
+          bs @ os @
+          [ I (Gep (arr_ptr, c_t, bop, [ IConst 0L ; IConst 1L ]))
+          ; I (Load (arr_op, Ptr (Array (0L, c_et)), Id arr_ptr))
+          ; I (Gep (rsym, Ptr (Array (0L, c_et)), Id arr_op, [ IConst 0L ; oop ]))
+          ] @ removeref (bllt,bop)
+
       | _     -> Stdlib.failwith "lhs unimplemented"
     end
   
