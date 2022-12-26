@@ -79,6 +79,13 @@
 	
 	\section{Introduction}
 	
+		\subsection{Hello, World!}
+		
+			\begin{lstlisting}
+fn main -> void
+	print_str("Hello, World!")
+			\end{lstlisting}
+	
 	\section{Typing System}
 	
 		Dromedar uses a static, strong and sound typing system -- typing errors cannot happen at runtime. It knows primitive and reference types.
@@ -98,22 +105,22 @@
 		
 			Reference types represent data structures that are laid over pointers to objects stored in the heap. References come in two types: Maybe-\code{null} and Definitely-not-\code{null} types. Operations like array subscript access are only possible with non-\code{null} types to ensure \code{null} safety.
 			
-			With a non-null-type \code{t}, the type \code{t?} represents a reference type that allows \code{null} values. Primitives are non-nullable, as are \code{string}s.
+			With a non-null-type \code{t}, the type \code{t?} represents a reference type that allows \code{null} values. Primitives are non-nullable.
 			
 			The following are reference types:
 			
 			\begin{itemize}
 				\item \code{string} represents lists of characters.
-				\item \code{[t]} represents a list of type \code{t}.
+				\item \code{[t]} represents an array with elements of type \code{t}.
 			\end{itemize}
 		
 			Thus, e.g. \code{[[int]?]} represents a two-dimensional array of integers which is definitely non-\code{null}, whereas its rows may be \code{null}.
 		
 		\subsection{Mutability}
 		
-			In general, variables declared with the \code{let} keyword are immutable, whereas \code{mut} declarations allow mutable variables.
+			In general, variables declared with the \code{let} keyword are immutable, whereas \code{mut} declarations create mutable variables.
 			
-			For references, there are different notions of mutability: Allowing the object to point to new objects is handled with the \code{mut} declaration. However, even immutable objects are allowed to call methods which alter their internal state -- for example changing an array's element.
+			For references, Dromedar uses a different notion of mutability: Allowing the object to point to new objects is handled with the \code{mut} declaration. However, even immutable objects are allowed to call methods which alter their internal state -- for example changing an array's element.
 			
 		\subsection{Subtyping}
 		
@@ -239,6 +246,14 @@
 					\code{IO.print_int} & \code{int -> void} & prints an integer to the console\\
 					\code{IO.print_flt} & \code{flt -> void} & prints a real number to the console
 				\end{longtable}
+		
+	\section{Garbage Collection}
+	
+		Dromedar uses an algorithm that combines the mark/sweep and reference counting approaches. It is a \textit{precise} garbage collection algorithm, meaning that it is capable of collecting all non-reachable objects and it will only attempt to GC exactly these (as opposed to conservative GC algorithms like the Boehm-Demers-Weiser garbage collector for C/C++).
+		
+		Internally, each reference object is stored in a central garbage collection table that counts the numbers of program references that can reach a program, as well as the set of its children.
+		
+		When a garbage collection run is triggered, the collector will free all objects that are not reachable. An object is deemed \textbf{reachable} if either its count of program references is nonzero, or if it is the child of a reachable object.
 		
 	\section{Formal Typing Rules}
 	
@@ -445,11 +460,16 @@
 		
 			\subsubsection{Assignability}
 			
-				The rule $\ruleapp{A}$ defines when an expression can be assigned a value.
+				The rule $\ruleapp{A}$ defines when an expression can be assigned a value; $\ruleapp{AC}$ is equivalent to $\ruleapp{A}$ -- except that it also allows immutable objects whose children (e.g. array elements) can still be modified.
 				
 				\begin{align*}
-					\drmrule{(\mc{id},\_,m)\in S}{S}{A}{\mc{id}}{ExpAssnId},\ \ 
-					\drmrule{S\ruleapp{A}\mc{e1}}{S}{A}{\mc{e1[e2]}}{ExpAssnSub}
+					\drmrule{(\mc{id},\_,m)\in S}{S}{A}{\mc{id}}{ExpAssnId}\ \ 
+					\drmrule{S\ruleapp{AC}\mc{e1}}{S}{A}{\mc{e1[e2]}}{ExpAssnSub}
+				\end{align*}
+				
+				\begin{align*}
+					\drmrule{(\mc{id},\_,\_)\in S}{S}{AC}{\mc{id}}{ExpAssnId'}\ \ 
+					\drmrule{S\ruleapp{AC}\mc{e1}}{S}{AC}{\mc{e1[e2]}}{ExpAssnSub'}
 				\end{align*}
 				
 			\subsubsection{Global Expressions}

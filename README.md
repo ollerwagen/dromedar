@@ -8,14 +8,7 @@ The garbage collector is already implemented, but it is not linked to most refer
 
 See the Doc folder for more extensive documentation on the language.
 
-The following is an example program that works on my machine:
-
-    fn main -> void
-        let x := [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-        for i := 20 |.. 0
-            print_int(x[i])
-        print_str("Hello, World!")
-        return
+The folder Droml/ExamplePrograms contains some (surprise!) example programs.
     
 It prints the number from `20` to `1` in reverse order, followed by the string `"Hello, World!"`.
 
