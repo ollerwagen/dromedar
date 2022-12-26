@@ -87,7 +87,8 @@ module TypeChecker = struct
   let bop_types : (bop * ((ty * ty) * ty) list) list =
     let intop = [(TInt, TInt), TInt] in
     let fltop = [(TFlt, TFlt), TFlt] in
-    let numop = intop @ fltop in
+    let fltintop = [(TInt, TFlt), TFlt ; (TFlt, TInt), TFlt] in
+    let numop = intop @ fltop @ fltintop in
     let boolop = [(TBool, TBool), TBool] in
     let numcharop = numop @ [(TInt, TChar), TChar ; (TChar, TInt), TChar] in
     [ Pow, numop

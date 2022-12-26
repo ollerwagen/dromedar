@@ -8,6 +8,9 @@ declare void @print_flt(double)
 ; print strings
 declare void @print_str({i64, [0 x i8]*}*)
 
+; print characters
+declare void @print_char(i8)
+
 ; print newline character
 declare void @println()
 

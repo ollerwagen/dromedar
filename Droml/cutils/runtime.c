@@ -44,6 +44,10 @@ void print_flt(double num) {
     printf("%lf", num);
 }
 
+void print_char(char c) {
+    putchar(c);
+}
+
 void print_str(string *s) {
     printf("%s", s->base);
 }

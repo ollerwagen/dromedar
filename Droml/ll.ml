@@ -199,10 +199,13 @@ let print_instr (i:instr) : string =
         let startt, ostr, endt = print_llty tf, print_operand o, print_llty tt in
         let opcode =
           begin match tf, tt with
-            | Ptr _, Ptr _ -> "bitcast"
-            | Ptr _, _     -> "ptrtoint"
-            | _    , Ptr _ -> "inttoptr"
-            | _    , _     -> "bitcast"
+            | I64,    I8     -> "trunc"
+            | I64,    Double -> "sitofp"
+            | Double, I64    -> "fptosi"
+            | Ptr _,  Ptr _  -> "bitcast"
+            | Ptr _,  _      -> "ptrtoint"
+            | _    ,  Ptr _  -> "inttoptr"
+            | _    ,  _      -> "bitcast"
           end in
         Printf.sprintf "%%%s = %s %s %s to %s" wt opcode startt ostr endt
   end
