@@ -604,7 +604,7 @@ fn main -> void
 			\subsubsection{Function Calls}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\ \ \mc{rt}\not\equiv\mc{void}\ \  S\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}}{S}{E}{\mc{f(e1,...,en)}::\mc{rt}}{ExpFunc}´
+					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\ \ \mc{rt}\not\equiv\mc{void}\ \  S\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1}\vee\mc{e1}\bowtie\mc{t1},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}\vee\mc{en}\bowtie\mc{tn}}{S}{E}{\mc{f(e1,...,en)}::\mc{rt}}{ExpFunc}´
 				\end{align*}
 				
 			\subsubsection{Subscript Access}
@@ -623,7 +623,7 @@ fn main -> void
 			\subsubsection{Comparison Lists}
 			
 				\begin{align*}
-					\drmrule{\ruleapp{O}\mc{op1}::\mc{(t0,t1)->t},\ \dots,\ \ruleapp{O}\mc{opn}::\mc{(t(n-1),tn)->t}\ \ S\ruleapp{ET}\mc{e0}\trianglelefteq\mc{t0},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}}{S}{E}{\mc{e0 op1 ... opn en} :: \mc{t}}{ExpCmpList}
+					\drmrule{\ruleapp{O}\mc{op1}::\mc{(t0,t1)->t},\ \dots,\ \ruleapp{O}\mc{opn}::\mc{(t(n-1),tn)->t}\ \ S\ruleapp{ET} (\mc{e0},\dots,\mc{en}) [\trianglelefteq|\bowtie] (\mc{t0},\dots,\mc{tn})}{S}{E}{\mc{e0 op1 ... opn en} :: \mc{t}}{ExpCmpList}
 				\end{align*}
 				
 		\subsection{Statements}
@@ -686,7 +686,7 @@ fn main -> void
 			\subsubsection{Return Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
+					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}\vee\mc{exp}\bowtie\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
 				\end{align*}
 				
 			\subsubsection{Blocks}

@@ -256,7 +256,7 @@ module TypeChecker = struct
                 let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
                 let () = List.iter2
                   (fun (aexp,pt) fet ->
-                    if subtype pt fet then ()
+                    if subtype pt fet || crosstype pt fet then ()
                     else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (print_ty (ofnode pt e)) (print_ty (ofnode fet f))) e)  
                   )
                   argts a in
@@ -304,11 +304,14 @@ module TypeChecker = struct
                 let argts = List.map (check_exp c) args in
                 begin match check_exp c f with
                   | f', TRef (TFun (a,rt)) ->
-                      let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode "Argument list length mismatch" e) else () in
-                      if List.for_all2 subtype (List.map snd argts) a then
-                        Expr ((FApp ((f', TRef (TFun (a,rt))),argts), begin match rt with | Void -> None | Ret t -> Some t end)), c, false
-                      else
-                        raise @@ TypeError (ofnode (Printf.sprintf "Function argument type mismatch(es)") e)
+                      let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                      let () = List.iter2
+                        (fun (aexp,pt) fet ->
+                          if subtype pt fet || crosstype pt fet then ()
+                          else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (print_ty (ofnode pt e)) (print_ty (ofnode fet f))) e)  
+                        )
+                        argts a in
+                      Expr ((FApp ((f', TRef (TFun (a,rt))),argts), begin match rt with | Void -> None | Ret t -> Some t end)), c, false
                   | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (print_ty (ofnode (snd t) f))) f)
                 end
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
@@ -355,7 +358,7 @@ module TypeChecker = struct
           begin match rt with
             | Void  -> raise @@ TypeError (ofnode "cannot return with expression in void function" s)
             | Ret t ->
-                if subtype (snd et) t then
+                if subtype (snd et) t || crosstype (snd et) t then
                   Return (Some et), c, true
                 else
                   raise @@ TypeError (ofnode "return type doesn't match with function return type" s)

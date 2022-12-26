@@ -121,6 +121,14 @@ module Translator = struct
       | _      -> Stdlib.failwith "bad AST: should be pointer"
     end
 
+  let cross_cast (et : ty) (lt,lllt,lop : ty * llty * operand) : (llty * operand) * stream =
+    begin match et,lt with
+      | TInt,TFlt | TFlt,TInt ->
+          let rsym, c_et = gensym "crosscast", cmp_ty et in
+          (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
+      | _ -> (lllt,lop), []
+    end
+
 
   (* last return value: true <=> value is linked to its own pref <=> needs to be GC'd *)
   let rec cmp_exp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * bool =
@@ -386,17 +394,21 @@ module Translator = struct
 
       | FApp (f,a), t ->
           let getstream (_,_,s,_) = s in
-          let getlltandop (op,llt,_,_) = llt, op in
           (* fgc must be = false since functions are not garbage-collectable (yet) *)
           let (fop,fllt,fs,fgc), argcs = cmp_exp c f, List.map (cmp_exp c) a in
           let arggcops = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) argcs a) in
           let rsym = gensym "callop" in
           begin match snd f with
-            | TRef (TFun (_,rt)) ->
+            | TRef (TFun (argts,rt)) ->
                 let llrt = cmp_retty rt in
+                let args_casts =
+                  List.map2
+                    (fun ((op,llt,_,_),(_,pt)) et -> cross_cast et (pt,llt,op))
+                    (List.combine argcs a) argts in
+                let argcs', caststreams = List.map fst args_casts, List.concat @@ List.map snd args_casts in
                 Id rsym, llrt,
-                fs @ List.concat (List.map getstream argcs) @
-                [ I (Call (Some rsym, llrt, fop, List.map getlltandop argcs)) ] @ arggcops,
+                fs @ List.concat (List.map getstream argcs) @ caststreams @
+                [ I (Call (Some rsym, llrt, fop, argcs')) ] @ arggcops,
                 begin match t with | TRef _ -> true | _ -> false end
             | _ -> Stdlib.failwith "not a function, abort"
           end
@@ -429,16 +441,6 @@ module Translator = struct
   
   (* string list is list of all variables that need to be gc'd at a return statement *)
   let rec cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list =
-    
-    let cross_cast (et : ty) (lt,lllt,lop : ty * llty * operand) : (llty * operand) * stream =
-      begin match et,lt with
-        | TInt,TFlt | TFlt,TInt ->
-            let rsym, c_et = gensym "crosscast", cmp_ty et in
-            (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
-        | _ -> (lllt,lop), []
-      end
-    in
-    
     begin match s with
       | VDecl (id, _, t, e) ->
           let op,ellt,s,gc = cmp_exp c e in
@@ -478,24 +480,29 @@ module Translator = struct
           begin match e with
             | FApp (f,a) ->
                 let getstream (_,_,s,_) = s in
-                let getlltandop (op,llt,_,_) = llt, op in
-                (* fgc = false, functions not GC'able yet *)
-                let (fop,_,fs,fgc), argcs = cmp_exp c f, List.map (cmp_exp c) a in
-                let arggcops = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then maybe_removeref t (llt,op) else []) argcs a) in
+                (* fgc must be = false since functions are not garbage-collectable (yet) *)
+                let (fop,fllt,fs,fgc), argcs = cmp_exp c f, List.map (cmp_exp c) a in
+                let arggcops = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) argcs a) in
                 begin match snd f with
-                  | TRef (TFun (_, Ret (TRef t))) ->
-                      let ret_name, cd_retty = gensym "ret_ref", cmp_retty (Ret (TRef t)) in
+                  | TRef (TFun (argts,rt)) ->
+                      let removerefretstream, retval =
+                        begin match rt with 
+                          | Ret (TRef t) ->
+                              let ret_name, cd_retty = gensym "ret_ref", cmp_retty (Ret (TRef t)) in
+                              removeref (cd_retty, Id ret_name), Some ret_name
+                          | _ -> [], None
+                        end in
+                      let llrt = cmp_retty rt in
+                      let args_casts =
+                        List.map2
+                          (fun ((op,llt,_,_),(_,pt)) et -> cross_cast et (pt,llt,op))
+                          (List.combine argcs a) argts in
+                      let argcs', caststreams = List.map fst args_casts, List.concat @@ List.map snd args_casts in
                       c,
-                      fs @ List.concat (List.map getstream argcs) @
-                        [ I (Call (Some ret_name, cd_retty, fop, List.map getlltandop argcs)) ] @
-                        removeref (cd_retty, Id ret_name) @ arggcops,
+                      fs @ List.concat (List.map getstream argcs) @ caststreams @
+                      [ I (Call (retval, llrt, fop, argcs')) ] @ removerefretstream @ arggcops,
                       refvars
-                  | TRef (TFun (_,rt)) ->
-                      c,
-                      fs @ List.concat (List.map getstream argcs) @
-                        [ I (Call (None, cmp_retty rt, fop, List.map getlltandop argcs)) ] @ arggcops,
-                      refvars
-                  | _ -> Stdlib.failwith "function call doesn't work"
+                  | _ -> Stdlib.failwith "not a function, abort"
                 end
             | _ -> Stdlib.failwith "can only compile function call as expression statement"
           end
@@ -595,8 +602,13 @@ module Translator = struct
           begin match e with
             | None   -> c, free_vars @ [ T (Ll.Ret None) ], refvars
             | Some e ->
-                let op,lt,s,gc = cmp_exp c e in
-                c, s @ (if gc then [] else maybe_addref (snd e) (lt,op)) @ free_vars @ [ T (Ret (Some (cmp_retty rt, op))) ], refvars
+                begin match rt with
+                  | Ret rt ->
+                      let op,lt,s,gc = cmp_exp c e in
+                      let (lt',op'),caststream = cross_cast rt (snd e, lt, op) in
+                      c, s @ (if gc then [] else maybe_addref (snd e) (lt,op)) @ free_vars @ caststream @ [ T (Ret (Some (lt', op'))) ], refvars
+                  | Void -> Stdlib.failwith "bad AST: return-value statement in void function"
+                end
           end
     end
   and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (b : annt_stmt list) : Ctxt.t * stream =
