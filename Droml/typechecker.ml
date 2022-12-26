@@ -104,6 +104,7 @@ module TypeChecker = struct
     [ TInt, TInt  ; TFlt,  TFlt
     ; TInt, TFlt  ; TFlt,  TInt
     ; TChar,TChar
+    ; TRef TStr, TRef TStr
     ]
   
   let rec crosstype (t1:ty) (t2:ty) : bool =
@@ -227,10 +228,24 @@ module TypeChecker = struct
           let first_exp = check_exp c x in
           let _,clist =
             List.fold_left
-              (fun (lt,l) r -> 
-                let rt = check_exp c (snd r) in
-                if List.mem (lt, snd rt) cmpop_types then snd rt, l @ [fst r, rt]
-                else raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s undefined for operand types (%s,%s)" (List.assoc (fst r) cmp_string) (print_ty (ofnode lt e)) (print_ty (ofnode (snd rt) (snd r)))) (snd r))
+              (fun (lt,l) (op,r) -> 
+                let rt = check_exp c r in
+                begin match op with
+                  | RefEq | RefNotEq ->
+                      begin match lt, snd rt with
+                        | TRef _, _ | _, TRef _ | TNullRef _, _ | _, TNullRef _ ->
+                            if subtype lt (snd rt) || subtype (snd rt) lt then
+                              snd rt, l @ [op, rt]
+                            else
+                              raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s only takes related reference types" (List.assoc op cmp_string)) r)
+                        | _ -> raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s only takes reference types" (List.assoc op cmp_string)) r)
+                      end
+                  | _ ->
+                      if List.mem (lt, snd rt) cmpop_types then
+                        snd rt, l @ [op, rt]
+                      else
+                        raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s undefined for operand types (%s,%s)" (List.assoc op cmp_string) (print_ty (ofnode lt e)) (print_ty (ofnode (snd rt) r))) r)
+                end
               )
               (snd first_exp, []) xs in
           Cmps (first_exp, clist), TBool

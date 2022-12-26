@@ -36,9 +36,11 @@ type cmpop =
   | Greater
   | LessEq
   | GreaterEq
+  | RefEq
+  | RefNotEq
 
 let cmp_string : (cmpop * string) list =
-  [ Eq, "=" ; Neq, "!=" ; Less, "<" ; Greater, ">" ; LessEq, "<=" ; GreaterEq, ">=" ]
+  [ Eq, "=" ; Neq, "!=" ; Less, "<" ; Greater, ">" ; LessEq, "<=" ; GreaterEq, ">=" ; RefEq, "==" ; RefNotEq, "!==" ]
 
 type mutability =
   | Const

@@ -27,6 +27,8 @@ module Lexer = struct
     ; "<",   Op Less    
     ; ">=",  Op GreaterEq 
     ; "<=",  Op LessEq  
+    ; "==",  Op RefEqual
+    ; "!==", Op RefNotEqual
     ; ":=",  Assign
     ; ".",   Dot
     ; ":",   Colon

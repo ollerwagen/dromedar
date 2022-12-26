@@ -24,6 +24,8 @@ type op =
   | Less
   | GreaterEq
   | LessEq
+  | RefEqual
+  | RefNotEqual
 
 type token =
   | LInt  of tint
@@ -72,26 +74,28 @@ type token =
 
 let print_token (t:token) : string =
   let opstrings : (op * string) list = [
-      Bang,      "!"
-    ; Starstar,  "**"
-    ; Star,      "*"
-    ; Plus,      "+"
-    ; Dash,      "-"
-    ; LShift,    "<<"
-    ; RShift,    ">>"
-    ; AShift,    ">>>"
-    ; Bitand,    "&"
-    ; Bitxor,    "^"
-    ; Bitor,     "|"
-    ; Logand,    "&&"
-    ; Logxor,    "^^"
-    ; Logor,     "||"
-    ; Equal,     "="
-    ; NotEqual,  "!="
-    ; Greater,   ">"
-    ; Less,      "<"
-    ; GreaterEq, ">="
-    ; LessEq,    "<="
+      Bang,        "!"
+    ; Starstar,    "**"
+    ; Star,        "*"
+    ; Plus,        "+"
+    ; Dash,        "-"
+    ; LShift,      "<<"
+    ; RShift,      ">>"
+    ; AShift,      ">>>"
+    ; Bitand,      "&"
+    ; Bitxor,      "^"
+    ; Bitor,       "|"
+    ; Logand,      "&&"
+    ; Logxor,      "^^"
+    ; Logor,       "||"
+    ; Equal,       "="
+    ; NotEqual,    "!="
+    ; Greater,     ">"
+    ; Less,        "<"
+    ; GreaterEq,   ">="
+    ; LessEq,      "<="
+    ; RefEqual,    "=="
+    ; RefNotEqual, "!=="
     ] in
   begin match t with
     | LInt  i      -> Printf.sprintf "[Int %s]"  (Int64.to_string i)

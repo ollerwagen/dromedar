@@ -173,7 +173,11 @@ fn main -> void
 			\code{|} & Bitwise Or & 40 & left & \code{int,int -> int}\\
 			\midrule
 			\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=} & Comparison & 30 & non-assoc. & \code{[int/flt] -> bool} \\
-				&&&& \code{[char/int] -> bool}\\
+				&&&& \code{[char] -> bool}\\
+			\midrule
+			\code{=},\code{!=},\code{>},\code{<},\code{>=},\code{<=} & Structural Comparison & 30 & non-assoc. & \code{[string]->bool} \\
+			\midrule
+			\code{==},\code{!==} & Reference Comparison & 30 & non-assoc. & \code{[rt1...rtn]->bool}\\
 			\midrule
 			\code{\&\&} & Logical And & 20 & left & \code{bool,bool -> bool}\\
 			\midrule
@@ -472,9 +476,15 @@ fn main -> void
 				\subsubsubsection{Comparison Operators}
 				
 					\begin{align*}
-						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(int,...,int)->bool}}{TyCmpListInt},\\
-						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(flt,...,flt)->bool}}{TyCmpListFlt},\\
-						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(char,...,char)->bool}}{TyCmpListChar},\\
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(int,...,int)->bool}}{TyCmpListInt}
+					\end{align*}\begin{align*}
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(flt,...,flt)->bool}}{TyCmpListFlt}
+					\end{align*}\begin{align*}
+						\drmrule{}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(char,...,char)->bool}}{TyCmpListChar}
+					\end{align*}\begin{align*}
+						\drmrule{\ruleapp{T}\mc{t1}\preceq\mc{string},\ \dots,\ \ruleapp{T}\mc{tn}\preceq\mc{string}}{}{O}{\{\mc{=},\mc{!=},\mc{>},\mc{<},\mc{>=},\mc{<=}\} :: \mc{(t1,...,tn)->bool}}{TyCmpListRefStr}
+					\end{align*}\begin{align*}
+						\drmrule{\ruleapp{T}\mc{t1}\preceq/\succeq\mc{t2},\ \dots,\ \ruleapp{T}\mc{t(n-1)}\preceq/\succeq\mc{tn}\ \ \mc{t1},\dots,\mc{tn}\textnormal{ reference types}}{}{O}{\{\mc{==},\mc{!==}\} :: \mc{(t1,...,tn)->bool}}{TyCmpListRefVal}
 					\end{align*}
 					
 					
@@ -807,6 +817,9 @@ fn main -> void
 				GreaterEq    ::= />=/
 				LessEq       ::= /<=/
 				
+				RefEqual     ::= /==/
+				RefNotEqual  ::= /!==/
+				
 				Assign       ::= /:=/
 				
 				Colon        ::= /:/
@@ -941,12 +954,14 @@ fn main -> void
 				
 				ExprPrec20       ::= 
 				                 | ExprPrec30
-				                 | ExprPrec30 %Equal     ExprPrec20
-				                 | ExprPrec30 %NotEqual  ExprPrec20
-				                 | ExprPrec30 %Greater   ExprPrec20
-				                 | ExprPrec30 %Less      ExprPrec20
-				                 | ExprPrec30 %GreaterEq ExprPrec20
-				                 | ExprPrec30 %LessEq    ExprPrec20
+				                 | ExprPrec30 %Equal       ExprPrec20
+				                 | ExprPrec30 %NotEqual    ExprPrec20
+				                 | ExprPrec30 %Greater     ExprPrec20
+				                 | ExprPrec30 %Less        ExprPrec20
+				                 | ExprPrec30 %GreaterEq   ExprPrec20
+				                 | ExprPrec30 %LessEq      ExprPrec20
+				                 | ExprPrec30 %RefEqual    ExprPrec20
+				                 | ExprPrec30 %RefNotEqual ExprPrec20
 				ExprPrec30       ::=
 				                 | ExprPrec40
 				                 | ExprPrec40 %Bitor ExprPrec30

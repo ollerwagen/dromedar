@@ -10,6 +10,7 @@ typedef int64_t i64;
 typedef char    i8;
 
 typedef struct string { i64 size ; i8 *base; } string;
+typedef struct blindarr { i64 size ; i8 * base; } blindarr;
 
 i64 _pow_ii(i64 base, i64 exp)
 {
@@ -69,6 +70,14 @@ string* _strmul_1(string *s, i64 count) {
 
 string* _strmul_2(i64 count, string *s) {
     return _strmul_1(s, count);
+}
+
+i64 _strcmp(string *a, string *b) {
+    return strcmp(a->base, b->base);
+}
+
+i64 _arrcmp(blindarr *a, blindarr *b, i64 elemsize) {
+    return 0;
 }
 
 

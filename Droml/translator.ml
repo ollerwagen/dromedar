@@ -165,7 +165,7 @@ module Translator = struct
         | TFlt,TInt ->
             let fltcastop = gensym "fltcast" in
             (lt,lllt,lop), (lt, lllt, Id fltcastop), [ I (Bitcast (fltcastop, rllt, rop, lllt)) ]
-        | _ -> Stdlib.failwith "bop_cast: no cast found"
+        | _ -> (lt,lllt,lop), (rt,rllt,rop), [] (* Stdlib.failwith "bop_cast: no cast found" *)
       end
     in
 
@@ -187,6 +187,8 @@ module Translator = struct
       ; GreaterEq, GreaterEq
       ; Less,      Less
       ; LessEq,    LessEq
+      ; RefEq,     Eq
+      ; RefNotEq,  Neq
       ] in
 
     begin match e with
@@ -341,30 +343,42 @@ module Translator = struct
           Id rsym, cmp_ty rt, s @ [ I (Binop (rsym, llop, cmp_ty rt, argop, eop)) ], false
 
       | Cmps (f,rs), t -> (* no GC, as all input results are primitives *)
+          let isnonrefop (op : Ast.cmpop) = op <> RefEq && op <> RefNotEq in
           let res, resstack = gensym "cmp", gensym "cmp" in
           (* ignore gc as all inputs are primitives *)
           let fop,fllt,fs,gc = cmp_exp c f in
           let fstlbl, lblfalse, lblend = gensym "cmplbl", gensym "cmpfalse", gensym "cmpend" in
-          let _,_,lastlbl,s =
+          let lastop,last_t,lastlbl,lastgc,s =
             List.fold_left
-              (fun (lop,lt,lbl,s) (op,rexp) ->
+              (fun (lop,lt,lbl,lgc,s) (op,rexp) ->
                 (* ignore gc as all inputs are primitives *)
                 let rop,rllt,rs,gc = cmp_exp c rexp in
                 let (lt,lllt,lop), (rt,rllt,rop), caststream = bop_cast (lt,cmp_ty lt,lop) (snd rexp,rllt,rop) in
                 let nextlbl, nextres = gensym "cmplbl", gensym "cmp" in
-                let cmpty =
-                  begin match lt with
-                    | TFlt -> FCmp
-                    | _    -> ICmp (* ints and chars, faulty types removed by typechecker *)
-                  end in
                 let cmpop = List.assoc op cmpop_to_ll in
-                rop, snd rexp, nextlbl,
-                s @ [ L lbl ] @ rs @ caststream @ 
-                [ I (Cmp (nextres, cmpty, cmpop, rllt, lop, rop)) ; T (Cbr (Id nextres, nextlbl, lblfalse)) ]
+                let cmpstream =
+                  begin match lt, snd rexp, isnonrefop op with
+                    | TRef TStr, TRef TStr, true ->
+                        let cmpres = gensym "cmpstr" in
+                        [ I (Call (Some cmpres, I64, Gid "_strcmp", [ lllt, lop ; rllt, rop ]))
+                        ; I (Cmp (nextres, ICmp, cmpop, I64, Id cmpres, IConst 0L)) ]
+                    | _ ->
+                        let cmpty =
+                          begin match lt with
+                            | TFlt -> FCmp
+                            | _    -> ICmp (* ints and chars, faulty types removed by typechecker *)
+                          end in
+                        [ I (Cmp (nextres, cmpty, cmpop, rllt, lop, rop)) ]
+                  end in
+                rop, snd rexp, nextlbl, gc,
+                s @ [ L lbl ] @ rs @ caststream @ cmpstream @
+                (if lgc then removeref (lllt,lop) else []) @
+                [ T (Cbr (Id nextres, nextlbl, lblfalse)) ]
               )
-              (fop,snd f,fstlbl,[]) rs in
+              (fop,snd f,fstlbl,gc,[]) rs in
           Id res, cmp_ty TBool,
           [ E (Alloca (resstack, cmp_ty TBool)) ] @ fs @ [ T (Br fstlbl) ] @ s @
+          (if lastgc then removeref (cmp_ty last_t,lastop) else []) @
           [ L lastlbl ; I (Store (cmp_ty TBool, IConst 1L, Id resstack)) ; T (Br lblend) ;
             L lblfalse ; I (Store (cmp_ty TBool, IConst 0L, Id resstack)) ; T (Br lblend) ;
             L lblend ; I (Load (res, cmp_ty TBool, Id resstack)) ],

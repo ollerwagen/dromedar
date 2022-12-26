@@ -13,7 +13,7 @@ module Parser = struct
       [ Logor ]
     ; [ Logxor ]
     ; [ Logand ]
-    ; [ Equal; NotEqual; Greater; Less; GreaterEq; LessEq ]
+    ; [ Equal; NotEqual; Greater; Less; GreaterEq; LessEq; RefEqual; RefNotEqual ]
     ; [ Bitor ]
     ; [ Bitxor ]
     ; [ Bitand ]
@@ -42,7 +42,7 @@ module Parser = struct
     ]
   
   let uops : Token.token list = Token.[ Op Bang ; Op Dash ]
-  let cmpops : Token.token list = Token.[ Op Equal ; Op NotEqual ; Op Greater ; Op GreaterEq ; Op Less ; Op LessEq ]
+  let cmpops : Token.token list = Token.[ Op Equal ; Op NotEqual ; Op Greater ; Op GreaterEq ; Op Less ; Op LessEq ; Op RefEqual ; Op RefNotEqual ]
 
   let uop_from_token : (Token.token * uop) list = [
       Token.Op Token.Bang, Not
@@ -65,13 +65,15 @@ module Parser = struct
     ; Token.Op Token.Logor,    Logor
     ]
   
-  let cmpop_from_token : (Token.token * cmpop) list = [
-      Token.Op Token.Equal,     Eq
-    ; Token.Op Token.NotEqual,  Neq
-    ; Token.Op Token.Greater,   Greater
-    ; Token.Op Token.Less,      Less
-    ; Token.Op Token.GreaterEq, GreaterEq
-    ; Token.Op Token.LessEq,    LessEq
+  let cmpop_from_token : (Token.token * cmpop) list =
+    [ Token.Op Token.Equal,       Eq
+    ; Token.Op Token.NotEqual,    Neq
+    ; Token.Op Token.Greater,     Greater
+    ; Token.Op Token.Less,        Less
+    ; Token.Op Token.GreaterEq,   GreaterEq
+    ; Token.Op Token.LessEq,      LessEq
+    ; Token.Op Token.RefEqual,    RefEq
+    ; Token.Op Token.RefNotEqual, RefNotEq
     ]
 
   let peek : state -> Token.token node = List.hd
