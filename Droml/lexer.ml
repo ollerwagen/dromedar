@@ -28,6 +28,7 @@ module Lexer = struct
     ; ">=",  Op GreaterEq 
     ; "<=",  Op LessEq  
     ; ":=",  Assign
+    ; ".",   Dot
     ; ":",   Colon
     ; ",",   Comma
     ; "->",  Arrow

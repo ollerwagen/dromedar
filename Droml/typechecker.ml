@@ -350,8 +350,12 @@ module TypeChecker = struct
             let c' = Ctxt.add_level c in
             let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in
             let b',_,returns = check_stmt_block rt.t c'' b in
-            if returns then GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b'), c
-            else raise @@ TypeError (ofnode "Function must return" gs)
+            if returns then
+              GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b'), c
+            else if rt.t = Void then
+              GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b' @ [ Return None ]), c
+            else
+              raise @@ TypeError (ofnode "Function must return" gs)
           else
             raise @@ TypeError (ofnode "Function argument names must be distinct" gs)
     end

@@ -34,6 +34,7 @@ type token =
   | Id    of string
   | Op    of op
   | Assign
+  | Dot
   | Colon
   | Comma
   | Arrow
@@ -100,6 +101,7 @@ let print_token (t:token) : string =
     | LStr  s      -> Printf.sprintf "[Str %s]"  (String.escaped s)
     | Op    o      -> Printf.sprintf "[Op %s]"   (List.assoc o opstrings)
     | Assign       -> "[Assign]"
+    | Dot          -> "[Dot]"
     | Colon        -> "[Colon]"
     | Comma        -> "[Comma]"
     | Arrow        -> "[Arrow]"

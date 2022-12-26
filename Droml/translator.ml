@@ -389,7 +389,7 @@ module Translator = struct
                   [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt', Id gcobj)
               | _ -> [] (* do not attempt to gc primitives *)
             end in
-          c, ls @ rs @ gc_prevval @ [ I (Store (rllt, rop, lop)) ], []
+          c, ls @ rs @ gc_prevval @ [ I (Store (rllt, rop, lop)) ], refvars
       | Expr (e,t) ->
           begin match e with
             | FApp (f,a) ->
@@ -404,12 +404,12 @@ module Translator = struct
                       fs @ List.concat (List.map getstream argcs) @
                         [ I (Call (Some ret_name, cd_retty, fop, List.map getlltandop argcs)) ] @
                         removeref (cd_retty, Id ret_name) @ arggcops,
-                      []
+                      refvars
                   | TRef (TFun (_,rt)) ->
                       c,
                       fs @ List.concat (List.map getstream argcs) @
                         [ I (Call (None, cmp_retty rt, fop, List.map getlltandop argcs)) ] @ arggcops,
-                      []
+                      refvars
                   | _ -> Stdlib.failwith "function call doesn't work"
                 end
             | _ -> Stdlib.failwith "can only compile function call as expression statement"
@@ -418,17 +418,17 @@ module Translator = struct
           let cop,_,cs = cmp_exp c cnd in
           let (_,s1), (_,s2) = cmp_block rt c refvars t, cmp_block rt c refvars nt in
           let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "lbl_end" in
-          c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], []
+          c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
       | While (cnd,b) ->
           let cop,_,cs = cmp_exp c cnd in
           let _,s = cmp_block rt c refvars b in
           let lblstart, lblbody, lblend = gensym "while_lbl", gensym "while_lbl", gensym "while_lbl" in
-          c, [ T (Br lblstart) ; L lblstart ] @ cs @ [ T (Cbr (cop, lblbody, lblend)) ; L lblbody ] @ s @ [ T (Br lblstart); L lblend ], []
+          c, [ T (Br lblstart) ; L lblstart ] @ cs @ [ T (Cbr (cop, lblbody, lblend)) ; L lblbody ] @ s @ [ T (Br lblstart); L lblend ], refvars
       | DoWhile (cnd,b) ->
           let cop,_,cs = cmp_exp c cnd in
           let _,s = cmp_block rt c refvars b in
           let lblstart, lblend = gensym "dowhile_lbl", gensym "dowhile_lbl" in
-          c, [ T (Br lblstart) ; L lblstart ] @ s @ cs @ [ T (Cbr (cop, lblstart, lblend)) ; L lblend ], []
+          c, [ T (Br lblstart) ; L lblstart ] @ s @ cs @ [ T (Cbr (cop, lblstart, lblend)) ; L lblend ], refvars
       | For (id,s,incl1,incl2,e,b) ->
           let diff, i = gensym "diff", gensym "for_var" in
           let lbl_cmp_up, lbl_cmp_dn = gensym "lbl_cmp_up", gensym "lbl_cmp_dn" in
@@ -487,7 +487,7 @@ module Translator = struct
           ; T (Br lblstart)
           ; L lblend
           ],
-          []
+          refvars
 
       | Return e ->
           let free_vars = List.concat (List.map
@@ -498,10 +498,10 @@ module Translator = struct
             refvars
           ) in
           begin match e with
-            | None   -> c, free_vars @ [ T (Ll.Ret None) ], []
+            | None   -> c, free_vars @ [ T (Ll.Ret None) ], refvars
             | Some e ->
                 let op,lt,s = cmp_exp c e in
-                c, s @ free_vars @ [ T (Ret (Some (cmp_retty rt, op))) ], []
+                c, s @ free_vars @ [ T (Ret (Some (cmp_retty rt, op))) ], refvars
           end
     end
   and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (b : annt_stmt list) : Ctxt.t * stream =

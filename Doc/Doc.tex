@@ -218,20 +218,26 @@
 			
 			\subsubsection{String Operations}
 			
+				String operations are always preceded by the \code{Str} library name.
+			
 				\begin{longtable}{l|l|l}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
-					\code{string_of_int} & \code{int -> string} & transforms an integer into a string \\
-					\code{string_of_flt} & \code{flt -> string} & transforms a decimal number into a string \\
-					\code{string_concat} & \code{(string,string) -> string} & concatenates two strings
+					\code{Str.of_int} & \code{int -> string} & transforms an integer into a string \\
+					\code{Str.of_flt} & \code{flt -> string} & transforms a decimal number into a string \\
+					\code{Str.concat} & \code{(string,string) -> string} & concatenates two strings
 				\end{longtable}
 			
-			\subsubsection{Printing}
+			\subsubsection{I/O}
+			
+				Printing operations are always preceded by the \code{IO} library name.
 			
 				\begin{longtable}{l|l|l}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
-					\code{io_print} & \code{string -> void} & prints a string to the standard output
+					\code{IO.print_str} & \code{string -> void} & prints a string to the console\\
+					\code{IO.print_int} & \code{int -> void} & prints an integer to the console\\
+					\code{IO.print_flt} & \code{flt -> void} & prints a real number to the console
 				\end{longtable}
 		
 	\section{Formal Typing Rules}
@@ -602,12 +608,9 @@
 				\end{align*}
 				
 			\subsubsection{For Statements}
-			
+	
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart ... eend b} \Rightarrow S,\bot}{StmtForIncluding}
-				\end{align*}
-				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart ..| eend b} \Rightarrow S,\bot}{StmtForIncluding}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart \%ForSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
 				\end{align*}
 			
 			\subsubsection{Return Statements}
@@ -627,7 +630,7 @@
 			\subsubsection{Global Function Declaration}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},\mc{rt} \ruleapp{S} \mc{b} \Rightarrow S',\top \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S}{GStmtFDecl}
+					\drmrule{S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},\mc{rt} \ruleapp{S} \mc{b} \Rightarrow S',\top\;(\textnormal{or \code{rt=void}}) \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S}{GStmtFDecl}
 				\end{align*}
 			
 			\subsubsection{Global Variable Declaration}
@@ -831,10 +834,13 @@
 				                 | %Do Block %While Expression
 				                 
 				ForStmt          ::=
-				                 | %For %Id %Assign Expr %Dots        Expr Block
-				                 | %For %Id %Assign Expr %DotsPipe    Expr Block
-				                 | %For %Id %Assign Expr %PipeDots    Expr Block
-				                 | %For %Id %Assign Expr %PipeDotPipe Expr Block
+				                 | %For %Id %Assign Expr ForSpecifier Expr Block
+				                 
+				ForSpecifier     ::=
+				                 | %Dots
+				                 | %DotsPipe
+				                 | %PipeDots
+				                 | %PipeDotPipe
 				                 
 				ExprStmt         ::=
 				                 | Expression
