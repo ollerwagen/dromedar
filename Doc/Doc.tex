@@ -150,6 +150,9 @@ fn main -> void
 				&&&& \code{int,flt -> flt}\\
 				&&&& \code{flt,int -> flt}\\
 			\midrule
+			\code{+} & String Addition & 70 & left &
+				\code{string,string -> string}\\
+			\midrule
 			\code{+},\code{-} & Addition & 70 & left &
 					 \code{int,int -> int}\\
 				& Subtraction &&&
@@ -391,7 +394,8 @@ fn main -> void
 								\drmrule{}{}{O}{\mc{+} :: \mc{(int,flt)->flt}}{TyBopAddIntFlt},\ \ & 
 								\drmrule{}{}{O}{\mc{+} :: \mc{(flt,int)->flt}}{TyBopAddFltInt}\\
 								\drmrule{}{}{O}{\mc{+} :: \mc{(int,char)->char}}{TyBopAddCharR},\ \ &
-								\drmrule{}{}{O}{\mc{+} :: \mc{(char,int)->char}}{TyBopAddCharL}
+								\drmrule{}{}{O}{\mc{+} :: \mc{(char,int)->char}}{TyBopAddCharL}\\
+								\drmrule{}{}{O}{\mc{+} :: \mc{(string,string)->string}}{TyBopAddString}
 							\end{align*}
 						\item
 							\begin{align*}

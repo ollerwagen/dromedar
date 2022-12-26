@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "gc.h"
+
 typedef int64_t i64;
 typedef char    i8;
 
@@ -35,6 +37,40 @@ void _memcpy(i8 *from, i8 *to, i64 size) {
 }
 
 
+string* _strconcat(string *a, string *b) {
+    string* res = (string*) _allocate(sizeof(string));
+    res->size = a->size + b->size - 1;
+    res->base = _allocate(res->size);
+    _addchild((i8*) res, (i8*) res->base);
+    _removeref((i8*) res->base);
+
+    strcpy(res->base, a->base);
+    strcat(res->base, b->base);
+
+    return res;
+}
+
+string* _strmul_1(string *s, i64 count) {
+    if (count < 0)
+        count = 0;
+    
+    string* res = (string*) _allocate(sizeof(string));
+    res->size = count * (s->size - 1) + 1;
+    res->base = _allocate(res->size);
+    _addchild((i8*) res, (i8*) res->base);
+    _removeref((i8*) res->base);
+
+    strcpy(res->base, "");
+    for (i64 i = 0; i < count; i++)
+        strcat(res->base, s->base);
+    
+    return res;
+}
+
+string* _strmul_2(i64 count, string *s) {
+    return _strmul_1(s, count);
+}
+
 
 void print_int(i64 num) {
     printf("%ld", num);
@@ -57,7 +93,6 @@ void println() {
 }
 
 
-#include "gc.h"
 
 
 string* int_to_str(i64 num) {

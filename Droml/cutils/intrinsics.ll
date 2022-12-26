@@ -7,6 +7,10 @@ declare double @_pow_ff(double,double)
 
 declare void @_memcpy(i8*,i8*,i64)
 
+declare {i64,[0 x i8]*}* @_strconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
+declare {i64,[0 x i8]*}* @_strmul_1({i64,[0 x i8]*}*, i64)
+declare {i64,[0 x i8]*}* @_strmul_2(i64, {i64,[0 x i8]*}*)
+
 ;
 ; Garbage Collection Functions
 ;

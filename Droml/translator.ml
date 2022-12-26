@@ -143,9 +143,16 @@ module Translator = struct
       ; (Logxor, TBool, TBool), (TBool, Xor )
       ] in
 
+    let str_bops : ((Ast.bop * Ast.ty * Ast.ty) * (string * Ast.ty)) list =
+      [ (Add, TRef TStr, TRef TStr), ("_strconcat", TRef TStr)
+      ; (Mul, TRef TStr, TInt),      ("_strmul_1",  TRef TStr)
+      ; (Mul, TInt,      TRef TStr), ("_strmul_2",  TRef TStr) 
+      ] in
+
     let bop_cast ((lt,lllt,lop) : ty * llty * operand) ((rt,rllt,rop) : ty * llty * operand) : (ty * llty * operand) * (ty * llty * operand) * stream =
       begin match lt,rt with
         | TInt,TInt | TFlt,TFlt | TBool,TBool | TChar,TChar -> (lt,lllt,lop), (rt,rllt,rop), []
+        | TRef TStr, TRef TStr | TRef TStr, TInt | TInt, TRef TStr -> (lt,lllt,lop), (rt,rllt,rop), []
         | TInt,TChar ->
             let charcastop = gensym "charcast" in
             (rt, rllt, Id charcastop), (rt,rllt,rop), [ I (Bitcast (charcastop, lllt, lop, rllt)) ]
@@ -282,39 +289,48 @@ module Translator = struct
 
       | Bop (op,l,r), t -> (* no GC, as all input results are primitives *)
           (* ignore gc as all inputs are primitives *)
-          let (op1,llt1,s1,_), (op2,llt2,s2,_) = cmp_exp c l, cmp_exp c r in
-          let (lt,llt1,op1), (rt,llt2,op2), caststream = bop_cast (snd l,llt1,op1) (snd r,llt2,op2) in
           let rsym = gensym "binop" in
-          begin match op with
-            | Pow ->
-                let rt,fname = List.assoc (lt,rt) pow_ts in
-                Id rsym, cmp_ty rt, s1 @ s2 @ caststream @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1; llt2, op2 ])) ], false
-            | Logand | Logor ->
-                let shortcircuiteval, shortcircuitstore =
-                  if op = Logand then 0L, 0L else 1L, 1L in
-                let cmpres = gensym "and" in
-                let shortcircuit, evalboth, logend = gensym "shortcircuit", gensym "evalboth", gensym "logend" in
-                let resstack = gensym "logstack" in
-                Id rsym, cmp_ty TBool,
-                [ E (Alloca (resstack, I1)) ] @
-                s1 @
-                [ I (Cmp (cmpres, ICmp, Eq, I1, op1, IConst shortcircuiteval))
-                ; T (Cbr (Id cmpres, shortcircuit, evalboth))
-                ; L shortcircuit
-                ; I (Store (I1, IConst shortcircuitstore, Id resstack))
-                ; T (Br logend)
-                ; L evalboth
-                ] @
-                s2 @
-                [ I (Store (I1, op2, Id resstack))
-                ; T (Br logend)
-                ; L logend
-                ; I (Load (rsym, I1, Id resstack))
-                ],
-                false
+          let (op1,llt1,s1,gc1), (op2,llt2,s2,gc2) = cmp_exp c l, cmp_exp c r in
+
+          begin match snd l, snd r with
+            | TRef TStr, TRef TStr | TRef TStr, TInt | TInt, TRef TStr ->
+                let fname,rt = List.assoc (op,snd l,snd r) str_bops in
+                Id rsym, cmp_ty rt,
+                s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1 ; llt2, op2 ]))] @
+                  (if gc1 then removeref (llt1,op1) else []) @ (if gc2 then removeref (llt2,op2) else []), true
             | _ ->
-                let rt,llop = List.assoc (op,lt,rt) bop_ts in
-                Id rsym, cmp_ty rt, s1 @ s2 @ caststream @ [ I (Binop (rsym, llop, cmp_ty rt, op1, op2))], false
+                let (lt,llt1,op1), (rt,llt2,op2), caststream = bop_cast (snd l,llt1,op1) (snd r,llt2,op2) in
+                begin match op with
+                  | Pow ->
+                      let rt,fname = List.assoc (lt,rt) pow_ts in
+                      Id rsym, cmp_ty rt, s1 @ s2 @ caststream @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1; llt2, op2 ])) ], false
+                  | Logand | Logor ->
+                      let shortcircuiteval, shortcircuitstore =
+                        if op = Logand then 0L, 0L else 1L, 1L in
+                      let cmpres = gensym "and" in
+                      let shortcircuit, evalboth, logend = gensym "shortcircuit", gensym "evalboth", gensym "logend" in
+                      let resstack = gensym "logstack" in
+                      Id rsym, cmp_ty TBool,
+                      [ E (Alloca (resstack, I1)) ] @
+                      s1 @
+                      [ I (Cmp (cmpres, ICmp, Eq, I1, op1, IConst shortcircuiteval))
+                      ; T (Cbr (Id cmpres, shortcircuit, evalboth))
+                      ; L shortcircuit
+                      ; I (Store (I1, IConst shortcircuitstore, Id resstack))
+                      ; T (Br logend)
+                      ; L evalboth
+                      ] @
+                      s2 @
+                      [ I (Store (I1, op2, Id resstack))
+                      ; T (Br logend)
+                      ; L logend
+                      ; I (Load (rsym, I1, Id resstack))
+                      ],
+                      false
+                  | _ ->
+                      let rt,llop = List.assoc (op,lt,rt) bop_ts in
+                      Id rsym, cmp_ty rt, s1 @ s2 @ caststream @ [ I (Binop (rsym, llop, cmp_ty rt, op1, op2))], false
+                end
           end
 
       | Uop (op,e), t -> (* no GC, as all input results are primitives *)
