@@ -6,8 +6,7 @@ module Lexer = struct
   exception LexError of string node
 
   let simple_regex_strings : (string * token) list =
-    [
-      "!",   Op Bang
+    [ "!",   Op Bang
     ; "**",  Op Starstar
     ; "*",   Op Star      
     ; "+",   Op Plus      
@@ -52,28 +51,29 @@ module Lexer = struct
     List.map (fun (s,t) -> Str.regexp_string s, t) (List.sort f simple_regex_strings)
   
   let keywords : (string * token) list = [
-      "global", KGlobal
-    ; "fn",     KFn
-    ; "let",    KLet
-    ; "mut",    KMut
-    ; "int",    KInt
-    ; "flt",    KFlt
-    ; "char",   KChar
-    ; "bool",   KBool
-    ; "string", KString
-    ; "void",   KVoid
-    ; "null",   KNull
-    ; "of",     KOf
-    ; "if",     KIf
-    ; "elif",   KElif
-    ; "else",   KElse
-    ; "denull", KDenull
-    ; "while",  KWhile
-    ; "for",    KFor
-    ; "do",     KDo
-    ; "return", KReturn
-    ; "true",   LBool true
-    ; "false",  LBool false
+      "global",  KGlobal
+    ; "fn",      KFn
+    ; "let",     KLet
+    ; "mut",     KMut
+    ; "int",     KInt
+    ; "flt",     KFlt
+    ; "char",    KChar
+    ; "bool",    KBool
+    ; "string",  KString
+    ; "void",    KVoid
+    ; "null",    KNull
+    ; "of",      KOf
+    ; "sprintf", KSprintf
+    ; "if",      KIf
+    ; "elif",    KElif
+    ; "else",    KElse
+    ; "denull",  KDenull
+    ; "while",   KWhile
+    ; "for",     KFor
+    ; "do",      KDo
+    ; "return",  KReturn
+    ; "true",    LBool true
+    ; "false",   LBool false
     ]
   
   type other_regexes = | Id | Flt | Int | Char | CharEscape | Whitespace | Comment

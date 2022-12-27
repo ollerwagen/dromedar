@@ -72,6 +72,7 @@ type exp =
   | LitArr    of exp node list
   | EmptyList of ty node
   | Null      of rty node
+  | Sprintf   of string node * exp node list
   | Bop       of bop * exp node * exp node
   | Uop       of uop * exp node
   | Cmps      of exp node * (cmpop * exp node) list
@@ -128,6 +129,7 @@ let rec print_exp (e : exp node) : string =
     | LitArr    ls      -> Printf.sprintf "[%s]" (String.concat ", " (List.map print_exp ls))
     | EmptyList t       -> Printf.sprintf "([] of %s)" (print_ty t)
     | Null      t       -> Printf.sprintf "(null of %s)" (print_rty t)
+    | Sprintf   (s,es)  -> Printf.sprintf "sprintf(\"%s\"%s" (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
     | Bop       (o,l,r) -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)
     | Uop       (o,e)   -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)
     | Cmps      (e,ls)  -> Printf.sprintf "(%s%s)" (print_exp e) (List.fold_left (fun s (o,e) -> Printf.sprintf "%s %s %s" s (List.assoc o cmp_string) (print_exp e)) "" ls)

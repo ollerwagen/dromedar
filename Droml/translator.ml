@@ -297,6 +297,37 @@ module Translator = struct
       | EmptyList rt, t -> cmp_exp c (LitArr [], t)
       | Null rt, t      -> Null, cmp_ty t, [], false
 
+      | Sprintf (s,es), t ->
+          let cmpd_es = List.map (cmp_exp c) es in
+          let substrings = Str.full_split (Str.regexp "{[0-9]}") s in
+          let arggcs = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) cmpd_es es) in
+          let strty = cmp_ty (TRef TStr) in
+          let makestr_instrs =
+            List.map
+            (function
+              | Str.Text s ->
+                  let op,_,instrs,gc = cmp_exp c (LitStr s, TRef TStr) in
+                  op, instrs, gc
+              | Str.Delim s ->
+                  let index = Stdlib.int_of_string @@ String.sub s 1 @@ String.length s - 2 in
+                  let (op,_,instrs,gc), (_,t) = List.nth cmpd_es index, List.nth es index in
+                  let rsym = gensym "op" in
+                  begin match t with
+                    | TRef TStr -> op, instrs, false
+                    | TInt      -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_int",  [ cmp_ty TInt,  op ])) ], true
+                    | TFlt      -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_flt",  [ cmp_ty TFlt,  op ])) ], true
+                    | TChar     -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_char", [ cmp_ty TChar, op ])) ], true
+                    | TBool     -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_bool", [ cmp_ty TBool, op ])) ], true
+                    | _         -> Stdlib.failwith "bad sprintf type"
+                  end
+            )
+            substrings in
+          let makestr_streams = List.concat ((List.map (fun (_,s,_) -> s)) makestr_instrs) in
+          let strgcs = List.concat (List.filter_map (fun (op,_,gc) -> if gc then Some (removeref (strty,op)) else None) makestr_instrs) in
+          let catargs = List.map (fun (op,_,_) -> strty, op) makestr_instrs in
+          let rsym = gensym "sprintf_res" in
+          Id rsym, strty, (makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ arggcs @ strgcs), true
+
       | Bop (op,l,r), t -> (* no GC, as all input results are primitives *)
           (* ignore gc as all inputs are primitives *)
           let rsym = gensym "binop" in

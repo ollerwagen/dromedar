@@ -15,6 +15,14 @@ declare i64 @_strcmp({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
 
 declare {i64,[0 x i8]*}* @_arrconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*, i64, i1)
 
+
+; sprintf helper functions
+declare {i64,[0 x i8]*}* @_sprintf_int(i64)
+declare {i64,[0 x i8]*}* @_sprintf_flt(double)
+declare {i64,[0 x i8]*}* @_sprintf_char(i8)
+declare {i64,[0 x i8]*}* @_sprintf_bool(i1)
+declare {i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
+
 ;
 ; Garbage Collection Functions
 ;

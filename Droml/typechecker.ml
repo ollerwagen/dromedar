@@ -189,9 +189,16 @@ module TypeChecker = struct
             false
       | Subscript (b,o) -> is_assignable_with_const b
       | _               -> false
-    end    
+    end   
+    
+  let rec is_printable (t:ty) : bool =
+    begin match t with
+      | TInt | TFlt | TChar | TBool | TRef TStr -> true
+      | TRef (TArr t) -> is_printable t
+      | _ -> false
+    end
   
-  let rec check_exp (c:Ctxt.t) (e:exp node) : annt_exp =
+  let rec check_exp (c:Ctxt.t) (exp_t : ty option) (e:exp node) : annt_exp =
     begin match e.t with
       | Id id ->
           if Ctxt.has c id then Id id, fst (Ctxt.get c id)
@@ -202,7 +209,7 @@ module TypeChecker = struct
       | LitBool b   -> LitBool b, TBool
       | LitStr  s   -> LitStr s, TRef TStr
       | LitArr  ls  ->
-          let annt_es = List.map (check_exp c) ls in
+          let annt_es = List.map (check_exp c None) ls in
           let spts = List.map suptys @@ List.map snd annt_es in
           begin match intersect spts with
             | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
@@ -210,16 +217,24 @@ module TypeChecker = struct
           end
       | EmptyList t -> EmptyList t.t, TRef (TArr t.t)
       | Null    rt  -> Null rt.t, TNullRef rt.t
+      | Sprintf (s, es) ->
+          let annt_es = List.map (check_exp c None) es in
+          let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
+          let strindices = List.filter_map (function | Str.Delim s -> Some (Stdlib.int_of_string (String.sub s 1 (String.length s - 2))) | _ -> None) indexstrs in
+          if List.for_all (fun i -> 0 <= i && i < List.length annt_es) strindices && List.for_all (fun (_,t) -> is_printable t) annt_es then
+            Sprintf (s.t, annt_es), TRef TStr
+          else
+            raise @@ TypeError (ofnode "Something is wrong with this sprintf expression" e)
       | Uop (op,r) ->
           let opts = List.assoc op uop_types in
-          let expt = check_exp c r in
+          let expt = check_exp c None r in
           begin match List.assoc_opt (snd expt) opts with
             | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand type %s" (List.assoc op uop_string) (print_ty (ofnode (snd expt) r))) r)
             | Some t -> Uop (op, expt), t
           end
       | Bop (op,l,r) ->
           let opts = List.assoc op bop_types in
-          let lt,rt = check_exp c l, check_exp c r in
+          let lt,rt = check_exp c None l, check_exp c None r in
           begin match snd lt, snd rt with
             | TRef (TArr t1), TRef (TArr t2) ->
                 begin match intersect_single (suptys t1) (suptys t2) with
@@ -233,11 +248,11 @@ module TypeChecker = struct
                 end
           end
       | Cmps (x,xs) ->
-          let first_exp = check_exp c x in
+          let first_exp = check_exp c None x in
           let _,clist =
             List.fold_left
               (fun (lt,l) (op,r) -> 
-                let rt = check_exp c r in
+                let rt = check_exp c None r in
                 begin match op with
                   | RefEq | RefNotEq ->
                       begin match lt, snd rt with
@@ -258,8 +273,8 @@ module TypeChecker = struct
               (snd first_exp, []) xs in
           Cmps (first_exp, clist), TBool
       | FApp (f,args) ->
-          let argts = List.map (check_exp c) args in
-          begin match check_exp c f with
+          let argts = List.map (check_exp c None) args in
+          begin match check_exp c None f with
             | f', TRef (TFun (a,rt)) ->
                 let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
                 let () = List.iter2
@@ -275,7 +290,7 @@ module TypeChecker = struct
             | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (print_ty (ofnode (snd t) f))) f)
           end
       | Subscript (l,r) ->
-          begin match check_exp c l, check_exp c r with
+          begin match check_exp c None l, check_exp c None r with
             | (l', TRef (TArr t)), (r', TInt) -> Subscript ((l', TRef (TArr t)), (r', TInt)), t
             | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (print_ty (ofnode t l))) l)
             | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (print_ty (ofnode t r))) r)
@@ -288,7 +303,7 @@ module TypeChecker = struct
           if Ctxt.has_toplevel c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in this block" id) s)
           else
-            let et = check_exp c e in
+            let et = check_exp c None e in
             begin match t with
               | None   -> VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
               | Some t ->
@@ -298,7 +313,7 @@ module TypeChecker = struct
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (print_ty t) (print_ty (ofnode (snd et) e))) s)
             end
       | Assn (l,r) ->
-          let lt,rt = check_exp c l, check_exp c r in
+          let lt,rt = check_exp c None l, check_exp c None r in
           if is_assignable c l then
             if subtype (snd rt) (snd lt) || crosstype (snd lt) (snd rt) then
               Assn (lt,rt), c, false
@@ -309,8 +324,8 @@ module TypeChecker = struct
       | Expr e ->
           begin match e.t with
             | FApp (f,args) ->
-                let argts = List.map (check_exp c) args in
-                begin match check_exp c f with
+                let argts = List.map (check_exp c None) args in
+                begin match check_exp c None f with
                   | f', TRef (TFun (a,rt)) ->
                       let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
                       let () = List.iter2
@@ -325,13 +340,13 @@ module TypeChecker = struct
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
           end
       | If (cd,t,n) ->
-          let ct = check_exp c cd in
+          let ct = check_exp c None cd in
           if snd ct = TBool then
             let (t',_,r1),(n',_,r2) = check_stmt_block rt c t, check_stmt_block rt c n in If (ct,t',n'), c, r1 && r2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
       | Denull (id,e,t,n) ->
-          let e',et = check_exp c e in
+          let e',et = check_exp c None e in
           begin match et with
             | TNullRef r ->
                 let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (TRef r, Const)) in
@@ -340,19 +355,19 @@ module TypeChecker = struct
             | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
           end
       | While (cd,b) ->
-          let ct = check_exp c cd in
+          let ct = check_exp c None cd in
           if snd ct = TBool then
             let b',_,_ = check_stmt_block rt c b in While (ct,b'), c, false
           else
             raise @@ TypeError (ofnode "while condition must be of type bool" cd)
       | DoWhile (cd,b) ->
-          let ct = check_exp c cd in
+          let ct = check_exp c None cd in
           if snd ct = TBool then
             let b',_,r = check_stmt_block rt c b in DoWhile (ct,b'), c, r
           else
             raise @@ TypeError (ofnode "do-while condition must be of type bool" cd)
       | For (id,exps,incl1,incl2,expe,b) ->
-          let sty, ety = check_exp c exps, check_exp c expe in
+          let sty, ety = check_exp c None exps, check_exp c None expe in
           if snd sty = TInt && snd ety = TInt then
             let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(TInt,Const)) in
             let b',_,_ = check_stmt_block rt c' b in For (id,sty,incl1,incl2,ety,b'), c, false
@@ -362,7 +377,7 @@ module TypeChecker = struct
           if rt = Void then Return None, c, true
           else raise @@ TypeError (ofnode "cannot return without expression in non-void function" s)
       | Return (Some e) ->
-          let et = check_exp c e in
+          let et = check_exp c None e in
           begin match rt with
             | Void  -> raise @@ TypeError (ofnode "cannot return with expression in void function" s)
             | Ret t ->

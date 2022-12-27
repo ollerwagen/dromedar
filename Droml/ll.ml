@@ -4,6 +4,7 @@ open Common
 
 type llty =
   | Void
+  | VariadicDots
   | Namedt of string
   | Struct of llty list
   | Func of llty list * llty
@@ -73,6 +74,7 @@ type ginstr =
 let rec size_ty (t:llty) : int =
   begin match t with
     | Void         -> 0
+    | VariadicDots -> Stdlib.failwith "cannot ask for size of variadic dots type"
     | Namedt s     -> Stdlib.failwith "named types unimplemented"
     | Struct ts    -> List.fold_left (+) 0 @@ List.map size_ty ts
     | Array  (s,t) -> Int64.to_int s * size_ty t
@@ -84,6 +86,7 @@ let rec size_ty (t:llty) : int =
 let rec print_llty (t:llty) : string =
   begin match t with
     | Void         -> "void"
+    | VariadicDots -> "..."
     | Namedt s     -> "%s"
     | Struct ts    -> Printf.sprintf "{%s}" (String.concat ", " (List.map print_llty ts))
     | Func   (a,r) -> Printf.sprintf "%s(%s)" (print_llty r) (String.concat ", " (List.map print_llty a))

@@ -193,6 +193,28 @@ module Parser = struct
         { t = Uop ((List.assoc op.t uop_from_token), e) ; start = start ; length = e.start - start + e.length }, s''
       else
         parse_simple_expression s
+    
+    and parse_sprintf_expression (s : state) : exp node * state =
+      let rec parse_commalist (s : state) : exp node list * state =
+        if (peek s).t = Token.Comma then
+          let s' = snd @@ advance s in
+          let e, s'' = parse_exp s' in
+          let rs,s''' = parse_commalist s'' in
+          e::rs, s'''
+        else
+          [], s
+      in
+      let start = (peek s).start in
+      let s' = expect s Token.KSprintf in
+      let s'' = expect s' Token.LParen in
+      let str,s''' =
+        begin match (peek s'').t with
+          | LStr s -> let snode,s''' = advance s'' in ofnode s snode, s'''
+          | _ -> raise @@ ParseError (ofnode "Expect a string literal in sprintf expression" (fst @@ advance s''))
+        end in
+      let es,s'''' = parse_commalist s''' in
+      let s''''' = expect s'''' Token.RParen in
+      { t = Sprintf (str, es) ; start = start ; length = (peek s''''').start - start }, s'''''
 
     and parse_simple_expression (s : state) : exp node * state =
       let start = (peek s).start in
@@ -236,6 +258,7 @@ module Parser = struct
             let exps,s'' = parse_commasep_explist s' RBrack false in
             let s''' = expect s'' RBrack in
             { t = LitArr exps ; start = start ; length = (peek s''').start - start }, s'''
+        | KSprintf -> parse_sprintf_expression s
         | LInt  i -> let _,s' = advance s in { t = LitInt  i ; start = start ; length = (peek s').start - start }, s'
         | LFlt  f -> let _,s' = advance s in { t = LitFlt  f ; start = start ; length = (peek s').start - start }, s'
         | LChar c -> let _,s' = advance s in { t = LitChar c ; start = start ; length = (peek s').start - start }, s'

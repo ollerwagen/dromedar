@@ -610,6 +610,26 @@ fn main -> void
 					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\ \ \mc{rt}\not\equiv\mc{void}\ \  S\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1}\vee\mc{e1}\bowtie\mc{t1},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}\vee\mc{en}\bowtie\mc{tn}}{S}{E}{\mc{f(e1,...,en)}::\mc{rt}}{ExpFunc}´
 				\end{align*}
 				
+			\subsubsection{\code{sprintf} call}
+			
+				Because Dromedar is typesafe, a construct like \code{sprintf} is not possible within the standard framework of the language. Instead, it uses the \code{sprintf} keyword that generates a string from the input string and its arguments.
+				
+				First, define the rule to decide whether an object type is \textit{printable}:
+				
+				\begin{align*}
+					\drmrule{}{}{P}{\mc{int}}{PrtInt},\ \ 
+					\drmrule{}{}{P}{\mc{flt}}{PrtFlt},\ \ 
+					\drmrule{}{}{P}{\mc{char}}{PrtChar},\ \ 
+					\drmrule{}{}{P}{\mc{bool}}{PrtBool},\ \ 
+					\drmrule{}{}{P}{\mc{string}}{PrtString}
+				\end{align*}\begin{align*}
+					\drmrule{\ruleapp{P}\mc{t}}{}{P}{\mc{[t]}}{PrtArr}
+				\end{align*}
+				
+				\begin{align*}
+					\drmrule{0\leq\mc{j1}<\mc{n},\ \dots,\ 0\leq\mc{jm}<\mc{n}\ \ S\ruleapp{E}\mc{e1}::\mc{t1},\ \dots,\ S\ruleapp{E}\mc{en}::\mc{tn}\ \ \ruleapp{P}\mc{t1},\ \dots,\ \ruleapp{P}\mc{tn}}{S}{E}{\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)} :: \mc{string}}{ExpSprintf}
+				\end{align*}
+				
 			\subsubsection{Subscript Access}
 			
 				\begin{itemize}
@@ -797,6 +817,8 @@ fn main -> void
 				do           ::= /do/
 				while        ::= /while/
 				for          ::= /for/
+				
+				sprintf      ::= /sprintf/
 				 
 				return       ::= /return/
 				
@@ -1007,6 +1029,11 @@ fn main -> void
 				                 | %LiteralBool
 				                 | %LiteralStr
 				                 | %Identifier
+				                 | %Sprintf %LParen %LiteralStr PrintfArglist %RParen
+				                 
+				PrintfArgList    ::=
+				                 | €
+				                 | %Comma Expression PrintfArgList
 				                 
 				Application      ::=
 				                 | %LParen CommaExpListNE %RParen
