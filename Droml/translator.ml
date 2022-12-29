@@ -295,9 +295,17 @@ module Translator = struct
           true
 
       | EmptyList rt, t -> cmp_exp c (LitArr [], t)
+
+      | RangeList (e1,i1,i2,e2), t ->
+          let rsym = gensym "rangelist" in
+          let (eop1,_,es1,_), (eop2,_,es2,_) = cmp_exp c e1, cmp_exp c e2 in
+          Id rsym, cmp_ty t,
+          es1 @ es2 @ [ I (Call (Some rsym, cmp_ty t, Gid "_makerangelist", [ I64, eop1 ; I64, eop2 ; I1, IConst (if i1=Incl then 1L else 0L) ; I1, IConst (if i2=Incl then 1L else 0L) ])) ],
+          true
+
       | Null rt, t      -> Null, cmp_ty t, [], false
 
-      | Sprintf (s,es), t ->
+      | Sprintf (opt,s,es), t ->
           let cmpd_es = List.map (cmp_exp c) es in
           let substrings = Str.full_split (Str.regexp "{[0-9]}") s in
           let arggcs = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) cmpd_es es) in
@@ -326,7 +334,12 @@ module Translator = struct
           let strgcs = List.concat (List.filter_map (fun (op,_,gc) -> if gc then Some (removeref (strty,op)) else None) makestr_instrs) in
           let catargs = List.map (fun (op,_,_) -> strty, op) makestr_instrs in
           let rsym = gensym "sprintf_res" in
-          Id rsym, strty, (makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ arggcs @ strgcs), true
+          let printf_call =
+            begin match opt with
+              | Sprintf -> []
+              | Printf  -> [ I (Call (None, Void, Gid "print_str", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym)
+            end in
+          Id rsym, strty, (makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), true
 
       | Bop (op,l,r), t -> (* no GC, as all input results are primitives *)
           (* ignore gc as all inputs are primitives *)
@@ -524,6 +537,7 @@ module Translator = struct
           c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ], refvars
       | Expr (e,t) ->
           begin match e with
+            | Sprintf (Printf,s,es) -> let _,_,s,_ = cmp_exp c (e, TRef TStr) in c, s, refvars
             | FApp (f,a) ->
                 let getstream (_,_,s,_) = s in
                 (* fgc must be = false since functions are not garbage-collectable (yet) *)

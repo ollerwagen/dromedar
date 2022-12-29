@@ -216,15 +216,23 @@ module TypeChecker = struct
             | t::ts -> LitArr annt_es, TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
           end
       | EmptyList t -> EmptyList t.t, TRef (TArr t.t)
+      | RangeList (e1,i1,i2,e2) ->
+          let e1',e2' = check_exp c None e1, check_exp c None e2 in
+          begin match snd e1', snd e2' with
+            | TInt,TInt -> RangeList (e1',i1,i2,e2'), TRef (TArr TInt)
+            | _ -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
+          end
       | Null    rt  -> Null rt.t, TNullRef rt.t
-      | Sprintf (s, es) ->
+      | Sprintf (Sprintf, s, es) ->
           let annt_es = List.map (check_exp c None) es in
           let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
           let strindices = List.filter_map (function | Str.Delim s -> Some (Stdlib.int_of_string (String.sub s 1 (String.length s - 2))) | _ -> None) indexstrs in
           if List.for_all (fun i -> 0 <= i && i < List.length annt_es) strindices && List.for_all (fun (_,t) -> is_printable t) annt_es then
-            Sprintf (s.t, annt_es), TRef TStr
+            Sprintf (Sprintf, s.t, annt_es), TRef TStr
           else
             raise @@ TypeError (ofnode "Something is wrong with this sprintf expression" e)
+      | Sprintf (Printf, _, _) ->
+          raise @@ TypeError (ofnode "printf expression returns void, cannot be used in an expression" e)
       | Uop (op,r) ->
           let opts = List.assoc op uop_types in
           let expt = check_exp c None r in
@@ -323,6 +331,14 @@ module TypeChecker = struct
             raise @@ TypeError (ofnode ("left-hand side expression cannot be written to") l)
       | Expr e ->
           begin match e.t with
+            | Sprintf (Printf, s, es) ->
+                let annt_es = List.map (check_exp c None) es in
+                let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
+                let strindices = List.filter_map (function | Str.Delim s -> Some (Stdlib.int_of_string (String.sub s 1 (String.length s - 2))) | _ -> None) indexstrs in
+                if List.for_all (fun i -> 0 <= i && i < List.length annt_es) strindices && List.for_all (fun (_,t) -> is_printable t) annt_es then
+                  Expr (Sprintf (Printf, s.t, annt_es), None), c, false
+                else
+                  raise @@ TypeError (ofnode "Something is wrong with this printf expression" e)
             | FApp (f,args) ->
                 let argts = List.map (check_exp c None) args in
                 begin match check_exp c None f with

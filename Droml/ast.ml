@@ -62,6 +62,8 @@ and retty =
   | Void
   | Ret of ty
 
+type formatstr = | Printf | Sprintf
+
 type exp =
   | Id        of string
   | LitInt    of Token.tint
@@ -71,8 +73,9 @@ type exp =
   | LitStr    of string
   | LitArr    of exp node list
   | EmptyList of ty node
+  | RangeList of exp node * inclusion * inclusion * exp node
   | Null      of rty node
-  | Sprintf   of string node * exp node list
+  | Sprintf   of formatstr * string node * exp node list
   | Bop       of bop * exp node * exp node
   | Uop       of uop * exp node
   | Cmps      of exp node * (cmpop * exp node) list
@@ -118,23 +121,32 @@ and print_rty (r : rty node) : string =
         Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map (fun arg -> print_ty (ofnode arg r)) args)) (print_retty (ofnode rt r))
   end
 
+let print_incl (i : inclusion * inclusion) : string =
+  begin match i with 
+    | Incl,Incl -> "..."
+    | Incl,Excl -> "..|"
+    | Excl,Incl -> "|.."
+    | Excl,Excl -> "|.|"
+  end
+
 let rec print_exp (e : exp node) : string =
   begin match e.t with
-    | Id        s       -> s
-    | LitInt    i       -> Printf.sprintf "%Ld"    i
-    | LitFlt    f       -> Printf.sprintf "%f"     f
-    | LitChar   c       -> Printf.sprintf "'%c'"   c
-    | LitBool   b       -> Printf.sprintf "%B"     b
-    | LitStr    s       -> Printf.sprintf "\"%s\"" (String.escaped s)
-    | LitArr    ls      -> Printf.sprintf "[%s]" (String.concat ", " (List.map print_exp ls))
-    | EmptyList t       -> Printf.sprintf "([] of %s)" (print_ty t)
-    | Null      t       -> Printf.sprintf "(null of %s)" (print_rty t)
-    | Sprintf   (s,es)  -> Printf.sprintf "sprintf(\"%s\"%s" (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
-    | Bop       (o,l,r) -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)
-    | Uop       (o,e)   -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)
-    | Cmps      (e,ls)  -> Printf.sprintf "(%s%s)" (print_exp e) (List.fold_left (fun s (o,e) -> Printf.sprintf "%s %s %s" s (List.assoc o cmp_string) (print_exp e)) "" ls)
-    | FApp      (f,ls)  -> Printf.sprintf "%s(%s)" (print_exp f) (String.concat ", " (List.map print_exp ls))
-    | Subscript (l,r)   -> Printf.sprintf "%s[%s]" (print_exp l) (print_exp r)
+    | Id        s           -> s
+    | LitInt    i           -> Printf.sprintf "%Ld"    i
+    | LitFlt    f           -> Printf.sprintf "%f"     f
+    | LitChar   c           -> Printf.sprintf "'%c'"   c
+    | LitBool   b           -> Printf.sprintf "%B"     b
+    | LitStr    s           -> Printf.sprintf "\"%s\"" (String.escaped s)
+    | LitArr    ls          -> Printf.sprintf "[%s]" (String.concat ", " (List.map print_exp ls))
+    | EmptyList t           -> Printf.sprintf "([] of %s)" (print_ty t)
+    | RangeList (s,i1,i2,e) -> Printf.sprintf "[%s%s%s]" (print_exp s) (print_incl (i1,i2)) (print_exp e)
+    | Null      t           -> Printf.sprintf "(null of %s)" (print_rty t)
+    | Sprintf   (t,s,es)    -> Printf.sprintf "%sprintf(\"%s\"%s)" (if t = Sprintf then "s" else "") (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
+    | Bop       (o,l,r)     -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)
+    | Uop       (o,e)       -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)
+    | Cmps      (e,ls)      -> Printf.sprintf "(%s%s)" (print_exp e) (List.fold_left (fun s (o,e) -> Printf.sprintf "%s %s %s" s (List.assoc o cmp_string) (print_exp e)) "" ls)
+    | FApp      (f,ls)      -> Printf.sprintf "%s(%s)" (print_exp f) (String.concat ", " (List.map print_exp ls))
+    | Subscript (l,r)       -> Printf.sprintf "%s[%s]" (print_exp l) (print_exp r)
   end
 
 let rec print_stmt (indent : int) (s : stmt node) : string =
@@ -150,10 +162,7 @@ let rec print_stmt (indent : int) (s : stmt node) : string =
     | Denull  (id,e,t,n)          -> Printf.sprintf "%sdenull %s := %s\n%s%selse\n%s" ind id (print_exp e) (print_block (indent+1) t) ind (print_block (indent+1) n)
     | While   (c,b)               -> Printf.sprintf "%swhile %s\n%s"                ind (print_exp c) (print_block (indent+1) b)
     | DoWhile (c,b)               -> Printf.sprintf "%sdo\n%s\n%swhile %s\n"        ind (print_block (indent+1) b) ind (print_exp c)
-    | For     (i,s,Incl,Incl,e,b) -> Printf.sprintf "%sfor %s := %s ... %s\n%s"     ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
-    | For     (i,s,Incl,Excl,e,b) -> Printf.sprintf "%sfor %s := %s ..| %s\n%s"     ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
-    | For     (i,s,Excl,Incl,e,b) -> Printf.sprintf "%sfor %s := %s |.. %s\n%s"     ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
-    | For     (i,s,Excl,Excl,e,b) -> Printf.sprintf "%sfor %s := %s |.| %s\n%s"     ind i (print_exp s) (print_exp e) (print_block (indent+1) b)
+    | For     (i,s,i1,i2,e,b)     -> Printf.sprintf "%sfor %s := %s %s %s\n%s"      ind i (print_exp s) (print_incl (i1,i2)) (print_exp e) (print_block (indent+1) b)
     | Return  None                -> Printf.sprintf "%sreturn\n"                    ind
     | Return  (Some e)            -> Printf.sprintf "%sreturn %s\n"                 ind (print_exp e)
   end

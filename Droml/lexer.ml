@@ -63,6 +63,7 @@ module Lexer = struct
     ; "void",    KVoid
     ; "null",    KNull
     ; "of",      KOf
+    ; "printf",  KPrintf
     ; "sprintf", KSprintf
     ; "if",      KIf
     ; "elif",    KElif

@@ -578,6 +578,12 @@ fn main -> void
 						Because the graph connecting types and subtypes is a forest of trees, if the intersection of supertypes is nonempty there is a unique solution \code{t}.
 				\end{itemize}
 			
+			\subsubsection{Range List}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{e1}::\mc{int}\ \ S\ruleapp{E}\mc{e2}::\mc{int}}{S}{E}{\mc{[e1 \%RangeSpecifier e2]} :: \mc{[int]}}{ExpRangeArr}
+				\end{align*}
+			
 			\subsubsection{Null}
 			
 				\begin{align*}
@@ -703,7 +709,7 @@ fn main -> void
 			\subsubsection{For Statements}
 	
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart \%ForSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
 				\end{align*}
 			
 			\subsubsection{Return Statements}
@@ -818,6 +824,7 @@ fn main -> void
 				while        ::= /while/
 				for          ::= /for/
 				
+				printf       ::= /printf/
 				sprintf      ::= /sprintf/
 				 
 				return       ::= /return/
@@ -939,9 +946,9 @@ fn main -> void
 				                 | %Do Block %While Expression
 				                 
 				ForStmt          ::=
-				                 | %For %Id %Assign Expr ForSpecifier Expr Block
+				                 | %For %Id %Assign Expr RangeSpecifier Expr Block
 				                 
-				ForSpecifier     ::=
+				RangeSpecifier   ::=
 				                 | %Dots
 				                 | %DotsPipe
 				                 | %PipeDots
@@ -949,7 +956,7 @@ fn main -> void
 				                 
 				ExprStmt         ::=
 				                 | Expression
-				                 | Expression %Colon FArgs
+				                 | %Printf %LParen %LiteralStr PrintfArglist %RParen
 				                 
 				ReturnStmt       ::=
 				                 | %Return
@@ -1023,6 +1030,7 @@ fn main -> void
 				BaseExpression   ::=
 				                 | %LParen Expression %RParen
 				                 | %LBrack CommaExpList %RBrack
+				                 | %LBrack Expression RangeSpecifier Expression %RBrack
 				                 | %LiteralInt
 				                 | %LiteralFlt
 				                 | %LiteralChar

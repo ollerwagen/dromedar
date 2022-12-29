@@ -135,6 +135,16 @@ module Parser = struct
 
   let rec parse_exp (s : state) : exp node * state =
 
+    let rec parse_commalist (s : state) : exp node list * state =
+      if (peek s).t = Token.Comma then
+        let s' = snd @@ advance s in
+        let e, s'' = parse_exp s' in
+        let rs,s''' = parse_commalist s'' in
+        e::rs, s'''
+      else
+        [], s
+    in
+
     let rec parse_binary_expression (prec_lvl : int) (s : state) : exp node * state =
 
       let rec parse_binary_partial (prec_lvl : int) (s : state) (lhs : exp node) : exp node * state =
@@ -194,18 +204,9 @@ module Parser = struct
       else
         parse_simple_expression s
     
-    and parse_sprintf_expression (s : state) : exp node * state =
-      let rec parse_commalist (s : state) : exp node list * state =
-        if (peek s).t = Token.Comma then
-          let s' = snd @@ advance s in
-          let e, s'' = parse_exp s' in
-          let rs,s''' = parse_commalist s'' in
-          e::rs, s'''
-        else
-          [], s
-      in
+    and parse_sprintf_expression (s : state) (start_t : token) : exp node * state =
       let start = (peek s).start in
-      let s' = expect s Token.KSprintf in
+      let s' = expect s start_t in
       let s'' = expect s' Token.LParen in
       let str,s''' =
         begin match (peek s'').t with
@@ -214,7 +215,7 @@ module Parser = struct
         end in
       let es,s'''' = parse_commalist s''' in
       let s''''' = expect s'''' Token.RParen in
-      { t = Sprintf (str, es) ; start = start ; length = (peek s''''').start - start }, s'''''
+      { t = Sprintf ((if start_t = Token.KSprintf then Sprintf else Printf), str, es) ; start = start ; length = (peek s''''').start - start }, s'''''
 
     and parse_simple_expression (s : state) : exp node * state =
       let start = (peek s).start in
@@ -255,10 +256,31 @@ module Parser = struct
             e, s'''
         | LBrack -> (* array literal *)
             let _,s' = advance s in
+            let e,s'' = parse_exp s' in
+            begin match (peek s'').t with
+              | Token.Comma | Token.RBrack ->
+                  let es,s''' = parse_commalist s'' in
+                  let s''' = expect s'' RBrack in
+                  { t = LitArr (e::es) ; start = start ; length = (peek s''').start - start }, s'''
+              | _ ->
+                  let incl,excl =
+                    begin match (peek s'').t with
+                      | Token.Dots        -> Incl, Incl
+                      | Token.DotsPipe    -> Incl, Excl
+                      | Token.PipeDots    -> Excl, Incl
+                      | Token.PipeDotPipe -> Excl, Excl
+                      | _ -> raise @@ ParseError (ofnode "Expected a range specifier in array expression" (peek s))
+                    end in
+                  let ee,s''' = parse_exp @@ snd @@ advance s'' in
+                  let s'''' = expect s''' RBrack in
+                  { t = RangeList (e,incl,excl,ee) ; start = start ; length = (peek s''').start - start }, s''''
+            end
+(*
             let exps,s'' = parse_commasep_explist s' RBrack false in
             let s''' = expect s'' RBrack in
-            { t = LitArr exps ; start = start ; length = (peek s''').start - start }, s'''
-        | KSprintf -> parse_sprintf_expression s
+            { t = LitArr exps ; start = start ; length = (peek s''').start - start }, s'''*)
+        | KPrintf  -> parse_sprintf_expression s KPrintf
+        | KSprintf -> parse_sprintf_expression s KSprintf
         | LInt  i -> let _,s' = advance s in { t = LitInt  i ; start = start ; length = (peek s').start - start }, s'
         | LFlt  f -> let _,s' = advance s in { t = LitFlt  f ; start = start ; length = (peek s').start - start }, s'
         | LChar c -> let _,s' = advance s in { t = LitChar c ; start = start ; length = (peek s').start - start }, s'
