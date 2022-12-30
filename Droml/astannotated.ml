@@ -10,6 +10,7 @@ type exp' =
   | LitArr    of annt_exp list
   | EmptyList of ty
   | RangeList of annt_exp * inclusion * inclusion * annt_exp
+  | ListComp  of annt_exp * (string * annt_exp) list * annt_exp
   | Null      of rty
   | Sprintf   of formatstr * string * annt_exp list
   | Bop       of bop * annt_exp * annt_exp

@@ -222,6 +222,19 @@ module TypeChecker = struct
             | TInt,TInt -> RangeList (e1',i1,i2,e2'), TRef (TArr TInt)
             | _ -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
           end
+      | ListComp (ex,vs,cnd) ->
+          let avs = List.map (fun (id,e) -> id, check_exp c None e) vs in
+          let c' =
+            List.fold_left
+            (fun c (id,(_,t)) ->
+              begin match t with
+                | TRef (TArr t') -> Ctxt.add_binding c (id,(t',Const))
+                | _              -> raise @@ TypeError (ofnode "list comprehension variable should be in an array type" e)
+              end
+            )
+            c avs in
+          let ae, acnd = check_exp c' None ex, check_exp c' None cnd in
+          ListComp (ae,avs,acnd), TRef (TArr (snd ae)) 
       | Null    rt  -> Null rt.t, TNullRef rt.t
       | Sprintf (Sprintf, s, es) ->
           let annt_es = List.map (check_exp c None) es in

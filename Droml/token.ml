@@ -65,6 +65,7 @@ type token =
   | KPrintf
   | KSprintf
   | KOf
+  | KIn
   | KIf
   | KElif
   | KElse
@@ -135,6 +136,7 @@ let print_token (t:token) : string =
     | KVoid        -> "[void]"
     | KNull        -> "[null]"
     | KOf          -> "[of]"
+    | KIn          -> "[in]"
     | KPrintf      -> "[printf]"
     | KSprintf     -> "[sprintf]"
     | KIf          -> "[if]"

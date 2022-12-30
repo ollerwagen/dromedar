@@ -247,6 +247,20 @@ module Parser = struct
     
     and parse_basic_expression (s : state) : exp node * state =
 
+      let rec parse_listcompvars (s : state) : (string * exp node) list * state =
+        let id,s' =
+          begin match (peek s).t with
+            | Id id -> id, snd @@ advance s
+            | _ -> raise @@ ParseError (ofnode "expected an identifier in list comprehension variable list" (peek s))
+          end in
+        let s'' = expect s' KIn in
+        let e,s''' = parse_exp s'' in
+        begin match (peek s''').t with
+          | Comma -> let vs,s'''' = parse_listcompvars (snd @@ advance s''') in (id,e)::vs, s''''
+          | _     -> [id,e], s'''
+        end
+      in
+
       let start = (peek s).start in
       begin match (peek s).t with
         | LParen -> (* grouping expression *)
@@ -260,8 +274,21 @@ module Parser = struct
             begin match (peek s'').t with
               | Token.Comma | Token.RBrack ->
                   let es,s''' = parse_commalist s'' in
-                  let s''' = expect s'' RBrack in
-                  { t = LitArr (e::es) ; start = start ; length = (peek s''').start - start }, s'''
+                  let s'''' = expect s''' RBrack in
+                  { t = LitArr (e::es) ; start = start ; length = (peek s'''').start - start }, s''''
+              | Token.Colon ->
+                  let s''' = snd @@ advance s'' in
+                  let vs,s'''' = parse_listcompvars s''' in
+                  let c,s''''' =
+                    begin match (peek s'''').t with
+                      | Colon -> 
+                          let s''''' = snd @@ advance s'''' in
+                          parse_exp s'''''
+                      | _ ->
+                          ofnode (LitBool true) (peek s''''), s''''
+                    end in
+                  let s'''''' = expect s''''' RBrack in
+                  { t = ListComp (e,vs,c) ; start = start ; length = (peek s'''''').start - start }, s''''''
               | _ ->
                   let incl,excl =
                     begin match (peek s'').t with

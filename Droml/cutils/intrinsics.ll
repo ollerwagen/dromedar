@@ -26,6 +26,11 @@ declare {i64,[0 x i8]*}* @_sprintf_char(i8)
 declare {i64,[0 x i8]*}* @_sprintf_bool(i1)
 declare {i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
 
+; list comprehension helper functions
+declare i8* @_make_vector()
+declare void @_addelem(i8*, i64)
+declare {i64,[0 x i8]*}* @_genlist(i8*,i8*,i64,i1)
+
 ;
 ; Garbage Collection Functions
 ;

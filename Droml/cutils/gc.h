@@ -13,6 +13,8 @@ extern "C" {
     void  _addref(ptr);
     void  _addchild(ptr,ptr);
 
+    void _transferchildren(ptr,ptr);
+
 #ifdef __cplusplus
 }
 #endif

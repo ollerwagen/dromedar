@@ -14,7 +14,7 @@
 	morekeywords = [2]{true,false,null},
 	morekeywords = [3]{return,if,else,while,do,for,denull},
 	morekeywords = [4]{let,mut,global},
-	morekeywords = [5]{of},
+	morekeywords = [5]{of,in},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -583,6 +583,12 @@ fn main -> void
 				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{e1}::\mc{int}\ \ S\ruleapp{E}\mc{e2}::\mc{int}}{S}{E}{\mc{[e1 \%RangeSpecifier e2]} :: \mc{[int]}}{ExpRangeArr}
 				\end{align*}
+				
+			\subsubsection{List Comprehension}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{l1}::\mc{[t1]},\ \dots,\ S\ruleapp{E}\mc{ln}::\mc{[tn]}\ \ S\sqcup\{(\mc{x1},\mc{t1},c),\dots,(\mc{xn},\mc{tn},c)\}\ruleapp{E}(\mc{e},\mc{c})::(\mc{t},\mc{bool})}{S}{E}{\mc{[e : x1 in l1, ..., xn in ln : c]}::\mc{[t]}}{ExpListComp}
+				\end{align*}
 			
 			\subsubsection{Null}
 			
@@ -816,6 +822,7 @@ fn main -> void
 				denull       ::= /denull/
 				
 				of           ::= /of/
+				in           ::= /in/
 				
 				if           ::= /if/
 				elif         ::= /elif/
@@ -1031,6 +1038,8 @@ fn main -> void
 				                 | %LParen Expression %RParen
 				                 | %LBrack CommaExpList %RBrack
 				                 | %LBrack Expression RangeSpecifier Expression %RBrack
+				                 | %LBrack Expression %Colon ListCmpVars %RBrack
+				                 | %LBrack Expression %Colon ListCmpVars %Colon Expression %RBrack
 				                 | %LiteralInt
 				                 | %LiteralFlt
 				                 | %LiteralChar
@@ -1042,6 +1051,14 @@ fn main -> void
 				PrintfArgList    ::=
 				                 | €
 				                 | %Comma Expression PrintfArgList
+				                 
+				ListCmpVars      ::=
+				                 | €
+				                 | ListCmpVarsNE
+				                 
+				ListCmpVarsNE    ::=
+				                 | %Identifier %In Expression
+				                 | %Identifier %In Expression %Comma ListCmpVarsNE
 				                 
 				Application      ::=
 				                 | %LParen CommaExpListNE %RParen

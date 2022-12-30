@@ -133,4 +133,13 @@ extern "C" {
         gcrun();
     }
 
+    void _transferchildren(ptr from, ptr to) {
+#if __DEBUG__
+        printf("transferchildren(%p -> %p)\n", from, to);
+#endif 
+
+        const auto &children = table[from].children;
+        table[to].children.insert(children.begin(), children.end());
+        table[from].children.clear();
+    }
 }

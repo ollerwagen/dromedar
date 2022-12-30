@@ -15,6 +15,7 @@ intrinsics:
 	$(COMPILE) -c cutils/intrinsics.c -o cutils/intrinsics.o
 	$(COMPILE) -c cutils/runtime.c -o cutils/runtime.o
 	$(COMPILE) -c cutils/sprintflib.c -o cutils/sprintflib.o
+	clang -fpic -shared cutils/listops.cpp -o cutils/listops.so -O3
 
 compiler:
 	ocamlbuild -pkg num main.native

@@ -303,6 +303,98 @@ module Translator = struct
           es1 @ es2 @ [ I (Call (Some rsym, cmp_ty t, Gid "_makerangelist", [ I64, eop1 ; I64, eop2 ; I1, IConst (if i1=Incl then 1L else 0L) ; I1, IConst (if i2=Incl then 1L else 0L) ])) ],
           true
 
+      | ListComp (e,vs,cnd), t ->
+          let rsym, rsym_cast, ivec = gensym "listcomp", gensym "listcomp", gensym "intermvec" in
+          let loopvars = List.map (fun _ -> gensym "index") vs in
+          let rt_elem_t =
+            begin match t with
+              | TRef (TArr t) -> t
+              | _             -> Stdlib.failwith "bad AST: list comprehension should return array type"
+            end in
+          let listelems = List.map (fun (id,_) -> gensym id) vs in
+          let c' = List.fold_left (fun c (xid,(id,(_,t))) -> let elem_t = begin match t with | TRef (TArr t) -> t | _ -> Stdlib.failwith "bad AST: list comprehension variable 'in' expression should be of array type" end in Ctxt.add_binding c (id, (t, cmp_ty elem_t, Id xid))) c (List.combine listelems vs) in
+          let (eop,ellt,es,egc), (cndop,_,cnds,_) = cmp_exp c' e, cmp_exp c' cnd in
+          let exp_as_i64 = gensym "exp_cast" in
+          let llbls = List.map (fun _ -> gensym "lcmphd", gensym "lcmpbd", gensym "lcmpend") loopvars in
+          let cd_ls = List.map (fun (_,e) -> cmp_exp c e) vs in
+          let lbl_addtolist, lbl_noadd = gensym "lbladd", gensym "lbldone" in
+          let lsizeops, lsizecmps = List.split @@ List.map
+            (fun (op,lllt,_,_) ->
+              let size_ptr, size_var = gensym "size_ptr", gensym "size_var" in
+              Id size_var,
+              [ I (Gep (size_ptr, lllt, op, [ IConst 0L ; IConst 0L ])) ; I (Load (size_var, I64, Id size_ptr)) ]
+            )
+            cd_ls in
+          let linstrs = List.map (fun (_,_,s,_) -> s) cd_ls in
+          let egc_obj = gensym "gcobj" in
+          let req_gcops_e = begin match snd e with | TRef _ -> true | _ -> false end in 
+          Id rsym_cast, cmp_ty t,
+          (if req_gcops_e then [ I (Call (Some egc_obj, Ptr I8, Gid "_allocate", [ I64, IConst 1L ])) ] else []) @
+          [ I (Call (Some ivec, Ptr I8, Gid "_make_vector", [])) ] @
+          (List.map (fun id -> I (Alloca (id, I64))) loopvars) @
+          (List.concat linstrs) @ (List.concat lsizecmps) @
+          (List.concat (List.map2
+            (fun ((id,varx),(hd,bd,ed)) ((lid,lllt,_,_),lsizeop) ->
+              let ixval, cmpval, arrptr, arrval = gensym "cmpval", gensym "index", gensym "arrptr", gensym "arrval"in
+              let elem_t =
+                begin match lllt with
+                  | Ptr (Struct [ I64 ; Ptr (Array (0L, t)) ]) -> t
+                  | _ -> Stdlib.failwith "bad AST: lltype of complist should be a list"
+                end in
+              [ I (Store (I64, IConst 0L, Id id))
+              ; T (Br hd) ; L hd
+              ; I (Load (ixval, I64, Id id))
+              ; I (Cmp (cmpval, ICmp, Less, I64, Id ixval, lsizeop))
+              ; T (Cbr (Id cmpval, bd, ed))
+              ; L bd
+              ; I (Gep (arrptr, lllt, lid, [ IConst 0L ; IConst 1L ]))
+              ; I (Load (arrval, Ptr (Array (0L, elem_t)), Id arrptr))
+              ; I (Gep (varx, Ptr (Array (0L, elem_t)), Id arrval, [ IConst 0L ; Id ixval ]))
+              ]
+            )
+            (List.combine (List.combine loopvars listelems) llbls) (List.combine cd_ls lsizeops)
+          )) @
+          cnds @
+          [ T (Cbr (cndop, lbl_addtolist, lbl_noadd))
+          ; L lbl_addtolist
+          ] @
+          es @
+          [ I (Bitcast (exp_as_i64, ellt, eop, I64))
+          ; I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id ivec ; I64, Id exp_as_i64 ]))
+          ] @ (
+            if req_gcops_e then
+              let e_ptr = gensym "e_as_i8p" in
+              [ I (Bitcast (e_ptr, ellt, eop, Ptr I8)); I (Call (None, Void, Gid "_addchild", [ Ptr I8, Id egc_obj; Ptr I8, Id e_ptr ])) ] @
+              if egc then
+                [ I (Call (None, Void, Gid "_removeref", [ Ptr I8, Id e_ptr ])) ]
+              else
+                []
+            else
+              []
+          ) @
+          [ T (Br lbl_noadd)
+          ; L lbl_noadd
+          ] @
+          (List.concat (List.rev (List.map2
+            (fun (lblhd,_,lblend) ix ->
+              let ixval, ixinc = gensym ix, gensym ix in
+              [ I (Load (ixval, I64, Id ix))
+              ; I (Binop (ixinc, Add, I64, IConst 1L, Id ixval))
+              ; I (Store (I64, Id ixinc, Id ix))
+              ; T (Br lblhd)
+              ; L lblend
+              ]
+            )
+            llbls loopvars
+          ))) @
+          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Gid "_genlist", [ Ptr I8, Id ivec ; Ptr I8, Id egc_obj ; I64, IConst (Int64.of_int (size_ty (cmp_ty rt_elem_t))) ; I1, IConst (if req_gcops_e then 1L else 0L) ]))
+          ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Id rsym, cmp_ty t))
+          ] @
+          (List.concat (List.filter_map (fun (op,llt,_,gc) -> if gc then Some (removeref (llt,op)) else None) cd_ls)) @
+          (if req_gcops_e then [ I (Call (None, Void, Gid "_removeref", [ Ptr I8, Id egc_obj ])) ] else [])
+          ,
+          true
+
       | Null rt, t      -> Null, cmp_ty t, [], false
 
       | Sprintf (opt,s,es), t ->
