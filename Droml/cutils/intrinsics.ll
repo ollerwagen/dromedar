@@ -24,6 +24,7 @@ declare {i64,[0 x i8]*}* @_sprintf_int(i64)
 declare {i64,[0 x i8]*}* @_sprintf_flt(i64)
 declare {i64,[0 x i8]*}* @_sprintf_char(i64)
 declare {i64,[0 x i8]*}* @_sprintf_bool(i64)
+declare {i64,[0 x i8]*}* @_sprintf_str(i64)
 declare {i64,[0 x i8]*}* @_sprintf_array(i64,i64,i64,{i64,[0 x i8]*}*(i64)*)
 declare {i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
 

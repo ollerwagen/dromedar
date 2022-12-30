@@ -440,6 +440,7 @@ module Translator = struct
                             | TFlt  -> "_sprintf_flt"
                             | TChar -> "_sprintf_char"
                             | TBool -> "_sprintf_bool"
+                            | TRef TStr -> "_sprintf_str"
                             | _     -> Stdlib.failwith "cannot print this type"
                           end in
                         Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_array", [ I64, Id casted_op ; I64, IConst (Int64.of_int (arrdepth + 1)) ; I64, IConst (Int64.of_int (size_ty (cmp_ty lowest_ty))) ; Ptr (Func ([I64], strty)), Gid lowest_function ])) ], true
