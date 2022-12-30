@@ -21,9 +21,10 @@ declare {i64,[0 x i64]*}* @_makerangelist(i64,i64,i1,i1)
 
 ; sprintf helper functions
 declare {i64,[0 x i8]*}* @_sprintf_int(i64)
-declare {i64,[0 x i8]*}* @_sprintf_flt(double)
-declare {i64,[0 x i8]*}* @_sprintf_char(i8)
-declare {i64,[0 x i8]*}* @_sprintf_bool(i1)
+declare {i64,[0 x i8]*}* @_sprintf_flt(i64)
+declare {i64,[0 x i8]*}* @_sprintf_char(i64)
+declare {i64,[0 x i8]*}* @_sprintf_bool(i64)
+declare {i64,[0 x i8]*}* @_sprintf_array(i64,i64,i64,{i64,[0 x i8]*}*(i64)*)
 declare {i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
 
 ; list comprehension helper functions

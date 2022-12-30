@@ -203,6 +203,8 @@ let print_instr (i:instr) : string =
         let opcode =
           begin match tf, tt with
             | I64,    I8     -> "trunc"
+            | I1,     I64    -> "sext"
+            | I8,     I64    -> "sext"
             | I64,    Double -> "sitofp"
             | Double, I64    -> "fptosi"
             | Ptr _,  Ptr _  -> "bitcast"

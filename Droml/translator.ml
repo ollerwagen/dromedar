@@ -129,6 +129,15 @@ module Translator = struct
       | _ -> (lllt,lop), []
     end
 
+  let double_to_i64 (op : operand) : operand * stream =
+    let fptr, iptr, rsym = gensym "dti_ptr", gensym "dti_ptr_asi", gensym "dti_res" in
+    Id rsym,
+    [ E (Alloca (fptr, Double))
+    ; I (Store (Double, op, Id fptr))
+    ; I (Bitcast (iptr, Ptr Double, Id fptr, Ptr I64))
+    ; I (Load (rsym, I64, Id iptr))
+    ]
+
 
   (* last return value: true <=> value is linked to its own pref <=> needs to be GC'd *)
   let rec cmp_exp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * bool =
@@ -387,7 +396,7 @@ module Translator = struct
             )
             llbls loopvars
           ))) @
-          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Gid "_genlist", [ Ptr I8, Id ivec ; Ptr I8, Id egc_obj ; I64, IConst (Int64.of_int (size_ty (cmp_ty rt_elem_t))) ; I1, IConst (if req_gcops_e then 1L else 0L) ]))
+          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Gid "_genlist", [ Ptr I8, Id ivec ; Ptr I8, if req_gcops_e then Id egc_obj else Null ; I64, IConst (Int64.of_int (size_ty (cmp_ty rt_elem_t))) ; I1, IConst (if req_gcops_e then 1L else 0L) ]))
           ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Id rsym, cmp_ty t))
           ] @
           (List.concat (List.filter_map (fun (op,llt,_,gc) -> if gc then Some (removeref (llt,op)) else None) cd_ls)) @
@@ -398,10 +407,19 @@ module Translator = struct
       | Null rt, t      -> Null, cmp_ty t, [], false
 
       | Sprintf (opt,s,es), t ->
+
+          let rec walk_arr (t : ty) : int * ty =
+            begin match t with
+              | TRef (TArr t) -> let d,t = walk_arr t in d+1, t
+              | _             -> 0, t
+            end
+          in
+
           let cmpd_es = List.map (cmp_exp c) es in
           let substrings = Str.full_split (Str.regexp "{[0-9]}") s in
           let arggcs = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) cmpd_es es) in
           let strty = cmp_ty (TRef TStr) in
+          let args_cmpd = List.concat @@ List.map (fun (_,_,s,_) -> s) cmpd_es in
           let makestr_instrs =
             List.map
             (function
@@ -410,14 +428,27 @@ module Translator = struct
                   op, instrs, gc
               | Str.Delim s ->
                   let index = Stdlib.int_of_string @@ String.sub s 1 @@ String.length s - 2 in
-                  let (op,_,instrs,gc), (_,t) = List.nth cmpd_es index, List.nth es index in
-                  let rsym = gensym "op" in
+                  let (op,llt,_,gc), (_,t) = List.nth cmpd_es index, List.nth es index in
+                  let rsym, casted_op = gensym "op", gensym "casted_sprintf_op" in
                   begin match t with
-                    | TRef TStr -> op, instrs, false
-                    | TInt      -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_int",  [ cmp_ty TInt,  op ])) ], true
-                    | TFlt      -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_flt",  [ cmp_ty TFlt,  op ])) ], true
-                    | TChar     -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_char", [ cmp_ty TChar, op ])) ], true
-                    | TBool     -> Id rsym, instrs @ [ I (Call (Some rsym, strty, Gid "_sprintf_bool", [ cmp_ty TBool, op ])) ], true
+                    | TRef TStr -> op, [], false
+                    | TRef (TArr t) ->
+                        let arrdepth, lowest_ty = walk_arr t in
+                        let lowest_function =
+                          begin match lowest_ty with
+                            | TInt  -> "_sprintf_int"
+                            | TFlt  -> "_sprintf_flt"
+                            | TChar -> "_sprintf_char"
+                            | TBool -> "_sprintf_bool"
+                            | _     -> Stdlib.failwith "cannot print this type"
+                          end in
+                        Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_array", [ I64, Id casted_op ; I64, IConst (Int64.of_int (arrdepth + 1)) ; I64, IConst (Int64.of_int (size_ty (cmp_ty lowest_ty))) ; Ptr (Func ([I64], strty)), Gid lowest_function ])) ], true
+                    | TInt      -> Id rsym, [ I (Call (Some rsym, strty, Gid "_sprintf_int",  [ I64, op ])) ], true
+                    | TFlt      ->
+                        let castop,casts = double_to_i64 op in
+                        Id rsym, casts @ [ I (Call (Some rsym, strty, Gid "_sprintf_flt",  [ I64, castop ])) ], true
+                    | TChar     -> Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_char", [ I64, Id casted_op ])) ], true
+                    | TBool     -> Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_bool", [ I64, Id casted_op ])) ], true
                     | _         -> Stdlib.failwith "bad sprintf type"
                   end
             )
@@ -431,7 +462,7 @@ module Translator = struct
               | Sprintf -> []
               | Printf  -> [ I (Call (None, Void, Gid "print_str", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym)
             end in
-          Id rsym, strty, (makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), true
+          Id rsym, strty, (args_cmpd @ makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), true
 
       | Bop (op,l,r), t -> (* no GC, as all input results are primitives *)
           (* ignore gc as all inputs are primitives *)

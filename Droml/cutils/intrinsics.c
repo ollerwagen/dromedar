@@ -90,6 +90,7 @@ intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend) {
         if (!inclend) --end;
         if (end < start) end = start;
         intarr* res = allocate_intarr(sizeof(i64) * (end - start + 1));
+        res->size = end - start + 1;
         for (i64 i = 0; i <= end - start; i++) {
             res->base[i] = start + i;
         }
@@ -99,6 +100,7 @@ intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend) {
         if (!inclend) ++end;
         if (start < end) end = start;
         intarr* res = allocate_intarr(sizeof(i64) * (start - end + 1));
+        res->size = start - end + 1;
         for (i64 i = start - end; i >= 0; i--) {
             res->base[i] = start - i;
         }

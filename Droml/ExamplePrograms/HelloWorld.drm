@@ -1,2 +1,2 @@
 fn main -> void
-    print_str("Hello, World!")
+    printf("Hello, World!")

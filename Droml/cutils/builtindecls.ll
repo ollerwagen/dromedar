@@ -14,5 +14,7 @@ declare void @print_char(i8)
 ; print newline character
 declare void @println()
 
-; string to int
 declare {i64, [0 x i8]*}* @int_to_str(i64)
+declare {i64, [0 x i8]*}* @flt_to_str(double)
+declare {i64, [0 x i8]*}* @char_to_str(i8)
+declare {i64, [0 x i8]*}* @bool_to_str(i1)

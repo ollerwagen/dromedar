@@ -31,6 +31,7 @@ extern "C" {
         }
         if (addchildren)
             _transferchildren(childrenbuf, (i8*) res);
+        free(l);
         return res;
     }
 }

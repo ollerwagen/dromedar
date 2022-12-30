@@ -1,5 +1,4 @@
 fn main -> void
     for i := 99 ..| 0
-        print_int(i)
-        print_str(" bottles of beer on the wall. Take one down, pass it around.\n")
-    print_str("No bottles left.\n")
+        printf("{0} bottles of beer on the wall. Take one down, pass it around.\n", i)
+    printf("No bottles left.\n")

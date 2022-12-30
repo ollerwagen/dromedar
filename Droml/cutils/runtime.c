@@ -37,22 +37,17 @@ void println() {
 
 
 string* int_to_str(i64 num) {
-    string *res = (string*) _allocate(sizeof(string));
+    return _sprintf_int(num);
+}
 
-    int size = 2;
+string* flt_to_str(double num) {
+    return _sprintf_flt(*(i64*)&num);
+}
 
-    if (num > 0)
-        size = (int)(ceil(log10(num)))+1;
-    else if (num < 0)
-        size = (int)(ceil(log10(num)))+2;
+string *char_to_str(i8 c) {
+    return _sprintf_char((i64) c);
+}
 
-    res->size = size;
-    res->base = (i8*) _allocate(size);
-
-    _addchild((i8*) res, (i8*) res->base);
-    _removeref((i8*) res->base);
-
-    sprintf(res->base, "%ld", num);
-
-    return res;
+string *bool_to_str(i1 b) {
+    return _sprintf_bool((i64) b);
 }
