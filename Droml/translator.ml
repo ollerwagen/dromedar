@@ -210,12 +210,12 @@ module Translator = struct
 
     begin match e with
       | Id id, t ->
-          let op,llt,s = cmp_lhs c e in
+          let op,llt,s,gc = cmp_lhs c e in
           begin match deptr llt with
             | Ptr (Func _) -> op, llt, s, false (* do not dereference functions *)
             | llt' ->
                 let idsym = gensym id in
-                Id idsym, llt', [ I (Load (idsym, llt', op)) ], false
+                Id idsym, llt', [ I (Load (idsym, llt', op)) ] @ gc, false
           end
       | LitInt  i, t  -> Ll.IConst i, cmp_ty t, [], false
       | LitFlt  f, t  -> Ll.FConst f, cmp_ty t, [], false
@@ -597,19 +597,21 @@ module Translator = struct
           end
 
       | Subscript (l,i), t ->
-          let ptrop, pllt, s = cmp_lhs c (Subscript (l,i), t) in
+          let ptrop, pllt, s, gc = cmp_lhs c (Subscript (l,i), t) in
           let rsym = gensym "subscript" in
-          Id rsym, cmp_ty t, s @ [ I (Load (rsym, cmp_ty t, ptrop)) ], false
+          let must_gc = begin match t with | TRef _ -> true | _ -> false end in
+          Id rsym, cmp_ty t, s @ [ I (Load (rsym, cmp_ty t, ptrop)) ] @ (if must_gc then addref (cmp_ty t, Id rsym) else []) @ gc, must_gc
     end
   
-  and cmp_lhs (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream =
+  (* second stream result is the garbage collection stream *)
+  and cmp_lhs (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * stream =
     begin match e with
       | Id id, t ->
           let t,llt,op = Ctxt.get c id in
-          op, Ptr llt, []
+          op, Ptr llt, [], []
 
       | Subscript (b,o), t ->
-          let (bop,bllt,bs,bgc), (oop,ollt,os,ogc) = cmp_exp c b, cmp_exp c o in
+          let (bop,bllt,bs,bgc), (oop,ollt,os,_) = cmp_exp c b, cmp_exp c o in
           let c_t, c_et = cmp_ty (snd b), cmp_ty t in
           let rsym, arr_ptr, arr_op = gensym "subscript", gensym "sub_arr_ptr", gensym "sub_arr_op" in
           Id rsym, Ptr (cmp_ty t),
@@ -617,7 +619,8 @@ module Translator = struct
           [ I (Gep (arr_ptr, c_t, bop, [ IConst 0L ; IConst 1L ]))
           ; I (Load (arr_op, Ptr (Array (0L, c_et)), Id arr_ptr))
           ; I (Gep (rsym, Ptr (Array (0L, c_et)), Id arr_op, [ IConst 0L ; oop ]))
-          ] @ (if bgc then removeref (bllt,bop) else [])
+          ],
+          (if bgc then removeref (bllt,bop) else [])
 
       | _     -> Stdlib.failwith "lhs unimplemented"
     end
@@ -649,7 +652,7 @@ module Translator = struct
           end
           (* add pref and remove it from %op: cancel each other out *)
       | Assn (l,r) ->
-          let (lop,lllt,ls), (rop,rllt,rs,rgc) = cmp_lhs c l, cmp_exp c r in
+          let (lop,lllt,ls,lgc), (rop,rllt,rs,rgc) = cmp_lhs c l, cmp_exp c r in
           let (rllt,rop),crosscaststream = cross_cast (snd l) (snd r, rllt, rop) in
           let gc_prevval =
             begin match snd l with
@@ -658,7 +661,7 @@ module Translator = struct
                   [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt',Id gcobj) @ (if rgc then [] else addref (rllt, rop))
               | _ -> [] (* do not attempt to gc primitives *)
             end in
-          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ], refvars
+          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars
       | Expr (e,t) ->
           begin match e with
             | Sprintf (Printf,s,es) -> let _,_,s,_ = cmp_exp c (e, TRef TStr) in c, s, refvars
