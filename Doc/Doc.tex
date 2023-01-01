@@ -786,9 +786,22 @@ fn main -> void
 					\end{array}
 				\right\}
 			\end{align*}
+			
+			Let $\mathsf{maintys}$ be the legal set of types of main functions -- one of which must be contained in a program.
+			
+			\begin{align*}
+				\mathsf{maintys} := \left\{
+					\begin{array}{ll}
+						\mc{void -> void}, & \mc{void -> int},\\
+						\mc{[string] -> void}, & \mc{[string] -> int}
+					\end{array}
+				\right\}
+			\end{align*}
+		
+			Then, the program rule \textsc{Prog} shall be:
 		
 			\begin{align*}
-				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
+				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ \exists!\; \mc{ft}\in\mathsf{maintys}\;(\mc{main},\mc{ft},c)\in S\ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
 			\end{align*}
 		
 	\section{Formal Grammar}

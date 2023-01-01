@@ -5,6 +5,31 @@
 #include "gc.h"
 #include "intrinsics.h"
 
+stringarr* _makestrvec(i64 argc, i8** argv) {
+    stringarr *res = (stringarr*) _allocate(sizeof(stringarr));
+
+    res->size = argc;
+    res->base = (string**) _allocate(sizeof(string*) * argc);
+    _addchild((i8*) res, (i8*) res->base);
+    _removeref((i8*) res->base);
+
+    for (i64 i = 0; i < argc; i++) {
+        i8* str = argv[i];
+        res->base[i] = (string*) _allocate(sizeof(string));
+
+        string* arrval = (string*) res->base[i];
+        arrval->size = strlen(str) + 1;
+        arrval->base = _allocate(arrval->size);
+        _addchild((i8*) arrval, arrval->base);
+        _removeref((i8*) arrval->base);
+
+        strcpy(arrval->base, str);
+        arrval->base[arrval->size - 1] = '\0';
+    }
+
+    return res;
+}
+
 i64 _pow_ii(i64 base, i64 exp)
 {
     i64 result = 1;

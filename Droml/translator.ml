@@ -534,6 +534,14 @@ module Translator = struct
           Id rsym, cmp_ty rt, s @ [ I (Binop (rsym, llop, cmp_ty rt, argop, eop)) ], false
 
       | Cmps (f,rs), t -> (* no GC, as all input results are primitives *)
+          let rec genislastlist (l : 'a list) : ('a * bool) list =
+            begin match l with
+              | []  -> Stdlib.failwith "bad AST: empty comparison value list"
+              | [x] -> [x,true]
+              | x::xs -> (x,false) :: genislastlist xs
+            end
+          in
+
           let isnonrefop (op : Ast.cmpop) = op <> RefEq && op <> RefNotEq in
           let res, resstack = gensym "cmp", gensym "cmp" in
           (* ignore gc as all inputs are primitives *)
@@ -541,11 +549,11 @@ module Translator = struct
           let fstlbl, lblfalse, lblend = gensym "cmplbl", gensym "cmpfalse", gensym "cmpend" in
           let lastop,last_t,lastlbl,lastgc,s =
             List.fold_left
-              (fun (lop,lt,lbl,lgc,s) (op,rexp) ->
+              (fun (lop,lt,lbl,lgc,s) ((op,rexp),islast) ->
                 (* ignore gc as all inputs are primitives *)
-                let rop,rllt,rs,gc = cmp_exp c rexp in
+                let rop,rllt,rs,rgc = cmp_exp c rexp in
                 let (lt,lllt,lop), (rt,rllt,rop), caststream = bop_cast (lt,cmp_ty lt,lop) (snd rexp,rllt,rop) in
-                let nextlbl, nextres = gensym "cmplbl", gensym "cmp" in
+                let tmpflslbl, nextlbl, nextres = gensym "tmpfls", gensym "cmplbl", gensym "cmp" in
                 let cmpop = List.assoc op cmpop_to_ll in
                 let cmpstream =
                   begin match lt, snd rexp, isnonrefop op with
@@ -563,13 +571,15 @@ module Translator = struct
                   end in
                 rop, snd rexp, nextlbl, gc,
                 s @ [ L lbl ] @ rs @ caststream @ cmpstream @
-                (if lgc then removeref (lllt,lop) else []) @
-                [ T (Cbr (Id nextres, nextlbl, lblfalse)) ]
+                (if lgc then removeref (lllt,lop) else []) @ (* have to gc the rhs if comparison is false *)
+                (if rgc && islast then removeref (rllt,rop) else []) @
+                [ T (Cbr (Id nextres, nextlbl, tmpflslbl)) ; L tmpflslbl] @
+                (if not islast && rgc then removeref (rllt, rop) else []) @
+                [ T (Br lblfalse) ]
               )
-              (fop,snd f,fstlbl,gc,[]) rs in
+              (fop,snd f,fstlbl,gc,[]) (genislastlist rs) in
           Id res, cmp_ty TBool,
           [ E (Alloca (resstack, cmp_ty TBool)) ] @ fs @ [ T (Br fstlbl) ] @ s @
-          (if lastgc then removeref (cmp_ty last_t,lastop) else []) @
           [ L lastlbl ; I (Store (cmp_ty TBool, IConst 1L, Id resstack)) ; T (Br lblend) ;
             L lblfalse ; I (Store (cmp_ty TBool, IConst 0L, Id resstack)) ; T (Br lblend) ;
             L lblend ; I (Load (res, cmp_ty TBool, Id resstack)) ],
@@ -875,7 +885,7 @@ module Translator = struct
           let gis,cfg = make_cfg (inits @ snd (cmp_block rt c' [] b)) in
           c,
           gis @ Ll.[ FDecl (
-              id
+              (fun (_,_,op) -> begin match op with | Gid id -> id | _ -> Stdlib.failwith "bad create_fctxt" end) (Ctxt.get c id)
             , cmp_retty rt
             , List.map (fun (id,t) -> cmp_ty t, id) args
             , cfg
@@ -889,14 +899,43 @@ module Translator = struct
         begin match gs with
           | GFDecl (id,args,rt,_) ->
               let ft = TRef (TFun (List.map snd args, rt)) in
-              Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid id))
+              Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (gensym id)))
           | _ -> c
         end
       )
       base_ctxt prog
 
   let cmp_program (prog : annt_program) : ginstr list =
-    snd @@ List.fold_left (fun (c,res) gs -> let c',g = cmp_gstmt c gs in c',res@g) (create_fctxt prog, []) prog
+    let destream : stream -> Ll.instr list =
+      List.map
+      (function
+        | I i -> i
+        | _   -> Stdlib.failwith "bad instruction stream in destream() call"
+      )
+    in
+
+    let c = create_fctxt prog in
+    (snd @@ List.fold_left (fun (c,res) gs -> let c',g = cmp_gstmt c gs in c',res@g) (c, []) prog) @
+    [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
+        let rval, strvec = gensym "mainret", gensym "strvec" in
+        let strvecty = TRef (TArr (TRef TStr)) in
+        let maincall, term =
+          begin match Ctxt.get c "main" with
+            | TRef (TFun ([], Void)), _, mainop ->
+                [ Call (None, Void, mainop, []) ], Ret (Some (I64, IConst 0L))
+            | TRef (TFun ([], Ret TInt)), _, mainop ->
+                [ Call (Some rval, cmp_ty TInt, mainop, []) ], Ret (Some (I64, Id rval))
+            | TRef (TFun ([TRef (TArr (TRef TStr))], Void)), _, mainop ->
+                [ Call (None, Void , mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, IConst 0L))
+            | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), _, mainop ->
+                [ Call (Some rval, cmp_ty TInt, mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, Id rval))
+            | _ -> Stdlib.failwith "bad AST: bad main function"
+          end in
+        ([ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] @
+        maincall @ destream (removeref (cmp_ty strvecty, Id strvec)),
+        term),
+        []
+    )]
 
   let cmp_to_llvm (prog : annt_program) : string =
     let cmpd = cmp_program prog in

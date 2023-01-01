@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+stringarr* _makestrvec(i64 argc, i8** argv);
+
 i64 _pow_ii(i64 base, i64 exp);
 double _pow_ff(double base, double exp);
 

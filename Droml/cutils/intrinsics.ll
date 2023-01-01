@@ -1,3 +1,6 @@
+; create argument vector for main function
+declare {i64,[0 x {i64,[0 x i8]*}*]*}* @_makestrvec(i64,i8**)
+
 ; integer exponentiation, used in builtin '**' operator
 declare i64 @_pow_ii(i64,i64)
 

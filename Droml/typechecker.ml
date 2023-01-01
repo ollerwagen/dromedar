@@ -472,6 +472,28 @@ module TypeChecker = struct
 
   let check_program (prog : gstmt node list) : annt_gstmt list =
     let c = create_fctxt_program startcontext prog in
+    let _ =
+      if Ctxt.has c "main" then
+        begin match Ctxt.get c "main" with
+          | TRef (TFun ([], Void)),                            Const -> ()
+          | TRef (TFun ([], Ret TInt)),                        Const -> ()
+          | TRef (TFun ([TRef (TArr (TRef TStr))], Void)),     Const -> ()
+          | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), Const -> ()
+          | _ ->
+              let mainfunc = List.hd (List.filter
+                (fun gs ->
+                  begin match gs.t with
+                    | Ast.GFDecl ("main", _, _, _) -> true
+                    | _                            -> false
+                  end
+                )
+                prog
+              ) in
+              raise @@ TypeError (ofnode "main function is of wrong type" mainfunc)
+        end
+      else
+        raise @@ TypeError { t = "program must contain a main function" ; start = 0 ; length = 1 }
+    in
     fst @@ check_gstmt_program c prog
 
 end

@@ -14,6 +14,8 @@ typedef struct string { i64 size; i8 *base; } string;
 typedef struct blindarr { i64 size; i8 *base; } blindarr;
 typedef struct intarr { i64 size; i64 *base; } intarr;
 
+typedef struct stringarr { i64 size; string** base; } stringarr;
+
 string* allocate_string(i64 size);
 intarr* allocate_intarr(i64 size);
 
