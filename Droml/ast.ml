@@ -83,6 +83,7 @@ type exp =
   | Cmps      of exp node * (cmpop * exp node) list
   | FApp      of exp node * exp node list
   | Subscript of exp node * exp node
+  | Proj      of exp node * string node
 
 type stmt =
   | VDecl   of string * mutability * ty node option * exp node
@@ -151,6 +152,7 @@ let rec print_exp (e : exp node) : string =
     | Cmps      (e,ls)      -> Printf.sprintf "(%s%s)" (print_exp e) (List.fold_left (fun s (o,e) -> Printf.sprintf "%s %s %s" s (List.assoc o cmp_string) (print_exp e)) "" ls)
     | FApp      (f,ls)      -> Printf.sprintf "%s(%s)" (print_exp f) (String.concat ", " (List.map print_exp ls))
     | Subscript (l,r)       -> Printf.sprintf "%s[%s]" (print_exp l) (print_exp r)
+    | Proj      (e,s)       -> Printf.sprintf "%s.%s" (print_exp e) s.t
   end
 
 let rec print_stmt (indent : int) (s : stmt node) : string =

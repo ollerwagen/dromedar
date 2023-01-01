@@ -587,7 +587,7 @@ fn main -> void
 			\subsubsection{List Comprehension}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{l1}::\mc{[t1]},\ \dots,\ S\ruleapp{E}\mc{ln}::\mc{[tn]}\ \ S\sqcup\{(\mc{x1},\mc{t1},c),\dots,(\mc{xn},\mc{tn},c)\}\ruleapp{E}(\mc{e},\mc{c})::(\mc{t},\mc{bool})}{S}{E}{\mc{[e : x1 in l1, ..., xn in ln : c]}::\mc{[t]}}{ExpListComp}
+					\drmrule{S\ruleapp{E}\mc{l1}::\mc{[t1]},S_1:=S\cup\{(\mc{l1},\mc{t1},c)\}\ruleapp{E}\mc{l2}::\mc{[t2]},\ \dots,\ S_{n-1}\ruleapp{E}\mc{ln}::\mc{[tn]}\ \ S_n\ruleapp{E}(\mc{e},\mc{c})::(\mc{t},\mc{bool})}{S}{E}{\mc{[e : x1 in l1, ..., xn in ln : c]}::\mc{[t]}}{ExpLC}
 				\end{align*}
 			
 			\subsubsection{Null}
@@ -660,6 +660,12 @@ fn main -> void
 							\drmrule{S\ruleapp{E}\mc{e}::\mc{[t]}\ \ S\ruleapp{E}\mc{i}::\mc{int}}{S}{E}{\mc{e[i]} :: \mc{t}}{ExpArrSub}
 						\end{align*}
 				\end{itemize}
+			
+			\subsubsection{Projection}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{e}::\mc{[t]}}{S}{E}{\mc{e.length} :: \mc{int}}{ExpProjListLength}
+				\end{align*}
 			
 			\subsubsection{Comparison Lists}
 			
@@ -883,6 +889,7 @@ fn main -> void
 				Colon        ::= /:/
 				Arrow        ::= /\->/
 				
+				Dot          ::= /\./
 				Comma        ::= /\,/
 				
 				Dots         ::= /\.\.\./
@@ -1081,8 +1088,12 @@ fn main -> void
 				                 | %Identifier %In Expression %Comma ListCmpVarsNE
 				                 
 				Application      ::=
-				                 | %LParen CommaExpListNE %RParen
+				                 | %LParen CommaExpList %RParen
+				                 | %LParen CommaExpList %RParen Application
 				                 | %LBrack Expression %RBrack
+				                 | %LBrack Expression %RBrack Application
+				                 | %Dot Identifier
+				                 | %Dot Identifier Application
 				
 				CommaExpList     ::=
 				                 | €

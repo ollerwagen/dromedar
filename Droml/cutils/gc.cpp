@@ -1,4 +1,4 @@
-#define __DEBUG__ 0
+#define __DEBUG__ 1
 
 
 
@@ -11,17 +11,17 @@
 #include <cstdarg>
 
 
-
+#include "cppallocator.h"
 #include "gc.h"
 
 
 struct GCEntry {
-    std::unordered_set<ptr> children;
+    std::unordered_set<ptr, std::hash<ptr>, std::equal_to<ptr>, drm::allocator<ptr>> children;
     uint16_t prefs = 0;
     bool reachable;
 };
 
-using GCTable = std::unordered_map<ptr, GCEntry>;
+using GCTable = std::unordered_map<ptr, GCEntry, std::hash<ptr>, std::equal_to<ptr>, drm::allocator<std::pair<const ptr, GCEntry>>>;
 
 
 static GCTable table;
@@ -55,7 +55,7 @@ static std::string print_table() {
 }
 
 static void gcrun() {
-
+    
     // printf("Before the GC Run:\n%s\n", print_table().c_str());
 
     // wipe all reachability info

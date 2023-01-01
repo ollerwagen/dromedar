@@ -223,16 +223,16 @@ module TypeChecker = struct
             | _ -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
           end
       | ListComp (ex,vs,cnd) ->
-          let avs = List.map (fun (id,e) -> id, check_exp c None e) vs in
-          let c' =
+          let c',avs =
             List.fold_left
-            (fun c (id,(_,t)) ->
-              begin match t with
-                | TRef (TArr t') -> Ctxt.add_binding c (id,(t',Const))
-                | _              -> raise @@ TypeError (ofnode "list comprehension variable should be in an array type" e)
-              end
-            )
-            c avs in
+              (fun (c,res) (id,exp) ->
+                let exp',t = check_exp c None exp in
+                begin match t with
+                  | TRef (TArr t') -> Ctxt.add_binding c (id,(t',Const)), res @ [ id, (exp',t) ]
+                  | _              -> raise @@ TypeError (ofnode "list comprehension variable should be in an array type" e)
+                end
+              )
+              (c,[]) vs in
           let ae, acnd = check_exp c' None ex, check_exp c' None cnd in
           ListComp (ae,avs,acnd), TRef (TArr (snd ae))
       | Ternary (cnd,e1,e2) ->
@@ -259,7 +259,7 @@ module TypeChecker = struct
           let opts = List.assoc op uop_types in
           let expt = check_exp c None r in
           begin match List.assoc_opt (snd expt) opts with
-            | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand type %s" (List.assoc op uop_string) (print_ty (ofnode (snd expt) r))) r)
+            | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand type %s" (List.assoc op uop_string) (Ast.print_ty (ofnode (snd expt) r))) r)
             | Some t -> Uop (op, expt), t
           end
       | Bop (op,l,r) ->
@@ -273,7 +273,7 @@ module TypeChecker = struct
                 end
             | _ ->
                 begin match List.assoc_opt (snd lt, snd rt) opts with
-                  | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (print_ty (ofnode (snd lt) l)) (print_ty (ofnode (snd rt) l))) e)
+                  | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (Ast.print_ty (ofnode (snd lt) l)) (Ast.print_ty (ofnode (snd rt) l))) e)
                   | Some t -> Bop (op, lt, rt), t
                 end
           end
@@ -297,7 +297,7 @@ module TypeChecker = struct
                       if List.mem (lt, snd rt) cmpop_types then
                         snd rt, l @ [op, rt]
                       else
-                        raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s undefined for operand types (%s,%s)" (List.assoc op cmp_string) (print_ty (ofnode lt e)) (print_ty (ofnode (snd rt) r))) r)
+                        raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s undefined for operand types (%s,%s)" (List.assoc op cmp_string) (Ast.print_ty (ofnode lt e)) (Ast.print_ty (ofnode (snd rt) r))) r)
                 end
               )
               (snd first_exp, []) xs in
@@ -306,24 +306,29 @@ module TypeChecker = struct
           let argts = List.map (check_exp c None) args in
           begin match check_exp c None f with
             | f', TRef (TFun (a,rt)) ->
-                let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
                 let () = List.iter2
                   (fun (aexp,pt) fet ->
                     if subtype pt fet || crosstype pt fet then ()
-                    else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (print_ty (ofnode pt e)) (print_ty (ofnode fet f))) e)  
+                    else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (Ast.print_ty (ofnode pt e)) (Ast.print_ty (ofnode fet f))) e)  
                   )
                   argts a in
                 begin match rt with
                   | Void  -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
                   | Ret t -> FApp ((f', TRef (TFun (a,rt))), argts), t 
                 end
-            | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (print_ty (ofnode (snd t) f))) f)
+            | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
           end
       | Subscript (l,r) ->
           begin match check_exp c None l, check_exp c None r with
             | (l', TRef (TArr t)), (r', TInt) -> Subscript ((l', TRef (TArr t)), (r', TInt)), t
-            | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (print_ty (ofnode t l))) l)
-            | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (print_ty (ofnode t r))) r)
+            | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (Ast.print_ty (ofnode t l))) l)
+            | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (Ast.print_ty (ofnode t r))) r)
+          end
+      | Proj (lhs,id) ->
+          begin match check_exp c None lhs, id.t with
+            | (e', TRef (TArr t)), "length" -> Proj ((e', TRef (TArr t)), "length"), TInt
+            | (_,t), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
           end
     end
   
@@ -340,7 +345,7 @@ module TypeChecker = struct
                   if subtype (snd et) t.t || crosstype (snd et) t.t then
                     VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false
                   else
-                    raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (print_ty t) (print_ty (ofnode (snd et) e))) s)
+                    raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (Ast.print_ty t) (Ast.print_ty (ofnode (snd et) e))) s)
             end
       | Assn (l,r) ->
           let lt,rt = check_exp c None l, check_exp c None r in
@@ -365,15 +370,15 @@ module TypeChecker = struct
                 let argts = List.map (check_exp c None) args in
                 begin match check_exp c None f with
                   | f', TRef (TFun (a,rt)) ->
-                      let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                      let _ = if List.length a <> List.length argts then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
                       let () = List.iter2
                         (fun (aexp,pt) fet ->
                           if subtype pt fet || crosstype pt fet then ()
-                          else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (print_ty (ofnode pt e)) (print_ty (ofnode fet f))) e)  
+                          else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (Ast.print_ty (ofnode pt e)) (Ast.print_ty (ofnode fet f))) e)  
                         )
                         argts a in
                       Expr ((FApp ((f', TRef (TFun (a,rt))),argts), begin match rt with | Void -> None | Ret t -> Some t end)), c, false
-                  | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (print_ty (ofnode (snd t) f))) f)
+                  | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
                 end
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
           end

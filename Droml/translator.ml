@@ -313,96 +313,132 @@ module Translator = struct
           true
 
       | ListComp (e,vs,cnd), t ->
-          let rsym, rsym_cast, ivec = gensym "listcomp", gensym "listcomp", gensym "intermvec" in
-          let loopvars = List.map (fun _ -> gensym "index") vs in
-          let rt_elem_t =
+
+        (*
+          let drmarr = gensym "arr" in
+
+          let elem_t =
             begin match t with
               | TRef (TArr t) -> t
-              | _             -> Stdlib.failwith "bad AST: list comprehension should return array type"
+              | _             -> Stdlib.failwith "no array type in list comprehension"
             end in
-          let listelems = List.map (fun (id,_) -> gensym id) vs in
-          let c' = List.fold_left (fun c (xid,(id,(_,t))) -> let elem_t = begin match t with | TRef (TArr t) -> t | _ -> Stdlib.failwith "bad AST: list comprehension variable 'in' expression should be of array type" end in Ctxt.add_binding c (id, (t, cmp_ty elem_t, Id xid))) c (List.combine listelems vs) in
-          let (eop,ellt,es,egc), (cndop,_,cnds,_) = cmp_exp c' e, cmp_exp c' cnd in
-          let exp_as_i64 = gensym "exp_cast" in
-          let llbls = List.map (fun _ -> gensym "lcmphd", gensym "lcmpbd", gensym "lcmpend") loopvars in
-          let cd_ls = List.map (fun (_,e) -> cmp_exp c e) vs in
-          let lbl_addtolist, lbl_noadd = gensym "lbladd", gensym "lbldone" in
-          let lsizeops, lsizecmps = List.split @@ List.map
-            (fun (op,lllt,_,_) ->
-              let size_ptr, size_var = gensym "size_ptr", gensym "size_var" in
-              Id size_var,
-              [ I (Gep (size_ptr, lllt, op, [ IConst 0L ; IConst 0L ])) ; I (Load (size_var, I64, Id size_ptr)) ]
+          
+          let arrdecl = VDecl (drmarr, Mut, None, (EmptyList elem_t, t)) in
+          let loopcenter = [ If (cnd, [ Assn ((Id drmarr, t), (Bop (Add, (Id drmarr, t), (LitArr [e], t)), t)) ], []) ] in
+
+          let loopstmts =
+            List.fold_right
+            (fun (id,(lexp,lt)) s ->
+                let lname, iname = gensym (id^"list"), gensym "i" in
+                let elem_t =
+                  begin match lt with
+                    | TRef (TArr t) -> t
+                    | _ -> Stdlib.failwith "should be array in list comprehension expression"
+                  end in
+                [ VDecl (lname, Const, None, (lexp,lt))
+                ; For (iname, (LitInt 0L, TInt), Incl, Excl, (Proj ((Id lname,lt), "length"), TInt),
+                    [ VDecl (id, Const, None, (Subscript ((Id lname, lt), (Id iname, TInt)), elem_t)) ] @ s)
+                ]
             )
-            cd_ls in
-          let linstrs = List.map (fun (_,_,s,_) -> s) cd_ls in
-          let egc_obj = gensym "gcobj" in
-          let req_gcops_e = begin match snd e with | TRef _ -> true | _ -> false end in 
-          Id rsym_cast, cmp_ty t,
-          (if req_gcops_e then [ I (Call (Some egc_obj, Ptr I8, Gid "_allocate", [ I64, IConst 1L ])) ] else []) @
-          [ I (Call (Some ivec, Ptr I8, Gid "_make_vector", [])) ] @
-          (List.map (fun id -> I (Alloca (id, I64))) loopvars) @
-          (List.concat linstrs) @ (List.concat lsizecmps) @
-          (List.concat (List.map2
-            (fun ((id,varx),(hd,bd,ed)) ((lid,lllt,_,_),lsizeop) ->
-              let ixval, cmpval, arrptr, arrval = gensym "cmpval", gensym "index", gensym "arrptr", gensym "arrval"in
-              let elem_t =
-                begin match lllt with
-                  | Ptr (Struct [ I64 ; Ptr (Array (0L, t)) ]) -> t
-                  | _ -> Stdlib.failwith "bad AST: lltype of complist should be a list"
+            vs loopcenter
+            in
+
+          
+          let allstmts = arrdecl :: loopstmts in
+          let _ = Printf.printf "%s\n" (Astannotated.print_block 0 allstmts) in
+          
+
+          let c', declstream, _ = cmp_stmt Ast.Void c [] arrdecl in
+          let _, loopstream = cmp_block Ast.Void c' [] loopstmts in
+
+          let rsym = gensym "listcomp" in
+          let (_,_,arrop) = Ctxt.get c' drmarr in
+          
+          Id rsym, cmp_ty t,
+          declstream @ loopstream @ [ I (Load (rsym, cmp_ty t, arrop)) ],
+          true
+        *)
+        
+          let indexids = List.mapi (fun i _ -> gensym (Printf.sprintf "i%d" i)) vs in
+          let valueids = List.map (fun (id,_) -> gensym id) vs in
+          let looplbls = List.map (fun _ -> gensym "headx", gensym "bodyx", gensym "endx") vs in
+          let lbladd, lblnoadd = gensym "add", gensym "noadd" in
+          let rsym, rsym_cast, vecp = gensym "listcomp", gensym "listcompcast", gensym "listvec" in
+          let handlegc_e =
+            begin match snd e with
+              | TRef _ -> true
+              | _      -> false
+            end in
+
+          let c' = List.fold_left
+            (fun c ((id,(_,t)),vid) ->
+              let t' =
+                begin match t with
+                  | TRef (TArr t) -> t
+                  | _             -> Stdlib.failwith "bad AST: listcomp expression should be an array"
                 end in
-              [ I (Store (I64, IConst 0L, Id id))
-              ; T (Br hd) ; L hd
-              ; I (Load (ixval, I64, Id id))
-              ; I (Cmp (cmpval, ICmp, Less, I64, Id ixval, lsizeop))
-              ; T (Cbr (Id cmpval, bd, ed))
-              ; L bd
-              ; I (Gep (arrptr, lllt, lid, [ IConst 0L ; IConst 1L ]))
-              ; I (Load (arrval, Ptr (Array (0L, elem_t)), Id arrptr))
-              ; I (Gep (varx, Ptr (Array (0L, elem_t)), Id arrval, [ IConst 0L ; Id ixval ]))
+              Ctxt.add_binding c (id,(t', cmp_ty t', Id vid)))
+            c (List.combine vs valueids) in
+
+          let (eop,ellt,es,egc), (cop,cllt,cs,_) = cmp_exp c' e, cmp_exp c' cnd in
+          let cd_ls = List.map (fun (_,e) -> cmp_exp c' e) vs in
+
+          Id rsym_cast, cmp_ty t,
+          (List.map (fun id -> E (Alloca (id, I64))) indexids) @
+          [ I (Call (Some vecp, Ptr I8, Gid "_make_vector", [])) ] @
+          (List.concat (List.map
+            (fun ((xid, iid), ((lop,lllt,ls,_), ((_, lexp), (lblhead, lblbody, lblend)))) ->
+              let cmpval, listlen, listlenptr, elemlistptr, elemlistval, ival = gensym "listcomp_comparison", gensym "listlen", gensym "listlenptr", gensym "elemlistptr", gensym "elemlistval", gensym "indexval" in
+              let elem_t =
+                begin match snd lexp with
+                  | TRef (TArr t) -> t
+                  | _             -> Stdlib.failwith "bad AST: non-array type for comprehension list element list"
+                end in
+              ls @
+              [ I (Gep (listlenptr, lllt, lop, [ IConst 0L ; IConst 0L ]))
+              ; I (Load (listlen, I64, Id listlenptr))
+              ; I (Store (I64, IConst 0L, Id iid))
+              ; T (Br lblhead)
+              ; L lblhead
+              ; I (Load (ival, I64, Id iid))
+              ; I (Cmp (cmpval, ICmp, Less, I64, Id ival, Id listlen))
+              ; T (Cbr (Id cmpval, lblbody, lblend))
+              ; L lblbody
+              ; I (Gep (elemlistptr, lllt, lop, [ IConst 0L ; IConst 1L ]))
+              ; I (Load (elemlistval, Ptr (Array (0L, cmp_ty elem_t)), Id elemlistptr))
+              ; I (Gep (xid, Ptr (Array (0L, cmp_ty elem_t)), Id elemlistval, [ IConst 0L ; Id ival ]))
               ]
             )
-            (List.combine (List.combine loopvars listelems) llbls) (List.combine cd_ls lsizeops)
+            (List.combine (List.combine valueids indexids) (List.combine cd_ls (List.combine vs looplbls)))
           )) @
-          cnds @
-          [ T (Cbr (cndop, lbl_addtolist, lbl_noadd))
-          ; L lbl_addtolist
+          cs @
+          [ T (Cbr (cop, lbladd, lblnoadd))
+          ; L lbladd
           ] @
           es @
-          [ I (Bitcast (exp_as_i64, ellt, eop, I64))
-          ; I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id ivec ; I64, Id exp_as_i64 ]))
-          ] @ (
-            if req_gcops_e then
-              let e_ptr = gensym "e_as_i8p" in
-              [ I (Bitcast (e_ptr, ellt, eop, Ptr I8)); I (Call (None, Void, Gid "_addchild", [ Ptr I8, Id egc_obj; Ptr I8, Id e_ptr ])) ] @
-              if egc then
-                [ I (Call (None, Void, Gid "_removeref", [ Ptr I8, Id e_ptr ])) ]
-              else
-                []
-            else
-              []
-          ) @
-          [ T (Br lbl_noadd)
-          ; L lbl_noadd
-          ] @
-          (List.concat (List.rev (List.map2
-            (fun (lblhd,_,lblend) ix ->
-              let ixval, ixinc = gensym ix, gensym ix in
-              [ I (Load (ixval, I64, Id ix))
-              ; I (Binop (ixinc, Add, I64, IConst 1L, Id ixval))
-              ; I (Store (I64, Id ixinc, Id ix))
-              ; T (Br lblhd)
+          [ I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id vecp ; ellt, eop ])) ] @
+          (if handlegc_e then
+            addchild (Ptr I8, Id vecp) (ellt, eop) @ if egc then removeref (ellt, eop) else []
+          else []) @
+          [ T (Br lblnoadd) ; L lblnoadd ] @
+          (List.concat (List.rev (List.map
+            (fun ((iid,(lblhead,_,lblend)), (lop,lllt,_,lgc)) ->
+              let ival, iincval = gensym "ix", gensym "ixplus" in
+              [ I (Load (ival, I64, Id iid))
+              ; I (Binop (iincval, Add, I64, IConst 1L, Id ival))
+              ; I (Store (I64, Id iincval, Id iid))
+              ; T (Br lblhead)
               ; L lblend
-              ]
+              ] @
+              (if lgc then removeref (lllt,lop) else [])
             )
-            llbls loopvars
+            (List.combine (List.combine indexids looplbls) cd_ls)
           ))) @
-          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Gid "_genlist", [ Ptr I8, Id ivec ; Ptr I8, if req_gcops_e then Id egc_obj else Null ; I64, IConst (Int64.of_int (size_ty (cmp_ty rt_elem_t))) ; I1, IConst (if req_gcops_e then 1L else 0L) ]))
-          ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; Ptr (Array (0L,I8)) ]), Id rsym, cmp_ty t))
-          ] @
-          (List.concat (List.filter_map (fun (op,llt,_,gc) -> if gc then Some (removeref (llt,op)) else None) cd_ls)) @
-          (if req_gcops_e then [ I (Call (None, Void, Gid "_removeref", [ Ptr I8, Id egc_obj ])) ] else [])
-          ,
+          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L, I8))]), Gid "_genlist", [ Ptr I8, Id vecp ; I64, IConst (Int64.of_int (size_ty (cmp_ty (snd e)))) ; I1, IConst (if handlegc_e then 1L else 0L) ]))
+          ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; Ptr (Array (0L, I8))]), Id rsym, cmp_ty t))
+          ],
           true
+        
 
       | Ternary (cnd,e1,e2), t ->
           let rsym, rptr = gensym "ternres", gensym "ternptr" in
@@ -430,7 +466,7 @@ module Translator = struct
 
           let cmpd_es = List.map (cmp_exp c) es in
           let substrings = Str.full_split (Str.regexp "{[0-9]}") s in
-          let arggcs = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) cmpd_es es) in
+          let arggcs = List.concat (List.map (fun (op,llt,_,gc) -> if gc then removeref (llt,op) else []) cmpd_es) in
           let strty = cmp_ty (TRef TStr) in
           let args_cmpd = List.concat @@ List.map (fun (_,_,s,_) -> s) cmpd_es in
           let makestr_instrs =
@@ -483,12 +519,13 @@ module Translator = struct
           let rsym = gensym "binop" in
           let (op1,llt1,s1,gc1), (op2,llt2,s2,gc2) = cmp_exp c l, cmp_exp c r in
 
+          let gcops = (if gc1 then removeref (llt1,op1) else []) @ (if gc2 then removeref (llt2,op2) else []) in
+
           begin match snd l, snd r with
             | TRef TStr, TRef TStr | TRef TStr, TInt | TInt, TRef TStr ->
                 let fname,rt = List.assoc (op,snd l,snd r) str_bops in
                 Id rsym, cmp_ty rt,
-                s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1 ; llt2, op2 ]))] @
-                  (if gc1 then removeref (llt1,op1) else []) @ (if gc2 then removeref (llt2,op2) else []), true
+                s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1 ; llt2, op2 ]))] @ gcops, true
             | TRef (TArr t1), TRef (TArr t2) ->
                 let elemsize =
                   begin match llt1 with
@@ -502,7 +539,7 @@ module Translator = struct
                   [ I (Bitcast (reduced1, llt1, op1, reduced_t)) ; I (Bitcast (reduced2, llt2, op2, reduced_t))
                   ; I (Call (Some concatres, reduced_t, Gid "_arrconcat", [ reduced_t, Id reduced1 ; reduced_t, Id reduced2 ; I64, IConst (Int64.of_int elemsize) ; I1, IConst (begin match t1 with | TRef _ -> 1L | _ -> 0L end) ]))
                   ; I (Bitcast (rsym, reduced_t, Id concatres, cmp_ty t))
-                  ],
+                  ] @ gcops,
                 true
             | _ ->
                 let (lt,llt1,op1), (rt,llt2,op2), caststream = bop_cast (snd l,llt1,op1) (snd r,llt2,op2) in
@@ -624,6 +661,17 @@ module Translator = struct
           let rsym = gensym "subscript" in
           let must_gc = begin match t with | TRef _ -> true | _ -> false end in
           Id rsym, cmp_ty t, s @ [ I (Load (rsym, cmp_ty t, ptrop)) ] @ (if must_gc then addref (cmp_ty t, Id rsym) else []) @ gc, must_gc
+      
+      | Proj (lhs,id), t ->
+          let op,llt,s,gc = cmp_exp c lhs in
+          begin match (snd lhs), id with
+            | TRef (TArr t), "length" ->
+                let rptr, rsym = gensym "lenptr", gensym "lenval" in
+                Id rsym, I64,
+                s @ [ I (Gep (rptr, llt, op, [ IConst 0L ; IConst 0L ])) ; I (Load (rsym, I64, Id rptr)) ] @ (if gc then removeref (llt,op) else []),
+                false
+            | _ -> Stdlib.failwith "bad AST: bad projection type/id"
+          end
     end
   
   (* second stream result is the garbage collection stream *)
@@ -649,7 +697,7 @@ module Translator = struct
     end
   
   (* string list is list of all variables that need to be gc'd at a return statement *)
-  let rec cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list =
+  and cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list =
     begin match s with
       | VDecl (id, _, t, e) ->
           let op,ellt,s,gc = cmp_exp c e in
@@ -719,7 +767,7 @@ module Translator = struct
       | If (cnd,t,nt) -> (* conditionals are bool -> primitive -> not GC'able (same for while, do-while) *)
           let cop,_,cs,_ = cmp_exp c cnd in
           let (_,s1), (_,s2) = cmp_block rt c refvars t, cmp_block rt c refvars nt in
-          let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "lbl_end" in
+          let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "ifi_lbl_end" in
           c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
       | Denull (id,e,t,nt) ->
           let nnsym, cmpres = gensym id, gensym "cmpres" in
@@ -836,7 +884,11 @@ module Translator = struct
             | L s  ->
                 begin match et with
                   | None -> Stdlib.failwith "entry block has no terminator"
-                  | _    -> g,ei,et,Some s,[],bs
+                  | _    ->
+                      begin match cl with
+                        | Some l -> g,ei,et,Some s,[],bs@[l,[],Br s]
+                        | None   -> g,ei,et,Some s,[],bs
+                      end
                 end
             | T t  ->
                 begin match et with

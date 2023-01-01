@@ -5,9 +5,11 @@
 #include <stdint.h>
 #include <vector>
 
+#include "cppallocator.h"
+
 typedef int64_t i64;
 
-typedef std::vector<i64> list;
+typedef std::vector<i64, drm::allocator<i64>> list;
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +24,7 @@ extern "C" {
     void _addelem(i8 *l, i64 elem);
 
     // also frees the object l
-    blindarr* _genlist(i8 *l, i8 *childrenbuf, i64 elemsize, i1 addchildren);
+    blindarr* _genlist(i8 *l, i64 elemsize, i1 addchildren);
 
 #ifdef __cplusplus
 }

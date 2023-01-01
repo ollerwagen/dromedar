@@ -7,7 +7,6 @@
 
 stringarr* _makestrvec(i64 argc, i8** argv) {
     stringarr *res = (stringarr*) _allocate(sizeof(stringarr));
-
     res->size = argc;
     res->base = (string**) _allocate(sizeof(string*) * argc);
     _addchild((i8*) res, (i8*) res->base);
@@ -16,6 +15,8 @@ stringarr* _makestrvec(i64 argc, i8** argv) {
     for (i64 i = 0; i < argc; i++) {
         i8* str = argv[i];
         res->base[i] = (string*) _allocate(sizeof(string));
+        _addchild((i8*) res, (i8*) res->base[i]);
+        _removeref((i8*) res->base[i]);
 
         string* arrval = (string*) res->base[i];
         arrval->size = strlen(str) + 1;
@@ -92,7 +93,8 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
 
     blindarr *res = (blindarr*) _allocate(sizeof(blindarr));
     res->base = _allocate(realasize + realbsize);
-    res->size = realasize + realbsize;
+    res->size = a->size + b->size;
+
     _addchild((i8*) res, (i8*) res->base);
     _removeref((i8*) res->base);
 

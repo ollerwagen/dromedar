@@ -48,7 +48,7 @@ string* _sprintf_array(i64 ptr, i64 depth, i64 elemsize, string* (*f)(i64)) {
     res->size = 0;
 
     blindarr *a = (blindarr*) ptr;
-    string** arrvalstrs = malloc(a->size * sizeof(string));
+    string** arrvalstrs = (string**) _allocate(a->size * sizeof(string));
 
     for (i64 i = 0; i < a->size; i++) {
         arrvalstrs[i] = _sprintf_array(* (i64*) (a->base + (depth == 1 ? elemsize : sizeof(i64*)) * i), depth - 1, elemsize, f);
@@ -77,7 +77,7 @@ string* _sprintf_array(i64 ptr, i64 depth, i64 elemsize, string* (*f)(i64)) {
     for (i64 i = 0; i < a->size; i++)
         _removeref((i8*) arrvalstrs[i]);
 
-    free(arrvalstrs);
+    _removeref((i8*) arrvalstrs);
 
     return res;
 }

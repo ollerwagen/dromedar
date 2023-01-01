@@ -14,19 +14,19 @@
 
 
 void print_int(i64 num) {
-    printf("%ld", num);
+    printf("%ld\n", num);
 }
 
 void print_flt(double num) {
-    printf("%lf", num);
+    printf("%lf\n", num);
 }
 
 void print_char(char c) {
-    putchar(c);
+    printf("%c\n", c);
 }
 
 void print_str(string *s) {
-    printf("%s", s->base);
+    printf("%s\n", s->base);
 }
 
 void println() {

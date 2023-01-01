@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <vector>
 
+#include "cppallocator.h"
 #include "gc.h"
 #include "listops.h"
 
@@ -10,8 +11,9 @@
 extern "C" {
 
     i8* _make_vector() {
-        i8* res = (i8*) malloc(sizeof(list));
-        return res;
+        list *l = (list*) _allocate(sizeof(list));
+        new (l) list();
+        return (i8*) l;
     }
 
     void _addelem(i8 *l, i64 elem) {
@@ -19,7 +21,7 @@ extern "C" {
         vl->push_back(elem);
     }
 
-    blindarr* _genlist(i8 *l, i8 *childrenbuf, i64 elemsize, i1 addchildren) {
+    blindarr* _genlist(i8 *l, i64 elemsize, i1 addchildren) {
         list* vl = (list*) l;
         blindarr* res = (blindarr*) _allocate(sizeof(blindarr));
         res->size = vl->size();
@@ -30,8 +32,9 @@ extern "C" {
             * (i64*) (res->base + i * elemsize) = vl->at(i);
         }
         if (addchildren)
-            _transferchildren(childrenbuf, (i8*) res);
-        free(l);
+            _transferchildren(l, (i8*) res);
+        ((list*)l)->~vector();
+        _removeref(l);
         return res;
     }
 }

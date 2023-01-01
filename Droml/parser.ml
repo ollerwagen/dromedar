@@ -230,6 +230,9 @@ module Parser = struct
         | Token.LBrack -> 
             let e,s' = parse_subscript_expression start lhs s in
             parse_optional_application start e s'
+        | Token.Dot ->
+            let e,s' = parse_projection_expression start lhs s in
+            parse_optional_application start e s'
         | _            -> lhs, s
       end
     
@@ -339,6 +342,19 @@ module Parser = struct
               | _            -> t, s'''
             end
         | _ -> raise @@ ParseError (ofnode "Malformed application expression" t)
+      end
+
+    and parse_projection_expression (start : int) (lhs : exp node) (s : state) : exp node * state =
+      let t,s' = advance s in
+      begin match t.t with
+        | Token.Dot ->
+            begin match (peek s').t with
+              | Token.Id id ->
+                  let snode,s'' = advance s' in
+                  { t = Proj (lhs, ofnode id snode) ; start = start ; length = (peek s'').start }, s''
+              | _ -> raise @@ ParseError (ofnode "expect an identifier in projection expression" (peek s'))
+            end
+        | _ -> raise @@ ParseError (ofnode "Malformed projection expression" t)
       end
 
     and parse_ternary_expression (s : state) : exp node * state =
