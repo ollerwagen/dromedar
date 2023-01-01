@@ -234,7 +234,16 @@ module TypeChecker = struct
             )
             c avs in
           let ae, acnd = check_exp c' None ex, check_exp c' None cnd in
-          ListComp (ae,avs,acnd), TRef (TArr (snd ae)) 
+          ListComp (ae,avs,acnd), TRef (TArr (snd ae))
+      | Ternary (cnd,e1,e2) ->
+          let cnd',e1',e2' = check_exp c None cnd, check_exp c None e1, check_exp c None e2 in
+          if snd cnd' = TBool then
+            begin match intersect_single (suptys (snd e1')) (suptys (snd e2')) with
+              | []    -> raise @@ TypeError (ofnode "types in ternary expression must have common supertype" e)
+              | t::ts -> Ternary (cnd',e1',e2'), List.fold_left (fun m t -> if subtype t m then t else m) t ts
+            end
+          else
+            raise @@ TypeError (ofnode "ternary condition must be of type bool" cnd)
       | Null    rt  -> Null rt.t, TNullRef rt.t
       | Sprintf (Sprintf, s, es) ->
           let annt_es = List.map (check_exp c None) es in

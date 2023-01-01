@@ -340,6 +340,16 @@ module Parser = struct
             end
         | _ -> raise @@ ParseError (ofnode "Malformed application expression" t)
       end
+
+    and parse_ternary_expression (s : state) : exp node * state =
+      let start = (peek s).start in
+      let s' = expect s QuestionMark in
+      let c,s'' = parse_exp s' in
+      let s''' = expect s'' Arrow in
+      let e1,s'''' = parse_exp s''' in
+      let s''''' = expect s'''' Colon in
+      let e2,s'''''' = parse_exp s''''' in
+      { t = Ternary (c,e1,e2) ; start = start ; length = (peek s'''''').start - start }, s''''''
     in
 
     let start = (peek s).start in
@@ -366,6 +376,7 @@ module Parser = struct
             | _ -> (* arbitrary expression starting with '[' *)
                 parse_binary_expression 0 s
           end
+      | QuestionMark -> parse_ternary_expression s
       | _    -> parse_binary_expression 0 s
     end
 

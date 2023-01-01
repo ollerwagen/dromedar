@@ -75,6 +75,7 @@ type exp =
   | EmptyList of ty node
   | RangeList of exp node * inclusion * inclusion * exp node
   | ListComp  of exp node * (string * exp node) list * exp node
+  | Ternary   of exp node * exp node * exp node
   | Null      of rty node
   | Sprintf   of formatstr * string node * exp node list
   | Bop       of bop * exp node * exp node
@@ -142,6 +143,7 @@ let rec print_exp (e : exp node) : string =
     | EmptyList t           -> Printf.sprintf "([] of %s)" (print_ty t)
     | RangeList (s,i1,i2,e) -> Printf.sprintf "[%s%s%s]" (print_exp s) (print_incl (i1,i2)) (print_exp e)
     | ListComp  (e,vs,c)    -> Printf.sprintf "[%s : %s : %s]" (print_exp e) (String.concat ", " (List.map (fun (id,e) -> Printf.sprintf "%s in %s" id (print_exp e)) vs)) (print_exp c)
+    | Ternary   (c,e1,e2)   -> Printf.sprintf "(?%s -> %s : %s)" (print_exp c) (print_exp e1) (print_exp e2)
     | Null      t           -> Printf.sprintf "(null of %s)" (print_rty t)
     | Sprintf   (t,s,es)    -> Printf.sprintf "%sprintf(\"%s\"%s)" (if t = Sprintf then "s" else "") (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
     | Bop       (o,l,r)     -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)

@@ -412,7 +412,7 @@ fn main -> void
 							\end{align*}\begin{align*}
 								\drmrule{}{}{O}{\mc{+} :: \mc{(string,string)->string}}{TyBopAddString}
 							\end{align*}\begin{align*}
-								\drmrule{\mc{t}=\min_\preceq(\mathsf{suptys}(\mc{t1})\cup\mathsf{suptys}(\mc{t2}))}{}{O}{\mc{+} :: \mc{([t1],[t2])->[t]}}{TyBopAddArr}
+								\drmrule{\mc{t}=\min_\preceq(\mathsf{suptys}(\mc{t1})\cap\mathsf{suptys}(\mc{t2}))}{}{O}{\mc{+} :: \mc{([t1],[t2])->[t]}}{TyBopAddArr}
 							\end{align*}
 						\item
 							\begin{align*}
@@ -594,6 +594,12 @@ fn main -> void
 			
 				\begin{align*}
 					\drmrule{\textnormal{\code{t} is a non-null ref. type}}{S}{E}{\mc{null of t} :: \mc{t?}}{ExpNull}
+				\end{align*}
+				
+			\subsubsection{Ternary Operator}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{c}::\mc{bool}\ \ S\ruleapp{E}\mc{e1}::\mc{t1},\ S\ruleapp{E}\mc{e2}::\mc{t2}\ \ \mc{t}=\min_\preceq(\mathsf{suptys}(\mc{t1})\cap\mathsf{suptys}(\mc{t2}))}{S}{E}{\mc{?c -> e1 : e2} :: \mc{t}}{ExpTern}
 				\end{align*}
 			
 			\subsubsection{Identifiers}
@@ -1002,6 +1008,7 @@ fn main -> void
 				Expression       ::=
 				                 | %Null %Of RefType
 				                 | %LBrack %RBrack %Of Type
+				                 | %QuestionMark Expression %Arrow Expression %Colon Expression
 				                 | ExprPrec30
 				
 				ExprPrec20       ::= 

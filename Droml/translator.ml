@@ -404,6 +404,19 @@ module Translator = struct
           ,
           true
 
+      | Ternary (cnd,e1,e2), t ->
+          let rsym, rptr = gensym "ternres", gensym "ternptr" in
+          let lbltrue, lblfalse, lblend = gensym "terntrue", gensym "ternfalse", gensym "ternend" in
+          let (cndop,cndllt,cnds,cndgc), (eop1,ellt1,es1,egc1), (eop2,ellt2,es2,egc2) = cmp_exp c cnd, cmp_exp c e1, cmp_exp c e2 in
+          let addref1, addref2 = not egc1 && egc2, egc1 && not egc2 in
+          Id rsym, cmp_ty t,
+          [ E (Alloca (rptr, cmp_ty t)) ] @ cnds @
+          [ T (Cbr (cndop, lbltrue, lblfalse))
+          ; L lbltrue ] @ es1 @ (if addref1 then addref (ellt1,eop1) else []) @ [ I (Store (ellt1, eop1, Id rptr)) ; T (Br lblend) ] @
+          [ L lblfalse ] @ es2 @ (if addref2 then addref (ellt2,eop2) else []) @ [ I (Store (ellt2, eop2, Id rptr)) ; T (Br lblend)
+          ; L lblend ; I (Load (rsym, cmp_ty t, Id rptr)) ],
+          egc1 || egc2
+
       | Null rt, t      -> Null, cmp_ty t, [], false
 
       | Sprintf (opt,s,es), t ->
