@@ -111,24 +111,24 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
     return res;
 }
 
+static inline i64 max(i64 a, i64 b) {
+    return a > b ? a : b;
+}
+
 intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend) {
     if (start < end) {
         if (!inclstart) ++start;
         if (!inclend) --end;
-        if (end < start) end = start;
-        intarr* res = allocate_intarr(sizeof(i64) * (end - start + 1));
-        res->size = end - start + 1;
-        for (i64 i = 0; i <= end - start; i++) {
+        intarr* res = allocate_intarr(max(end - start + 1, 0));
+        for (i64 i = 0; i < res->size; i++) {
             res->base[i] = start + i;
         }
         return res;
     } else {
         if (!inclstart) --start;
         if (!inclend) ++end;
-        if (start < end) end = start;
-        intarr* res = allocate_intarr(sizeof(i64) * (start - end + 1));
-        res->size = start - end + 1;
-        for (i64 i = start - end; i >= 0; i--) {
+        intarr* res = allocate_intarr(max(start - end + 1, 0));
+        for (i64 i = res->size - 1; i >= 0; i--) {
             res->base[i] = start - i;
         }
         return res;
