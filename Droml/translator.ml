@@ -15,22 +15,67 @@ module Translator = struct
       Consider a variable x:int
       Ctxt contains binding  "x" -> %xsym, int, i64, where %sym :: i64*
   *)
+
+  (*
+    First string in the context corresponds to the current module
+    Variable names in the context are mangled according to the module they are in: module$name
+    Since only global variables matter for cross-module access, this doesn't cause any harm   
+  *)
   module Ctxt = struct
 
-    type t = (string * (Ast.ty * Ll.llty * Ll.operand)) list list
+    type t = string * (string * (Ast.ty * Ll.llty * Ll.operand)) list list
 
-    let empty : t = [[]]
+    let print_ctxt (c:t) : string =
+      Printf.sprintf "Current Module: %s\n%s"
+        (fst c) @@
+        String.concat ";\n" @@
+        List.map
+          (fun l ->
+            String.concat ", " @@
+            List.map
+              (fun (id,_) ->
+                id
+              )
+              l
+          )
+          (snd c)
+
+    let empty : t = default_module_name, [[]]
+
+    let set_current_module (c:t) (m:string) : t = m, snd c
+
+    let get_raw (c:t) (id:string) : Ast.ty * Ll.llty * Ll.operand =
+      let found,res = List.fold_left (fun (f,r) c -> if f then true,r else if List.mem_assoc id c then true,List.assoc id c else f,r) (false,(TInt,Ll.I64,Ll.IConst 0L)) (snd c) in
+      if found then res else raise Not_found
+
+    let module_mangle (c:t) (id:string) : string = Printf.sprintf "%s$%s" (fst c) id
+
+    let add_level (c:t) : t = fst c, [] :: (snd c)
+
+    let top_level (c:t) = List.hd (snd c)
+
+    let add_binding_to_module (c:t) (m:string) (id,bnd : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
+      fst c, ((Printf.sprintf "%s$%s" m id, bnd) :: List.hd (snd c)) :: List.tl (snd c)
+
+    let add_binding (c:t) (b : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
+      add_binding_to_module c (fst c) b
 
     let get (c:t) (id:string) : Ast.ty * Ll.llty * Ll.operand =
-      let found,res = List.fold_left (fun (f,r) c -> if f then true,r else if List.mem_assoc id c then true,List.assoc id c else f,r) (false,(TInt,Ll.I64,Ll.IConst 0L)) c in
-      if found then res else raise Not_found
-      
-    let add_level (c:t) : t = [] :: c
+      get_raw c @@ module_mangle c id
+    
+    let get_from_module (c:t) (m:string) (id:string) : Ast.ty * Ll.llty * Ll.operand =
+      get_raw c @@ Printf.sprintf "%s$%s" m id
 
-    let top_level (c:t) = List.hd c
-
-    let add_binding (c:t) (bnd : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
-      (bnd :: List.hd c) :: List.tl c
+    let get_from_any_module (c:t) (id:string) : Ast.ty * Ll.llty * Ll.operand =
+      let rec aux (c : (string * (Ast.ty * Ll.llty * Ll.operand)) list) =
+        begin match c with
+          | []           -> raise Not_found
+          | (name,bnd)::cs ->
+              let name' = List.nth (String.split_on_char '$' name) 1 in
+              if id = name' then bnd else aux cs
+        end
+      in
+      aux (top_level c)
 
   end
 
@@ -74,8 +119,7 @@ module Translator = struct
 
   (* context buildup with all builtin functions (see builtins.ml) *)
   let base_ctxt =
-    let builtin_bindings = List.map (fun (s,t) -> s, (t, cmp_ty t, Gid s)) builtins in
-    List.fold_left Ctxt.add_binding Ctxt.empty builtin_bindings
+    List.fold_left (fun c (m,id,t) -> Ctxt.add_binding_to_module c m (id,(t, cmp_ty t, Gid id))) Ctxt.empty builtins
 
   
   let allocate (size : Ll.operand) (t : Ll.llty) (name : string) : stream =
@@ -212,7 +256,7 @@ module Translator = struct
       ] in
 
     begin match e with
-      | Id id, t ->
+      | Id id, t | ModAccess (_,id), t ->
           let op,llt,s,gc = cmp_lhs c e in
           begin match deptr llt with
             | Ptr (Func _) -> op, llt, s, false (* do not dereference functions *)
@@ -692,6 +736,10 @@ module Translator = struct
           let t,llt,op = Ctxt.get c id in
           op, Ptr llt, [], []
 
+      | ModAccess (m,id), t ->
+          let t,llt,op = Ctxt.get_from_module c m id in
+          op, Ptr llt, [], []
+
       | Subscript (b,o), t ->
           let (bop,bllt,bs,bgc), (oop,ollt,os,_) = cmp_exp c b, cmp_exp c o in
           let c_t, c_et = cmp_ty (snd b), cmp_ty t in
@@ -733,6 +781,23 @@ module Translator = struct
             | _      -> refvars
           end
           (* add pref and remove it from %op: cancel each other out *)
+          
+      | Assert e ->
+          let lbltrue, lblfalse = gensym "assert_true", gensym "assert_false" in
+          let op,llt,s,_ = cmp_exp c e in
+          let failstring = Printf.sprintf "Assertion failure in {%s}\nAborting.\n" (Astannotated.print_exp e) in
+          let fop,fllt,fs,fgc = cmp_exp c (LitStr failstring, TRef TStr) in
+          c,
+          s @
+          [ T (Cbr (op, lbltrue, lblfalse)) ; L lblfalse ] @
+          fs @
+          [ I (Call (None, Void, Gid "print_str", [ fllt, fop ]))
+          ; I (Call (None, Void, Gid "_abort", [ I64, IConst 134L ]))
+          ; T (Br lbltrue)
+          ] @
+          [ L lbltrue ],
+          refvars
+
       | Assn (l,r) ->
           let (lop,lllt,ls,lgc), (rop,rllt,rs,rgc) = cmp_lhs c l, cmp_exp c r in
           let (rllt,rop),crosscaststream = cross_cast (snd l) (snd r, rllt, rop) in
@@ -934,6 +999,7 @@ module Translator = struct
   
   let cmp_gstmt (c : Ctxt.t) (gs : annt_gstmt) : Ctxt.t * ginstr list =
     begin match gs with
+      | Module m -> Ctxt.set_current_module c m, []
       | GVDecl (id,_,t,e) ->
           let op,ellt,s = cmp_gexp c e in
           let vt =
@@ -973,6 +1039,7 @@ module Translator = struct
     List.fold_left
       (fun c gs ->
         begin match gs with
+          | Module m -> Ctxt.set_current_module c m
           | GFDecl (id,args,rt,_) ->
               let ft = TRef (TFun (List.map snd args, rt)) in
               Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (gensym id)))
@@ -996,7 +1063,7 @@ module Translator = struct
         let rval, strvec = gensym "mainret", gensym "strvec" in
         let strvecty = TRef (TArr (TRef TStr)) in
         let maincall, term =
-          begin match Ctxt.get c "main" with
+          begin match Ctxt.get_from_any_module c "main" with
             | TRef (TFun ([], Void)), _, mainop ->
                 [ Call (None, Void, mainop, []) ], Ret (Some (I64, IConst 0L))
             | TRef (TFun ([], Ret TInt)), _, mainop ->

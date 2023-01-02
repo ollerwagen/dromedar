@@ -424,6 +424,12 @@ module Parser = struct
       let e,s''''' = parse_exp s'''' in
       { t = VDecl (id, m, t, e) ; start = start ; length = (peek s''''').start - start }, s'''''
 
+    and parse_assert_stmt (s : state) (indent : int) : stmt node * state =
+      let start = (peek s).start in
+      let s' = expect s KAssert in
+      let e,s'' = parse_exp s' in
+      { t = Assert e ; start = start ; length = (peek s'').start - start }, s''
+
     and parse_expr_or_assn_stmt (s : state) (indent : int) : stmt node * state =
       let start = (peek s).start in
       let l,s' = parse_exp s in
@@ -522,6 +528,7 @@ module Parser = struct
     let s' = expect s (Token.Whitespace indent) in
     begin match (peek s').t with
       | Token.KLet | Token.KMut -> parse_vdecl_stmt        s' indent
+      | Token.KAssert           -> parse_assert_stmt       s' indent
       | Token.KIf               -> parse_if_stmt           s' indent Token.KIf
       | Token.KDenull           -> parse_denull_stmt       s' indent
       | Token.KWhile            -> parse_while_stmt        s' indent
@@ -539,7 +546,9 @@ module Parser = struct
     else
       [], s
 
+
   let parse_gstmt (s:state) : gstmt node * state =
+
     let rec parse_gvdecl (s:state) : gstmt node * state =
       let start = (peek s).start in
       let s' = expect s Token.KGlobal in
@@ -593,9 +602,22 @@ module Parser = struct
       let rt,s''''' = parse_retty s'''' in
       let b,s'''''' = parse_block s''''' 1 in
       { t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''').start - start }, s''''''
+    
+    and parse_gmodule (s : state) : gstmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KModule in
+      begin match (peek s').t with
+        | Token.Id m ->
+            let s'' = snd @@ advance s' in
+            { t = Module m ; start = start ; length = (peek s'').start - start }, s''
+        | _ -> raise @@ ParseError (ofnode "Expected an identifier in module declaration" (peek s'))
+      end
+
     in
+
     let s' = expect s (Token.Whitespace 0) in
     begin match (peek s').t with
+      | Token.KModule -> parse_gmodule s'
       | Token.KGlobal -> parse_gvdecl s'
       | Token.KFn     -> parse_gfdecl s'
       | _             -> raise @@ ParseError (ofnode "Expected a global variable or function declaration" (peek s'))

@@ -16,15 +16,17 @@ let () =
       (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
        Stdlib.failwith "Lexer Error. Aborting.")
   in
-  (* let _ = List.iter (fun t -> Printf.printf "%s\n" (Token.print_token t.t)) (List.concat lexes), Printf.printf "\n" in *)
+  (*let _ = List.iter (fun t -> Printf.printf "%s\n" (Token.print_token t.t)) (List.concat lexes), Printf.printf "\n" in*)
   let parses =
     try List.map Parser.parse lexes
     with Parser.ParseError {t=m;start=s;length=l} ->
       (Printf.printf "Error at [%d-%d] -> '%s'.\n" s (s+l) m;
        Stdlib.failwith "Parser Error. Aborting.")
   in
-  let program = List.fold_left (@) [] parses in
-  let () = Printf.printf "\n%s\n" (Ast.print_program program) in
+  let parses' =
+    List.map2 (fun p filename -> { t = Module (filename_to_module filename) ; start = 0 ; length = 0 } :: p) parses filenames in
+  let program = List.fold_left (@) [] parses' in
+  let _ = Printf.printf "\n%s\n" (Ast.print_program program) in
 
   let annt_prog =
     try TypeChecker.check_program program
@@ -32,7 +34,7 @@ let () =
       (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
        Stdlib.failwith "Type Error. Aborting.")
   in
-  (* Printf.printf "\n%s\n" (Ast.print_program program); *)
+  (* let _ = Printf.printf "\n%s\n" (Ast.print_program program) in *)
   
   let llstring = Translator.cmp_to_llvm annt_prog in
   let llfile = Stdlib.open_out "Out.ll" in
@@ -50,5 +52,5 @@ let () =
     -lm to add math.h library because apparently that is necessary
    *)
   let _ = Sys.command "clang -S Out.ll -O3" in
-  let _ = Sys.command "clang -o a.out Out.ll cutils/*.o -L. ./cutils/gc.so ./cutils/listops.so -lstdc++ -lm -O3" in
+  let _ = Sys.command "clang -o a.out Out.ll cutils/*.o -L. ./cutils/gc.so ./cutils/listops.so -lstdc++ -lm -O0" in
   ()

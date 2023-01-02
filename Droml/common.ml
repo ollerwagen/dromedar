@@ -12,3 +12,12 @@ let rec readall (filename : string) : string =
       close_in_noerr ic; []
   in
   String.concat "\n" @@ aux (open_in filename)
+
+let default_module_name : string = "Default"
+
+let filename_to_module (filename : string) : string =
+  let filename_regex = "[A-Za-z0-9]+" in
+  if Str.string_match (Str.regexp filename_regex) filename 0 then
+    Str.matched_string filename
+  else
+    default_module_name

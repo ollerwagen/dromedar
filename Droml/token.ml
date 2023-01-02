@@ -53,6 +53,7 @@ type token =
   | PipeDotPipe
   | EOF
   | Whitespace of int
+  | KModule
   | KGlobal
   | KFn
   | KLet
@@ -66,6 +67,7 @@ type token =
   | KNull
   | KPrintf
   | KSprintf
+  | KAssert
   | KOf
   | KIn
   | KIf
@@ -128,6 +130,7 @@ let print_token (t:token) : string =
     | PipeDotPipe  -> "[PipeDotPipe]"
     | EOF          -> "[EOF]"
     | Whitespace i -> Printf.sprintf "[Whitespace %d]" i
+    | KModule      -> "[module]"
     | KGlobal      -> "[global]"
     | KFn          -> "[fn]"
     | KLet         -> "[let]"
@@ -143,6 +146,7 @@ let print_token (t:token) : string =
     | KIn          -> "[in]"
     | KPrintf      -> "[printf]"
     | KSprintf     -> "[sprintf]"
+    | KAssert      -> "[assert]"
     | KIf          -> "[if]"
     | KElif        -> "[elif]"
     | KElse        -> "[else]"

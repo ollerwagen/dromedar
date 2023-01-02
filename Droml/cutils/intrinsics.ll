@@ -1,3 +1,5 @@
+declare void @_abort(i64)
+
 ; create argument vector for main function
 declare {i64,[0 x {i64,[0 x i8]*}*]*}* @_makestrvec(i64,i8**)
 

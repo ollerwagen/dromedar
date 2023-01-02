@@ -5,6 +5,10 @@
 #include "gc.h"
 #include "intrinsics.h"
 
+void _abort(i64 code) {
+    exit(code);
+}
+
 stringarr* _makestrvec(i64 argc, i8** argv) {
     stringarr *res = (stringarr*) _allocate(sizeof(stringarr));
     res->size = argc;

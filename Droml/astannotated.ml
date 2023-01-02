@@ -2,6 +2,7 @@ open Ast
 
 type exp' =
   | Id        of string
+  | ModAccess of string * string
   | LitInt    of Token.tint
   | LitFlt    of Token.tflt
   | LitChar   of Token.tchar
@@ -24,6 +25,7 @@ and annt_exp = exp' * ty
 
 type annt_stmt =
   | VDecl   of string * mutability * ty option * annt_exp
+  | Assert  of annt_exp
   | Assn    of annt_exp * annt_exp
   | Expr    of exp' * ty option
   | If      of annt_exp * annt_stmt list * annt_stmt list
@@ -36,6 +38,7 @@ type annt_stmt =
 type annt_gstmt =
   | GVDecl of string * mutability * ty option * annt_exp
   | GFDecl of string * (string * ty) list * retty * annt_stmt list
+  | Module of string
 
 type annt_program = annt_gstmt list
 
@@ -72,6 +75,7 @@ let print_incl (i : inclusion * inclusion) : string =
 let rec print_exp (e:annt_exp) : string =
   begin match fst e with
     | Id        s           -> s
+    | ModAccess (m,id)      -> Printf.sprintf "%s.%s"  m id
     | LitInt    i           -> Printf.sprintf "%Ld"    i
     | LitFlt    f           -> Printf.sprintf "%f"     f
     | LitChar   c           -> Printf.sprintf "'%c'"   c
@@ -99,6 +103,7 @@ let rec print_stmt (indent:int) (s:annt_stmt) : string =
     | VDecl   (id,Const,Some t,e) -> Printf.sprintf "%slet %s:%s := %s\n"           ind id (print_ty t) (print_exp e)
     | VDecl   (id,Mut,None,e)     -> Printf.sprintf "%smut %s := %s\n"              ind id (print_exp e)
     | VDecl   (id,Mut,Some t,e)   -> Printf.sprintf "%smut %s:%s := %s\n"           ind id (print_ty t) (print_exp e)
+    | Assert  e                   -> Printf.sprintf "%sassert %s\n"                 ind (print_exp e)
     | Assn    (l,r)               -> Printf.sprintf "%s%s := %s\n"                  ind (print_exp l) (print_exp r)
     | Expr    (e,t)               -> Printf.sprintf "%s%s\n"                        ind (print_exp (e,TInt))
     | If      (c,t,n)             -> Printf.sprintf "%sif %s\n%s%selse\n%s"         ind (print_exp c) (print_block (indent+1) t) ind (print_block (indent+1) n)
@@ -114,12 +119,13 @@ and print_block (indent:int) (b : annt_stmt list) : string =
 
 let print_gstmt (gs:annt_gstmt) : string =
   begin match gs with
-    | GVDecl (id,Const,None,e)   -> Printf.sprintf "global %s := %s\n" id (print_exp e)
-    | GVDecl (id,Const,Some t,e) -> Printf.sprintf "global %s:%s := %s\n" id (print_ty t) (print_exp e)
-    | GVDecl (id,Mut,None,e)     -> Printf.sprintf "global mut %s := %s\n" id (print_exp e)
-    | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n" id (print_ty t) (print_exp e)
-    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s" id (print_retty rt) (print_block 1 b)
-    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | GVDecl (id,Const,None,e)   -> Printf.sprintf "global %s := %s\n\n" id (print_exp e)
+    | GVDecl (id,Const,Some t,e) -> Printf.sprintf "global %s:%s := %s\n\n" id (print_ty t) (print_exp e)
+    | GVDecl (id,Mut,None,e)     -> Printf.sprintf "global mut %s := %s\n\n" id (print_exp e)
+    | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n\n" id (print_ty t) (print_exp e)
+    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s\n" id (print_retty rt) (print_block 1 b)
+    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | Module m                   -> Printf.sprintf "module %s\n\n\n" m
   end
 
 let print_program (prog:annt_program) : string =

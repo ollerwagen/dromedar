@@ -90,6 +90,7 @@ type exp =
 
 type stmt =
   | VDecl   of string * mutability * ty node option * exp node
+  | Assert  of exp node
   | Assn    of exp node * exp node
   | Expr    of exp node 
   | If      of exp node * stmt node list * stmt node list
@@ -102,6 +103,7 @@ type stmt =
 type gstmt =
   | GVDecl of string * mutability * ty node option * exp node
   | GFDecl of string * (string * ty node) list * retty node * stmt node list
+  | Module of string
 
 type program = gstmt node list
 
@@ -165,6 +167,7 @@ let rec print_stmt (indent : int) (s : stmt node) : string =
     | VDecl   (id,Const,Some t,e) -> Printf.sprintf "%slet %s:%s := %s\n"           ind id (print_ty t) (print_exp e)
     | VDecl   (id,Mut,None,e)     -> Printf.sprintf "%smut %s := %s\n"              ind id (print_exp e)
     | VDecl   (id,Mut,Some t,e)   -> Printf.sprintf "%smut %s:%s := %s\n"           ind id (print_ty t) (print_exp e)
+    | Assert  e                   -> Printf.sprintf "%sassert %s\n"                 ind (print_exp e)
     | Assn    (l,r)               -> Printf.sprintf "%s%s := %s\n"                  ind (print_exp l) (print_exp r)
     | Expr    e                   -> Printf.sprintf "%s%s\n"                        ind (print_exp e)
     | If      (c,t,n)             -> Printf.sprintf "%sif %s\n%s%selse\n%s"         ind (print_exp c) (print_block (indent+1) t) ind (print_block (indent+1) n)
@@ -180,12 +183,13 @@ and print_block (indent : int) (b : stmt node list) : string =
 
 let print_gstmt (gs : gstmt node) : string =
   begin match gs.t with
-    | GVDecl (id,Const,None,e)   -> Printf.sprintf "global %s := %s\n" id (print_exp e)
-    | GVDecl (id,Const,Some t,e) -> Printf.sprintf "global %s:%s := %s\n" id (print_ty t) (print_exp e)
-    | GVDecl (id,Mut,None,e)     -> Printf.sprintf "global mut %s := %s\n" id (print_exp e)
-    | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n" id (print_ty t) (print_exp e)
-    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s" id (print_retty rt) (print_block 1 b)
-    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | GVDecl (id,Const,None,e)   -> Printf.sprintf "global %s := %s\n\n" id (print_exp e)
+    | GVDecl (id,Const,Some t,e) -> Printf.sprintf "global %s:%s := %s\n\n" id (print_ty t) (print_exp e)
+    | GVDecl (id,Mut,None,e)     -> Printf.sprintf "global mut %s := %s\n\n" id (print_exp e)
+    | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n\n" id (print_ty t) (print_exp e)
+    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s\n" id (print_retty rt) (print_block 1 b)
+    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | Module m                   -> Printf.sprintf "module %s\n\n\n" m
   end
 
 let print_program (prog : program) : string =

@@ -26,7 +26,7 @@ void print_char(char c) {
 }
 
 void print_str(string *s) {
-    printf("%s\n", s->base);
+    printf("%s", s->base);
 }
 
 void println() {

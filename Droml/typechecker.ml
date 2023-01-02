@@ -10,25 +10,68 @@ module TypeChecker = struct
 
   module Ctxt = struct
 
-    (* List.hd <=> top level block *)
-    type t = ((string * (ty * mutability)) list) list
+    (* List.hd @@ List.assoc (fst l) (snd l)    <=>    top level block in current module *)
+    type t = string * (string * ((string * (ty * mutability)) list) list) list
 
-    let empty : t = [[]]
+    (* invariant: every file starts with a module declaration (ensured by the main.ml file) *)
+    let empty : t = "", []
+
+    let exists_module (c:t) (m:string) : bool = List.mem_assoc m (snd c)
+    
+    let has_in_module (c:t) (m:string) (id:string) : bool =
+      if List.mem_assoc m (snd c) then
+        List.exists (List.mem_assoc id) (List.assoc m (snd c))
+      else
+        false
 
     let has (c:t) (id:string) : bool =
-      List.fold_left (fun b l -> if b then true else List.mem_assoc id l) false c
+      has_in_module c (fst c) id
 
-    let has_toplevel (c:t) (id:string) : bool = List.mem_assoc id (List.hd c)
+    let has_toplevel (c:t) (id:string) : bool =
+      List.mem_assoc id (List.hd (List.assoc (fst c) (snd c)))
+
+    let has_in_any_binding (c:t) (id:string) : bool =
+      List.exists (fun (_,l) -> List.exists (List.mem_assoc id) l) (snd c)
+
+    let get_from_module (c:t) (m:string) (id:string) : ty * mutability =
+      let l = List.assoc m (snd c) in
+      let found,res =
+        List.fold_left (fun (f,r) l -> if f then true,r else if List.mem_assoc id l then true, List.assoc id l else false,r) (false,(TInt,Const)) l in
+      if found then res else raise Not_found
 
     let get (c:t) (id:string) : ty * mutability =
-      let found,res =
-        List.fold_left (fun (f,r) l -> if f then true,r else if List.mem_assoc id l then true, List.assoc id l else false,r) (false,(TInt,Const)) c in
-      if found then res else raise Not_found
-    
-    let add_level (c:t) : t = [] :: c
+      get_from_module c (fst c) id
 
-    let add_binding (c:t) (bnd : string*(ty*mutability)) : t =
-      (bnd :: List.hd c) :: List.tl c
+    let get_from_any_binding (c:t) (id:string) : ty * mutability =
+      let rec aux (m : (string * ((string * (ty * mutability)) list) list) list) : ty * mutability =
+        begin match m with
+          | []    -> raise Not_found
+          | x::xs -> if List.exists (List.mem_assoc id) (snd x) then get_from_module c (fst x) id else aux xs
+        end
+      in
+      aux (snd c)
+
+    let add_level (c:t) : t =
+      let l = List.assoc (fst c) (snd c) in
+      let c' = List.remove_assoc (fst c) (snd c) in
+      fst c, (fst c, [] :: l) :: c'
+
+    let add_binding_to_module (c:t) (m:string) (bnd : string*(ty*mutability)) : t =
+      let l,c' =
+        if List.mem_assoc m (snd c) then
+          List.assoc m (snd c), List.remove_assoc m (snd c)
+        else
+          [[]], snd c
+        in
+      fst c, (m, (bnd :: List.hd l) :: List.tl l) :: c'
+
+    let add_binding (c:t) (bnd : string*(ty*mutability)) : t = add_binding_to_module c (fst c) bnd
+
+    let set_current_module (c:t) (id:string) : t =
+      if List.mem_assoc id (snd c) then
+        id, snd c
+      else
+        id, (id, [[]]) :: snd c
 
   end
 
@@ -72,7 +115,7 @@ module TypeChecker = struct
     end
   
   let startcontext : Ctxt.t =
-    List.fold_left (fun c f -> Ctxt.add_binding c (fst f, (snd f, Const))) Ctxt.empty builtins
+    List.fold_left (fun c (m,id,f) -> Ctxt.add_binding_to_module c m (id, (f, Const))) Ctxt.empty builtins
 
   let uop_types : (uop * (ty * ty) list) list =
     [ Neg, [ 
@@ -327,9 +370,24 @@ module TypeChecker = struct
             | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (Ast.print_ty (ofnode t r))) r)
           end
       | Proj (lhs,id) ->
-          begin match check_exp c None lhs, id.t with
-            | (e', TRef (TArr t)), "length" -> Proj ((e', TRef (TArr t)), "length"), TInt
-            | (_,t), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
+          let mayberes =
+            begin match lhs.t with
+              | Id m ->
+                  if Ctxt.exists_module c m then
+                    if Ctxt.has_in_module c m id.t then
+                      let t,_ = Ctxt.get_from_module c m id.t in
+                      Some (ModAccess (m, id.t), t)
+                    else None
+                  else None
+              | _ -> None
+            end in
+          begin match mayberes with
+            | Some res -> res
+            | _ ->
+                begin match check_exp c None lhs, id.t with
+                  | (e', TRef (TArr t)), "length" -> Proj ((e', TRef (TArr t)), "length"), TInt
+                  | (_,t), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
+                end
           end
     end
   
@@ -348,6 +406,12 @@ module TypeChecker = struct
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (Ast.print_ty t) (Ast.print_ty (ofnode (snd et) e))) s)
             end
+      | Assert e ->
+          let e' = check_exp c None e in
+          begin match snd e' with
+            | TBool -> Assert e', c, false
+            | _     -> raise @@ TypeError (ofnode ("assertion expression needs to be of type bool") e)
+          end
       | Assn (l,r) ->
           let lt,rt = check_exp c None l, check_exp c None r in
           if is_assignable c l then
@@ -446,6 +510,8 @@ module TypeChecker = struct
 
   let check_gstmt (c : Ctxt.t) (gs : gstmt node) : annt_gstmt * Ctxt.t =
     begin match gs.t with
+      | Module m ->
+          Module m, Ctxt.set_current_module c m
       | GVDecl (id,m,t,e) ->
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
@@ -479,6 +545,7 @@ module TypeChecker = struct
 
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
+      | Module m              -> Ctxt.set_current_module c m
       | GFDecl (id,args,rt,_) -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
       | GVDecl _              -> c
     end
@@ -488,8 +555,8 @@ module TypeChecker = struct
   let check_program (prog : gstmt node list) : annt_gstmt list =
     let c = create_fctxt_program startcontext prog in
     let _ =
-      if Ctxt.has c "main" then
-        begin match Ctxt.get c "main" with
+      if Ctxt.has_in_any_binding c "main" then
+        begin match Ctxt.get_from_any_binding c "main" with
           | TRef (TFun ([], Void)),                            Const -> ()
           | TRef (TFun ([], Ret TInt)),                        Const -> ()
           | TRef (TFun ([TRef (TArr (TRef TStr))], Void)),     Const -> ()

@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+void _abort(i64 code);
+
 stringarr* _makestrvec(i64 argc, i8** argv);
 
 i64 _pow_ii(i64 base, i64 exp);

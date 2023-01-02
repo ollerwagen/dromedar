@@ -15,6 +15,8 @@
 	morekeywords = [3]{return,if,else,while,do,for,denull},
 	morekeywords = [4]{let,mut,global},
 	morekeywords = [5]{of,in},
+	morekeywords = [6]{printf,sprintf,assert},
+	morekeywords = [7]{module},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -275,7 +277,9 @@ fn main -> void
 	
 		A typing rule takes the following shape: $$ \drmrule{\mathrm{Hypotheses}}{S,\dots}{type}{\mc{grammar spec}}{name} $$
 		
-		Here, $S$ represents a stack of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type} \times \{c,m\})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}), and $\{c,m\}$ to the mutability of the object: $c$ represents an immutable value (as declared by \code{let}), and $m$ a mutable one (declared by \code{mut}).
+		Here, $S$ represents a list of stacks (resp. a stack) of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type} \times \{c,m\})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}), and $\{c,m\}$ to the mutability of the object: $c$ represents an immutable value (as declared by \code{let}), and $m$ a mutable one (declared by \code{mut}).
+		
+		Writing $S$ in a proof rule enables access to functions and variables within the same module \code{M}, whereas $S_{\mc{N}}$ corresponds to the context from module \code{N}.
 		
 		The symbol $\in$ is defined as follows: $s\in S \Leftrightarrow \textnormal{$s$ is contained in \textit{any} layer of $S$}$, whereas $\in_0$ is true only if the symbol is at the top level of the symbol stack (i.e. defined in the same block). The operator $\cup$ on $S$ adds another binding to the top layer of the stack, whereas $\sqcup$ adds another layer to the stack.
 		
@@ -675,6 +679,10 @@ fn main -> void
 			\subsubsection{Projection}
 			
 				\begin{align*}
+					\drmrule{(\mc{f},\mc{t},\_)\in S_{\mc{Id}}}{S}{E}{\mc{Id.f}::\mc{t}}{ExpProjModule}
+				\end{align*}
+			
+				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{e}::\mc{[t]}}{S}{E}{\mc{e.length} :: \mc{int}}{ExpProjListLength}
 				\end{align*}
 			
@@ -709,6 +717,18 @@ fn main -> void
 			
 				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,\mc{rt}}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
+				\end{align*}
+				
+			\subsubsection{\code{printf} Call}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)}::\mc{string}}{S}{S}{\mc{printf("...\{j1\}...\{jm\}...", e1,...,en)} \Rightarrow S,\bot}{StmtPrintf}
+				\end{align*}
+				
+			\subsubsection{\code{assert} Call}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{bool}}{S}{S}{\mc{assert exp}\Rightarrow S,\bot}{StmtAssert}
 				\end{align*}
 			
 			\subsubsection{If Statements}
@@ -769,6 +789,12 @@ fn main -> void
 					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}\\
 					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}
 				\end{align*}
+				
+			\subsubsection{Module Header}
+			
+				\begin{align*}
+					\drmrule{}{S}{G}{\mc{module M} \Rightarrow S \textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module}}{GStmtModule}
+				\end{align*}
 			
 			\subsubsection{Program}
 			
@@ -782,18 +808,16 @@ fn main -> void
 			
 				\begin{align*}
 					\drmrule{(\mc{id},\_) \not\in S}{S}{GCF}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S \cup (\mc{id}, \mc{(t1,...,tn)->rt}, c)}{GStmtFCtxtFDecl}
-				\end{align*}
-				\begin{align*}
-					\drmrule{}{S}{GCF}{\mc{global id := exp} \Rightarrow S}{GStmtFCtxtVDeclConst}\\
-					\drmrule{}{S}{GCF}{\mc{global id:t := exp} \Rightarrow S}{GStmtFCtxtVTDeclConst}\\
-					\drmrule{}{S}{GCF}{\mc{global mut id := exp} \Rightarrow S}{GStmtFCtxtVDeclMut}\\
-					\drmrule{}{S}{GCF}{\mc{global mut id:t := exp} \Rightarrow S}{GStmtFCtxtVTDeclMut}
+				\end{align*}\begin{align*}
+					\drmrule{}{S}{GCF}{\mc{global X := Y} \Rightarrow S}{GStmtFCtxtVDecl}
+				\end{align*}\begin{align*}
+					\drmrule{}{S}{GCF}{\mc{module M} \Rightarrow S\textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module}}{GStmtFCtxtModule}
 				\end{align*}
 			
 			\subsubsection{Program: Functions}
 			
 				\begin{align*}
-					\drmrule{S_0 \ruleapp{GCF} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{GCF} \mc{gsn} \Rightarrow S_n}{S_0}{GC}{\mc{gs1 ... gsn} \Rightarrow S_n}{GStmtCtxtFuncs}
+					\drmrule{S_0 \ruleapp{GCF} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{GCF} \mc{gsn} \Rightarrow S_n}{S_0}{GC}{\mc{gs1 ... gsn} \Rightarrow S_n \textnormal{ with no active module}}{GStmtCtxtFuncs}
 				\end{align*}
 			
 		\subsection{Rule for Program Typechecking}
@@ -824,7 +848,7 @@ fn main -> void
 			Then, the program rule \textsc{Prog} shall be:
 		
 			\begin{align*}
-				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ \exists!\; \mc{ft}\in\mathsf{maintys}\;(\mc{main},\mc{ft},c)\in S\ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
+				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ \exists!\; \mc{ft}\in\mathsf{maintys}:\;(\mc{main},\mc{ft},c)\in S'\ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
 			\end{align*}
 		
 	\section{Formal Grammar}
@@ -841,6 +865,8 @@ fn main -> void
 				LiteralStr   ::= /"([^"\\]|(\\[\\nrt"]))*"/
 				
 				Identifier   ::= /[a-zA-Z][a-zA-Z0-9_]*/
+				
+				module       ::= /module/
 				
 				global       ::= /global/
 				fn           ::= /fn/
@@ -869,6 +895,7 @@ fn main -> void
 				
 				printf       ::= /printf/
 				sprintf      ::= /sprintf/
+				assert       ::= /assert/
 				 
 				return       ::= /return/
 				
@@ -928,6 +955,7 @@ fn main -> void
 				GlobalStatement  ::=
 				                 | GVDeclaration
 				                 | GFDeclaration
+				                 | %Module %Identifier
 				                 
 				GVDeclaration    ::=
 				                 | %Global      %Identifier             %Assign GlobalExpression
@@ -1001,6 +1029,7 @@ fn main -> void
 				ExprStmt         ::=
 				                 | Expression
 				                 | %Printf %LParen %LiteralStr PrintfArglist %RParen
+				                 | %Assert Expression
 				                 
 				ReturnStmt       ::=
 				                 | %Return

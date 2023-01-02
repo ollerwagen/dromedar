@@ -53,7 +53,8 @@ module Lexer = struct
     List.map (fun (s,t) -> Str.regexp_string s, t) (List.sort f simple_regex_strings)
   
   let keywords : (string * token) list = [
-      "global",  KGlobal
+      "module",  KModule
+    ; "global",  KGlobal
     ; "fn",      KFn
     ; "let",     KLet
     ; "mut",     KMut
@@ -68,6 +69,7 @@ module Lexer = struct
     ; "in",      KIn
     ; "printf",  KPrintf
     ; "sprintf", KSprintf
+    ; "assert",  KAssert
     ; "if",      KIf
     ; "elif",    KElif
     ; "else",    KElse
