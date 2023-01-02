@@ -8,7 +8,9 @@ module Lexer = struct
   let simple_regex_strings : (string * token) list =
     [ "!",   Op Bang
     ; "**",  Op Starstar
-    ; "*",   Op Star      
+    ; "*",   Op Star    
+    ; "/",   Op Slash
+    ; "%",   Op Percent  
     ; "+",   Op Plus      
     ; "-",   Op Dash     
     ; "<<",  Op LShift    

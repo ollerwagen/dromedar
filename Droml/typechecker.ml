@@ -93,6 +93,7 @@ module TypeChecker = struct
     let numcharop = numop @ [(TInt, TChar), TChar ; (TChar, TInt), TChar] in
     [ Pow, numop
     ; Mul, numop @ [(TRef TStr, TInt), TRef TStr ; (TInt, TRef TStr), TRef TStr]
+    ; Div, numop ; Mod, intop
     ; Add, numcharop @ [(TRef TStr,TRef TStr), TRef TStr] ; Sub, numcharop
     ; Shl, intop ; Shr, intop ; Sha, intop
     ; Bitand, intop ; Bitxor, intop ; Bitor, intop

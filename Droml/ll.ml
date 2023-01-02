@@ -32,6 +32,9 @@ type bop =
   | FSub
   | Mul
   | FMul
+  | Div
+  | FDiv
+  | Rem
   | Shl
   | Shr
   | Sha
@@ -133,6 +136,9 @@ let binop_to_string : (bop * string) list =
   ; FSub, "fsub"
   ; Mul,  "mul"
   ; FMul, "fmul"
+  ; Div,  "sdiv"
+  ; FDiv, "fdiv"
+  ; Rem,  "srem"
   ; Shl,  "shl"
   ; Shr,  "lshr"
   ; Sha,  "ashr"

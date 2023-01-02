@@ -1,12 +1,2 @@
 fn main -> void
-    let x := [ x : x in [1...10000] : [ y : y in [1...x] : divides(y,x) ].length = 2 ]
-    printf("{0}\n", x)
-
-fn divides : x:int, y:int -> bool
-   if x = 0 || x > y
-       return false
-   mut x1 := x
-   while x1 < y
-       x1 := x1 + x
-   return x1=y
-        
+    printf("{0}\n", [ x : x in [1...1000] : [ y : y in [1...x] : x%y = 0 ].length = 2 ])

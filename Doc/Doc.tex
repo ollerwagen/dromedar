@@ -389,13 +389,24 @@ fn main -> void
 						\drmrule{}{}{O}{\mc{**} :: \mc{(flt,int)->flt}}{TybopPowFltInt}
 					\end{align*}
 				
-				\subsubsubsection{Multiplication}
+				\subsubsubsection{Multiplication, Division, Modulo}
 				
 					\begin{align*}
 						\drmrule{}{}{O}{\mc{*} :: \mc{(int,int)->int}}{TyBopMulInt},\ \ &
 						\drmrule{}{}{O}{\mc{*} :: \mc{(flt,flt)->flt}}{TyBopMulInt}\\
 						\drmrule{}{}{O}{\mc{*} :: \mc{(int,flt)->flt}}{TyBopMulIntFlt},\ \ &
 						\drmrule{}{}{O}{\mc{*} :: \mc{(flt,int)->flt}}{TybopMulFltInt}
+					\end{align*}
+					
+					\begin{align*}
+						\drmrule{}{}{O}{\mc{/} :: \mc{(int,int)->int}}{TyBopDivInt},\ \ &
+						\drmrule{}{}{O}{\mc{/} :: \mc{(flt,flt)->flt}}{TyBopDivInt}\\
+						\drmrule{}{}{O}{\mc{/} :: \mc{(int,flt)->flt}}{TyBopDivIntFlt},\ \ &
+						\drmrule{}{}{O}{\mc{/} :: \mc{(flt,int)->flt}}{TybopDivFltInt}
+					\end{align*}
+					
+					\begin{align*}
+						\drmrule{}{}{O}{\mc{\%} :: \mc{(int,int)->int}}{TyBopModInt}
 					\end{align*}
 				
 				\subsubsubsection{Addition and Subtraction}

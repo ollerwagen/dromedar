@@ -151,6 +151,9 @@ module Translator = struct
       ; (Sub,    TChar, TChar), (TChar, Sub )
       ; (Mul,    TInt,  TInt ), (TInt,  Mul )
       ; (Mul,    TFlt,  TFlt ), (TFlt,  FMul)
+      ; (Div,    TInt,  TInt ), (TInt,  Div )
+      ; (Div,    TFlt,  TFlt ), (TFlt,  FDiv)
+      ; (Mod,    TInt,  TInt ), (TInt,  Rem )
       ; (Shl,    TInt,  TInt ), (TInt,  Shl )
       ; (Shr,    TInt,  TInt ), (TInt,  Shr )
       ; (Sha,    TInt,  TInt ), (TInt,  Sha )
@@ -382,6 +385,8 @@ module Translator = struct
 
           let (eop,ellt,es,egc), (cop,cllt,cs,_) = cmp_exp c' e, cmp_exp c' cnd in
           let cd_ls = List.map (fun (_,e) -> cmp_exp c' e) vs in
+          
+          let e_as_int = gensym "exp_int" in
 
           Id rsym_cast, cmp_ty t,
           (List.map (fun id -> E (Alloca (id, I64))) indexids) @
@@ -416,7 +421,13 @@ module Translator = struct
           ; L lbladd
           ] @
           es @
-          [ I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id vecp ; ellt, eop ])) ] @
+          (if snd e = TFlt then
+            let op,caststream = double_to_i64 eop in
+            caststream @ [ I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id vecp ; I64, op ])) ]
+          else
+            [ I (Bitcast (e_as_int, ellt, eop, I64))
+            ; I (Call (None, Void, Gid "_addelem", [ Ptr I8, Id vecp ; I64, Id e_as_int ])) ]
+          ) @
           (if handlegc_e then
             addchild (Ptr I8, Id vecp) (ellt, eop) @ if egc then removeref (ellt, eop) else []
           else []) @

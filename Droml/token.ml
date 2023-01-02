@@ -7,6 +7,8 @@ type op =
   | Bang
   | Starstar
   | Star
+  | Slash
+  | Percent
   | Plus
   | Dash
   | LShift
@@ -80,6 +82,8 @@ let print_token (t:token) : string =
       Bang,        "!"
     ; Starstar,    "**"
     ; Star,        "*"
+    ; Slash,       "/"
+    ; Percent,     "%"
     ; Plus,        "+"
     ; Dash,        "-"
     ; LShift,      "<<"

@@ -11,6 +11,8 @@ let uop_string : (uop * string) list =
 type bop =
   | Pow
   | Mul
+  | Div
+  | Mod
   | Add
   | Sub
   | Shl
@@ -24,7 +26,8 @@ type bop =
   | Logor
 
 let bop_string : (bop * string) list =
-  [ Pow, "**" ; Mul, "*" ; Add, "+" ; Sub, "-"
+  [ Pow, "**" ; Mul, "*" ; Div, "/" ; Mod, "%"
+  ; Add, "+" ; Sub, "-"
   ; Shl, "<<" ; Shr, ">>" ; Sha, ">>>"
   ; Bitand, "&" ; Bitxor, "^" ; Bitor, "|"
   ; Logand, "&&" ; Logxor, "^^" ; Logor, "||" ]

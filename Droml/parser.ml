@@ -19,7 +19,7 @@ module Parser = struct
     ; [ Bitand ]
     ; [ LShift; RShift; AShift ]
     ; [ Plus; Dash ]
-    ; [ Star ]
+    ; [ Star; Slash; Percent ]
     ; [ Starstar ]
     ]
 
@@ -28,6 +28,8 @@ module Parser = struct
   let binary_assocs : (bop * prec) list = [
       Pow,       RightAssoc
     ; Mul,       LeftAssoc
+    ; Div,       LeftAssoc
+    ; Mod,       LeftAssoc
     ; Add,       LeftAssoc
     ; Sub,       LeftAssoc
     ; Shl,       LeftAssoc
@@ -52,6 +54,8 @@ module Parser = struct
   let bop_from_token : (Token.token * bop) list = [
       Token.Op Token.Starstar, Pow
     ; Token.Op Token.Star,     Mul
+    ; Token.Op Token.Slash,    Div
+    ; Token.Op Token.Percent,  Mod
     ; Token.Op Token.Plus,     Add
     ; Token.Op Token.Dash,     Sub
     ; Token.Op Token.LShift,   Shl
