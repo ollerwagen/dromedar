@@ -1,2 +1,3 @@
 true: use_str
 <cutils>: -traverse
+<obj>: -traverse

@@ -253,5 +253,5 @@ let print_ginstr (gi:ginstr) : string =
 
 let print_llprog (p : ginstr list) : string =
   (readall "cutils/intrinsics.ll") ^ "\n\n" ^
-  (readall "cutils/builtindecls.ll") ^ "\n\n" ^
+  (readall "cutils/drmstdlib/drmstdlib.ll") ^ "\n\n" ^
   (String.concat "\n" (List.map print_ginstr p))

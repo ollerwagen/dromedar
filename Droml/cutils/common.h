@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "gc.h"
+
 
 typedef int64_t i64;
 typedef char    i8;

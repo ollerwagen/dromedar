@@ -119,7 +119,7 @@ module Translator = struct
 
   (* context buildup with all builtin functions (see builtins.ml) *)
   let base_ctxt =
-    List.fold_left (fun c (m,id,t) -> Ctxt.add_binding_to_module c m (id,(t, cmp_ty t, Gid id))) Ctxt.empty builtins
+    List.fold_left (fun c (m,id,t,op) -> Ctxt.add_binding_to_module c m (id,(t, cmp_ty t, op))) Ctxt.empty builtins
 
   
   let allocate (size : Ll.operand) (t : Ll.llty) (name : string) : stream =
@@ -565,7 +565,7 @@ module Translator = struct
           let printf_call =
             begin match opt with
               | Sprintf -> []
-              | Printf  -> [ I (Call (None, Void, Gid "print_str", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym)
+              | Printf  -> [ I (Call (None, Void, Gid "_IO$print_str", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym)
             end in
           Id rsym, strty, (args_cmpd @ makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), true
 
@@ -1009,7 +1009,7 @@ module Translator = struct
             end in
           let vllt = cmp_ty vt in
           let llid = gensym id in
-          Ctxt.add_binding c (id, (vt, Ptr vllt, Gid llid)),
+          Ctxt.add_binding c (id, (vt, vllt, Gid llid)),
           s @ [ GDecl (llid, vllt, op) ]
       | GFDecl (id,args,rt,b) ->
           (* allocate a stack slot for all variables *)

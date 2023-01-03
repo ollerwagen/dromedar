@@ -26,7 +26,7 @@ let () =
   let parses' =
     List.map2 (fun p filename -> { t = Module (filename_to_module filename) ; start = 0 ; length = 0 } :: p) parses filenames in
   let program = List.fold_left (@) [] parses' in
-  let _ = Printf.printf "\n%s\n" (Ast.print_program program) in
+  (* let _ = Printf.printf "\n%s\n" (Ast.print_program program) in *)
 
   let annt_prog =
     try TypeChecker.check_program program
@@ -52,5 +52,5 @@ let () =
     -lm to add math.h library because apparently that is necessary
    *)
   let _ = Sys.command "clang -S Out.ll -O3" in
-  let _ = Sys.command "clang -o a.out Out.ll cutils/*.o -L. ./cutils/gc.so ./cutils/listops.so -lstdc++ -lm -O0" in
+  let _ = Sys.command "clang -o a.out Out.ll obj/*.o -L. ./obj/gc.so ./obj/listops.so -L. ./obj/cpputils_File.so -lstdc++ -lm -O3" in
   ()

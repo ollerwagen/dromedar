@@ -237,23 +237,20 @@ fn main -> void
 			
 			Functions are also declared globally. They can call each other and themselves recursively within their respective function bodies.
 			
-		\subsection{Builtin Functions}
+		\subsection{Standard Library}
 		
-			The Dromedar standard library includes the following functions:
+			The Dromedar standard library includes the following functions and objects:
 			
-			\subsubsection{String Operations}
-			
-				String operations are always preceded by the \code{Str} library name.
+			\subsubsection{\code{Str}: String Operations}
 			
 				\begin{longtable}{l|l|l}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{Str.of_int} & \code{int -> string} & transforms an integer into a string \\
-					\code{Str.of_flt} & \code{flt -> string} & transforms a decimal number into a string \\
-					\code{Str.concat} & \code{(string,string) -> string} & concatenates two strings
+					\code{Str.of_flt} & \code{flt -> string} & transforms a decimal number into a string
 				\end{longtable}
 			
-			\subsubsection{I/O}
+			\subsubsection{\code{IO}: Standard I/O Operations}
 			
 				Printing operations are always preceded by the \code{IO} library name.
 			
@@ -262,7 +259,29 @@ fn main -> void
 					\midrule
 					\code{IO.print_str} & \code{string -> void} & prints a string to the console\\
 					\code{IO.print_int} & \code{int -> void} & prints an integer to the console\\
-					\code{IO.print_flt} & \code{flt -> void} & prints a real number to the console
+					\code{IO.print_flt} & \code{flt -> void} & prints a real number to the console\\
+					\code{IO.print_char} & \code{char -> void} & prints a character to the console\\
+					\code{IO.print_bool} & \code{bool -> void} & prints \code{"true"} or \code{"false"} to the console
+				\end{longtable}
+			
+			\subsubsection{\code{File}: File I/O}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{File.readall} & \code{string -> [string]} & returns all lines from the file with the given input name
+				\end{longtable}
+			
+			\subsubsection{\code{Math} : Mathematical Operations}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{Math.sin} & \code{flt -> flt} & sine function \\
+					\code{Math.cos} & \code{flt -> flt} & cosine function \\
+					\code{Math.tan} & \code{flt -> flt} & tangent function \\
+					\code{Math.e} & \code{flt} & Euler's constant \\
+					\code{Math.pi} & \code{flt} & $\pi$ constant
 				\end{longtable}
 		
 	\section{Garbage Collection}

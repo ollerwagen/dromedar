@@ -115,7 +115,7 @@ module TypeChecker = struct
     end
   
   let startcontext : Ctxt.t =
-    List.fold_left (fun c (m,id,f) -> Ctxt.add_binding_to_module c m (id, (f, Const))) Ctxt.empty builtins
+    List.fold_left (fun c (m,id,f,_) -> Ctxt.add_binding_to_module c m (id, (f, Const))) Ctxt.empty builtins
 
   let uop_types : (uop * (ty * ty) list) list =
     [ Neg, [ 
