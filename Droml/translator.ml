@@ -106,9 +106,11 @@ module Translator = struct
 
   and cmp_rty (rt : Ast.rty) : Ll.llty =
     begin match rt with
-      | TStr        -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
-      | TArr t      -> Struct [ I64 ; Ptr (Array (0L, cmp_ty t)) ]
-      | TFun (a,rt) -> Func ((List.map cmp_ty a), cmp_retty rt)
+      | TStr         -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
+      | TArr t       -> Struct [ I64 ; Ptr (Array (0L, cmp_ty t)) ]
+      | TFun (a,rt)  -> Func ((List.map cmp_ty a), cmp_retty rt)
+      | TNamed _     -> I8
+      | TModNamed _  -> I8
     end
   
   and cmp_retty (t : Ast.retty) : Ll.llty =
@@ -413,8 +415,8 @@ module Translator = struct
           let rsym, rsym_cast, vecp = gensym "listcomp", gensym "listcompcast", gensym "listvec" in
           let handlegc_e =
             begin match snd e with
-              | TRef _ -> true
-              | _      -> false
+              | TRef _ | TNullRef _ -> true
+              | _                   -> false
             end in
 
           let c' = List.fold_left
@@ -707,7 +709,7 @@ module Translator = struct
                 Id rsym, llrt,
                 fs @ List.concat (List.map getstream argcs) @ caststreams @
                 [ I (Call (Some rsym, llrt, fop, argcs')) ] @ arggcops,
-                begin match t with | TRef _ -> true | _ -> false end
+                begin match t with | TRef _ | TNullRef _ -> true | _ -> false end
             | _ -> Stdlib.failwith "not a function, abort"
           end
 
@@ -773,11 +775,11 @@ module Translator = struct
           Ctxt.add_binding c (id, (vt, vllt, Id llid)),
           s @ crosscaststream @ [ E (Alloca (llid, vllt)) ; I (Store (ellt, op, Id llid)) ] @
             begin match vt,gc with
-              | TRef _, false -> addref (ellt,op)
+              | TRef _, false | TNullRef _, false -> addref (ellt,op)
               | _             -> []
             end,
           begin match vt with
-            | TRef _ -> (vllt, Id llid) :: refvars
+            | TRef _ | TNullRef _ -> (vllt, Id llid) :: refvars
             | _      -> refvars
           end
           (* add pref and remove it from %op: cancel each other out *)

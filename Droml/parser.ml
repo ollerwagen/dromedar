@@ -119,6 +119,17 @@ module Parser = struct
         | Token.KString ->
             let _,s' = advance s in
             TStr, s'
+        | Token.Id id ->
+            let s' = snd @@ advance s in
+            begin match (peek s').t with
+              | Token.Dot ->
+                  let s'' = snd @@ advance s' in
+                  begin match (peek s'').t with
+                    | Token.Id id' -> TModNamed (id,id'), snd @@ advance s''
+                    | _ -> raise @@ ParseError (ofnode "Expected a type name" (peek s''))
+                  end
+              | _ -> TNamed id, s'
+            end
         | _             -> raise @@ ParseError (ofnode "Expected a reference type" (peek s))
       end in
     if (peek s').t = QuestionMark then

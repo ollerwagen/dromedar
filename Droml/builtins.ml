@@ -18,4 +18,10 @@ let builtins : (string * string * ty * operand) list =
   ; "Math", "tan", TRef (TFun ([TFlt], Ret TFlt)), Gid "_Math$tan"
   ; "Math", "e",   TFlt,                           Gid "_Math$e"
   ; "Math", "pi",  TFlt,                           Gid "_Math$pi"
+
+  ; "Regex", "compile", TRef (TFun ([TRef TStr], Ret (TNullRef (TModNamed ("Regex", "R"))))), Gid "_Regex$compile"
+  ; "Regex", "matches", TRef (TFun ([TRef (TModNamed ("Regex", "R")) ; TRef TStr], Ret TBool)), Gid "_Regex$matches"
   ]
+
+let builtin_tys : (string * string) list =
+  [ "Regex", "R" ]

@@ -61,6 +61,8 @@ and rty =
   | TStr
   | TArr of ty
   | TFun of ty list * retty
+  | TNamed of string
+  | TModNamed of string * string
 and retty =
   | Void
   | Ret of ty
@@ -127,6 +129,8 @@ and print_rty (r : rty node) : string =
     | TArr t -> Printf.sprintf "[%s]" (print_ty @@ ofnode t r)
     | TFun (args,rt) ->
         Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map (fun arg -> print_ty (ofnode arg r)) args)) (print_retty (ofnode rt r))
+    | TNamed id        -> id
+    | TModNamed (m,id) -> Printf.sprintf "%s.%s" m id
   end
 
 let print_incl (i : inclusion * inclusion) : string =

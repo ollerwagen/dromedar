@@ -17,15 +17,17 @@ gc:
 	clang -fpic -shared cutils/gc.cpp -o $(OUT)/gc.so -O3
 
 intrinsics:
-	$(COMPILE) $(INCL) -o $(OUT)/File.o -c $(STDLIB)/File.c
-	$(COMPILE) $(INCL) -o $(OUT)/IO.o -c $(STDLIB)/IO.c
-	$(COMPILE) $(INCL) -o $(OUT)/Math.o -c $(STDLIB)/Math.c
-	$(COMPILE) $(INCL) -o $(OUT)/Str.o -c $(STDLIB)/Str.c
+	$(COMPILE) $(INCL) -o $(OUT)/File.o  -c $(STDLIB)/File.c
+	$(COMPILE) $(INCL) -o $(OUT)/IO.o    -c $(STDLIB)/IO.c
+	$(COMPILE) $(INCL) -o $(OUT)/Math.o  -c $(STDLIB)/Math.c
+	$(COMPILE) $(INCL) -o $(OUT)/Str.o   -c $(STDLIB)/Str.c
+	$(COMPILE) $(INCL) -o $(OUT)/Regex.o -c $(STDLIB)/Regex.c
 	$(COMPILE) -c cutils/common.c -o $(OUT)/common.o
 	$(COMPILE) -c cutils/intrinsics.c -o $(OUT)/intrinsics.o
 	$(COMPILE) -c cutils/sprintflib.c -o $(OUT)/sprintflib.o
 	clang -fpic -shared cutils/listops.cpp -o $(OUT)/listops.so -O3
-	clang -fpic -shared -I cutils/ cutils/drmstdlib/cpputils/File.cpp -o $(OUT)/cpputils_File.so -O3
+	clang -fpic -shared -I cutils/ cutils/drmstdlib/cpputils/File.cpp -o  $(OUT)/cpputils_File.so -O3
+	clang -fpic -shared -I cutils/ cutils/drmstdlib/cpputils/Regex.cpp -o $(OUT)/cpputils_Regex.so -O3
 
 compiler:
 	ocamlbuild -pkg num main.native

@@ -11,7 +11,8 @@ module TypeChecker = struct
   module Ctxt = struct
 
     (* List.hd @@ List.assoc (fst l) (snd l)    <=>    top level block in current module *)
-    type t = string * (string * ((string * (ty * mutability)) list) list) list
+    (* per module: string list is list of recognized type names *)
+    type t = string * (string * ((string * (ty * mutability)) list list * string list)) list
 
     (* invariant: every file starts with a module declaration (ensured by the main.ml file) *)
     let empty : t = "", []
@@ -20,7 +21,7 @@ module TypeChecker = struct
     
     let has_in_module (c:t) (m:string) (id:string) : bool =
       if List.mem_assoc m (snd c) then
-        List.exists (List.mem_assoc id) (List.assoc m (snd c))
+        List.exists (List.mem_assoc id) (fst (List.assoc m (snd c)))
       else
         false
 
@@ -28,13 +29,37 @@ module TypeChecker = struct
       has_in_module c (fst c) id
 
     let has_toplevel (c:t) (id:string) : bool =
-      List.mem_assoc id (List.hd (List.assoc (fst c) (snd c)))
+      List.mem_assoc id (List.hd (fst (List.assoc (fst c) (snd c))))
 
     let has_in_any_binding (c:t) (id:string) : bool =
-      List.exists (fun (_,l) -> List.exists (List.mem_assoc id) l) (snd c)
+      List.exists (fun (_,(l,_)) -> List.exists (List.mem_assoc id) l) (snd c)
+
+    let has_namedt (c:t) (id:string) : bool =
+      if List.mem_assoc (fst c) (snd c) then
+        List.mem id (snd (List.assoc (fst c) (snd c)))
+      else
+        false
+
+    let has_modnamedt (c:t) (m:string) (id:string): bool =
+      if List.mem_assoc m (snd c) then
+        List.mem id (snd (List.assoc m (snd c)))
+      else
+        false
+
+    let add_modnamedt (c:t) (m:string) (id:string) : t =
+      let l,c' =
+        if List.mem_assoc m (snd c) then
+          List.assoc m (snd c), List.remove_assoc m (snd c)
+        else
+          ([[]], []), snd c
+        in
+      fst c, (m, (fst l, id :: snd l)) :: c'
+
+    let add_namedt (c:t) (id:string) : t =
+      add_modnamedt c (fst c) id
 
     let get_from_module (c:t) (m:string) (id:string) : ty * mutability =
-      let l = List.assoc m (snd c) in
+      let l = fst (List.assoc m (snd c)) in
       let found,res =
         List.fold_left (fun (f,r) l -> if f then true,r else if List.mem_assoc id l then true, List.assoc id l else false,r) (false,(TInt,Const)) l in
       if found then res else raise Not_found
@@ -43,10 +68,10 @@ module TypeChecker = struct
       get_from_module c (fst c) id
 
     let get_from_any_binding (c:t) (id:string) : ty * mutability =
-      let rec aux (m : (string * ((string * (ty * mutability)) list) list) list) : ty * mutability =
+      let rec aux (m : (string * ((string * (ty * mutability)) list list * string list)) list) : ty * mutability =
         begin match m with
           | []    -> raise Not_found
-          | x::xs -> if List.exists (List.mem_assoc id) (snd x) then get_from_module c (fst x) id else aux xs
+          | x::xs -> if List.exists (List.mem_assoc id) (fst (snd x)) then get_from_module c (fst x) id else aux xs
         end
       in
       aux (snd c)
@@ -54,16 +79,16 @@ module TypeChecker = struct
     let add_level (c:t) : t =
       let l = List.assoc (fst c) (snd c) in
       let c' = List.remove_assoc (fst c) (snd c) in
-      fst c, (fst c, [] :: l) :: c'
+      fst c, (fst c, ([] :: fst l, snd l)) :: c'
 
     let add_binding_to_module (c:t) (m:string) (bnd : string*(ty*mutability)) : t =
       let l,c' =
         if List.mem_assoc m (snd c) then
           List.assoc m (snd c), List.remove_assoc m (snd c)
         else
-          [[]], snd c
+          ([[]], []), snd c
         in
-      fst c, (m, (bnd :: List.hd l) :: List.tl l) :: c'
+      fst c, (m, ((bnd :: List.hd (fst l)) :: List.tl (fst l), snd l)) :: c'
 
     let add_binding (c:t) (bnd : string*(ty*mutability)) : t = add_binding_to_module c (fst c) bnd
 
@@ -71,7 +96,7 @@ module TypeChecker = struct
       if List.mem_assoc id (snd c) then
         id, snd c
       else
-        id, (id, [[]]) :: snd c
+        id, (id, ([[]], [])) :: snd c
 
   end
 
@@ -115,7 +140,8 @@ module TypeChecker = struct
     end
   
   let startcontext : Ctxt.t =
-    List.fold_left (fun c (m,id,f,_) -> Ctxt.add_binding_to_module c m (id, (f, Const))) Ctxt.empty builtins
+    let c' = List.fold_left (fun c (m,id) -> Ctxt.add_modnamedt c m id) Ctxt.empty builtin_tys in
+    List.fold_left (fun c (m,id,f,_) -> Ctxt.add_binding_to_module c m (id, (f, Const))) c' builtins
 
   let uop_types : (uop * (ty * ty) list) list =
     [ Neg, [ 
@@ -191,6 +217,7 @@ module TypeChecker = struct
           let arglists = crossp spts in
           let fts = crossp_single arglists rspts in
           List.map (fun (fta,ftr) -> TRef (TFun (fta,ftr))) fts
+      | TRef (TNamed _) | TRef (TModNamed _) -> [t]
     end
   and suptys (t:ty) : ty list =
     begin match t with
@@ -212,6 +239,8 @@ module TypeChecker = struct
           let arglists = crossp sbts in
           let fts = crossp_single arglists rsbts in
           List.map (fun (fta,ftr) -> TRef (TFun (fta,ftr))) fts
+      | TRef (TNamed id)        -> [TRef (TNamed id)        ; TNullRef (TNamed id)]
+      | TRef (TModNamed (m,id)) -> [TRef (TModNamed (m,id)) ; TNullRef (TModNamed (m,id))]
     end
   
   let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
@@ -241,6 +270,18 @@ module TypeChecker = struct
       | TRef (TArr t) -> is_printable t
       | _ -> false
     end
+
+  let rec check_ty (c:Ctxt.t) (t : ty node) : unit =
+    begin match t.t with
+      | TRef (TNamed id)        | TNullRef (TNamed id)        ->
+          if Ctxt.has_namedt c id then ()
+          else raise @@ TypeError (ofnode (Printf.sprintf "Type %s doesn't exist" id) t)
+      | TRef (TModNamed (m,id)) | TNullRef (TModNamed (m,id)) ->
+          if Ctxt.has_modnamedt c m id then ()
+          else raise @@ TypeError (ofnode (Printf.sprintf "Type %s.%s doesn't exist" m id) t)
+      | TRef (TArr st) | TNullRef (TArr st) -> check_ty c (ofnode st t)
+      | _ -> ()
+    end
   
   let rec check_exp (c:Ctxt.t) (exp_t : ty option) (e:exp node) : annt_exp =
     begin match e.t with
@@ -259,7 +300,7 @@ module TypeChecker = struct
             | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
             | t::ts -> LitArr annt_es, TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
           end
-      | EmptyList t -> EmptyList t.t, TRef (TArr t.t)
+      | EmptyList t -> let () = check_ty c t in EmptyList t.t, TRef (TArr t.t)
       | RangeList (e1,i1,i2,e2) ->
           let e1',e2' = check_exp c None e1, check_exp c None e2 in
           begin match snd e1', snd e2' with
@@ -288,7 +329,7 @@ module TypeChecker = struct
             end
           else
             raise @@ TypeError (ofnode "ternary condition must be of type bool" cnd)
-      | Null    rt  -> Null rt.t, TNullRef rt.t
+      | Null    rt  -> let () = check_ty c (ofnode (TNullRef rt.t) rt) in Null rt.t, TNullRef rt.t
       | Sprintf (Sprintf, s, es) ->
           let annt_es = List.map (check_exp c None) es in
           let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
@@ -401,6 +442,7 @@ module TypeChecker = struct
             begin match t with
               | None   -> VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
               | Some t ->
+                  let () = check_ty c t in
                   if subtype (snd et) t.t || crosstype (snd et) t.t then
                     VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false
                   else
@@ -520,12 +562,19 @@ module TypeChecker = struct
             begin match t with
               | None   -> GVDecl(id,m,None,et), Ctxt.add_binding c (id,(snd et,m))
               | Some t ->
+                  let () = check_ty c t in
                   if subtype (snd et) t.t then
                     GVDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m))
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match") gs)
             end
       | GFDecl (id,args,rt,b) ->
+          let () = List.iter (check_ty c) (List.map snd args) in
+          let () =
+            begin match rt.t with
+              | Void  -> ()
+              | Ret t -> check_ty c (ofnode t rt)
+            end in
           if alldistinct (List.map fst args) then
             let c' = Ctxt.add_level c in
             let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in

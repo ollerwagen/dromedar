@@ -62,6 +62,8 @@ and print_rty (r:rty) : string =
     | TArr t -> Printf.sprintf "[%s]" (print_ty t)
     | TFun (args,rt) ->
         Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map (fun arg -> print_ty arg) args)) (print_retty rt)
+    | TNamed id        -> id
+    | TModNamed (m,id) -> Printf.sprintf "%s.%s" m id
   end
 
 let print_incl (i : inclusion * inclusion) : string =

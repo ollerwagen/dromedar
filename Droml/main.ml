@@ -52,5 +52,5 @@ let () =
     -lm to add math.h library because apparently that is necessary
    *)
   let _ = Sys.command "clang -S Out.ll -O3" in
-  let _ = Sys.command "clang -o a.out Out.ll obj/*.o -L. ./obj/gc.so ./obj/listops.so -L. ./obj/cpputils_File.so -lstdc++ -lm -O3" in
+  let _ = Sys.command "clang -o a.out Out.ll obj/*.o -L. ./obj/gc.so ./obj/listops.so -L. ./obj/cpputils_File.so -L. ./obj/cpputils_Regex.so -lstdc++ -lm -O3" in
   ()

@@ -1066,8 +1066,10 @@ fn main -> void
 				                 | RefType %QuestionMark
 				                 
 				RefType          ::=
-				                 | %Str
+				                 | %String
 				                 | %LBrack Type %RBrack
+				                 | %Identifier
+				                 | %Identifier %Dot %Identifier
 				                 
 				GlobalExpression ::= Expression*
 			

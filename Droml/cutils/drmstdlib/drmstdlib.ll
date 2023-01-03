@@ -16,3 +16,7 @@ declare double @_Math$tan(double)
 
 @_Math$e = external global double
 @_Math$pi = external global double
+
+declare i8* @_Regex$compile({ i64 , [0 x i8]* }*)
+declare i1  @_Regex$matches(i8*, { i64 , [0 x i8]* }*)
+declare i8* @_Regex$compile_number()
