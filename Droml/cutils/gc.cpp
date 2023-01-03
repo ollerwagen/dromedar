@@ -1,4 +1,5 @@
 #define __DEBUG__ 0
+#define __AGGRESSIVE_GC__ 0
 
 
 
@@ -25,6 +26,9 @@ using GCTable = std::unordered_map<ptr, GCEntry, std::hash<ptr>, std::equal_to<p
 
 
 static GCTable table;
+
+static int64_t used_memory = 0;
+static int64_t next_gc = 0x10000;
 
 
 static void mark_reachable(GCEntry &ge) {
@@ -58,6 +62,8 @@ static void gcrun() {
     
     // printf("Before the GC Run:\n%s\n", print_table().c_str());
 
+    int64_t prev_size = table.size();
+
     // wipe all reachability info
     for (auto &it : table)
         it.second.reachable = false;
@@ -78,7 +84,8 @@ static void gcrun() {
     }
 
 #if __DEBUG__
-    printf("After the GC Run:\n%s\n", print_table().c_str());
+    printf("After GC Run: %ld freed objects\n", prev_size - table.size());
+    // printf("After the GC Run:\n%s\n", print_table().c_str());
 #endif
 }
 
@@ -97,7 +104,9 @@ extern "C" {
             return;
         table[p].prefs--;
 
+#if __AGGRESSIVE_GC__
         gcrun();
+#endif
     }
 
     ptr _allocate(size s) {
@@ -108,9 +117,15 @@ extern "C" {
         ptr res = (ptr)malloc(s);
         table[res].prefs++;
 
-        // need better heuristics than just calling it every time
-        // stress testing -> find bugs by running it on every allocate()
+#if __AGGRESSIVE_GC__
         gcrun();
+#else
+        used_memory += s;
+        if (used_memory >= next_gc) {
+            used_memory = 0;
+            gcrun();
+        }
+#endif
 
         return res;
     }
@@ -121,7 +136,10 @@ extern "C" {
 #endif
 
         table[p].prefs++;
+
+#if __AGGRESSIVE_GC__
         gcrun();
+#endif
     }
 
     void _addchild(ptr base, ptr child) {
@@ -130,7 +148,10 @@ extern "C" {
 #endif
 
         table[base].children.insert(child);
+
+#if __AGGRESSIVE_GC__
         gcrun();
+#endif
     }
 
     void _transferchildren(ptr from, ptr to) {
@@ -141,5 +162,9 @@ extern "C" {
         const auto &children = table[from].children;
         table[to].children.insert(children.begin(), children.end());
         table[from].children.clear();
+
+#if __AGGRESSIVE_GC__
+        gcrun();
+#endif
     }
 }

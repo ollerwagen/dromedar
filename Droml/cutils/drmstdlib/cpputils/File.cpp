@@ -39,10 +39,14 @@ extern "C" {
 
         for (i64 i = 0; i < res->size; i++) {
             res->base[i] = (string*) _allocate(sizeof(string*));
+            _addchild((i8*) res, (i8*) res->base[i]);
+            _removeref((i8*) res->base[i]);
+
             res->base[i]->size = strvec.at(i).length() + 1;
             res->base[i]->base = _allocate(res->base[i]->size);
             _addchild((i8*) res->base[i], res->base[i]->base);
             _removeref(res->base[i]->base);
+            
             strcpy(res->base[i]->base, strvec.at(i).c_str());
         }
 
