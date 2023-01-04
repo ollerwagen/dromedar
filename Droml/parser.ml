@@ -381,6 +381,12 @@ module Parser = struct
       let s''''' = expect s'''' Colon in
       let e2,s'''''' = parse_exp s''''' in
       { t = Ternary (c,e1,e2) ; start = start ; length = (peek s'''''').start - start }, s''''''
+
+    and parse_deref_expression (s : state) : exp node * state =
+      let start = (peek s).start in
+      let s' = expect s KAssert in
+      let e,s'' = parse_exp s' in
+      { t = Deref e ; start = start ; length = (peek s'').start - start }, s''
     in
 
     let start = (peek s).start in
@@ -408,6 +414,7 @@ module Parser = struct
                 parse_binary_expression 0 s
           end
       | QuestionMark -> parse_ternary_expression s
+      | KAssert -> parse_deref_expression s
       | _    -> parse_binary_expression 0 s
     end
 

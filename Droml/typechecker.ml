@@ -300,6 +300,12 @@ module TypeChecker = struct
             | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
             | t::ts -> LitArr annt_es, TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
           end
+      | Deref e ->
+          let e' = check_exp c None e in
+          begin match snd e' with
+            | TNullRef t -> Deref e', TRef t
+            | _          -> raise @@ TypeError (ofnode "Expression assertion must take maybe-null type argument" e)
+          end
       | EmptyList t -> let () = check_ty c t in EmptyList t.t, TRef (TArr t.t)
       | RangeList (e1,i1,i2,e2) ->
           let e1',e2' = check_exp c None e1, check_exp c None e2 in

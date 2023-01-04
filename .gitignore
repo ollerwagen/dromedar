@@ -4,9 +4,11 @@ Doc/Doc.out
 Doc/Doc.synctex.gz
 Doc/Doc.toc
 TODO.txt
+.vscode/
+Droml/DEBUG.txt
 Droml/_build/
-Droml/cutils/*.o
-Droml/cutils/*.so
+Droml/obj/
+Droml/Notes/
 Droml/.vscode/
 Droml/a.out
 Droml/droml

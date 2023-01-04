@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,6 +8,13 @@
 
 void _abort(i64 code) {
     exit(code);
+}
+
+void _checknull(i8* ptr) {
+    if (ptr == NULL) {
+        fprintf(stderr, "Null Pointer Exception in assert expression\n");
+        exit(1);
+    }
 }
 
 stringarr* _makestrvec(i64 argc, i8** argv) {

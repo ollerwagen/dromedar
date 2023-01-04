@@ -4,6 +4,7 @@
 #include "common.h"
 
 void _abort(i64 code);
+void _checknull(i8* ptr);
 
 stringarr* _makestrvec(i64 argc, i8** argv);
 

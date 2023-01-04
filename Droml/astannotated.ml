@@ -9,6 +9,7 @@ type exp' =
   | LitBool   of Token.tbool
   | LitStr    of string
   | LitArr    of annt_exp list
+  | Deref     of annt_exp
   | EmptyList of ty
   | RangeList of annt_exp * inclusion * inclusion * annt_exp
   | ListComp  of annt_exp * (string * annt_exp) list * annt_exp
@@ -84,6 +85,7 @@ let rec print_exp (e:annt_exp) : string =
     | LitBool   b           -> Printf.sprintf "%B"     b
     | LitStr    s           -> Printf.sprintf "\"%s\"" (String.escaped s)
     | LitArr    ls          -> Printf.sprintf "[%s]" (String.concat ", " (List.map print_exp ls))
+    | Deref     e           -> Printf.sprintf "assert %s" (print_exp e)
     | EmptyList t           -> Printf.sprintf "([] of %s)" (print_ty t)
     | RangeList (s,i1,i2,e) -> Printf.sprintf "[%s%s%s]" (print_exp s) (print_incl (i1,i2)) (print_exp e)
     | ListComp  (e,vs,c)    -> Printf.sprintf "[%s : %s : %s]" (print_exp e) (String.concat ", " (List.map (fun (id,e) -> Printf.sprintf "%s in %s" id (print_exp e)) vs)) (print_exp c)

@@ -352,6 +352,11 @@ module Translator = struct
           ),
           true
 
+      | Deref e, t ->
+          let asi8ptr = gensym "deref_ptr" in
+          let op,llt,s,gc = cmp_exp c e in
+          op, llt, s @ [ I (Bitcast (asi8ptr, llt, op, Ptr I8)) ; I (Call (None, Void, Gid "_checknull", [ Ptr I8, Id asi8ptr ])) ], gc
+
       | EmptyList rt, t -> cmp_exp c (LitArr [], t)
 
       | RangeList (e1,i1,i2,e2), t ->
