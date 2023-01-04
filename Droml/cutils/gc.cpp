@@ -2,7 +2,6 @@
 #define __AGGRESSIVE_GC__ 0
 
 
-
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>

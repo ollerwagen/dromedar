@@ -367,52 +367,6 @@ module Translator = struct
           true
 
       | ListComp (e,vs,cnd), t ->
-
-        (*
-          let drmarr = gensym "arr" in
-
-          let elem_t =
-            begin match t with
-              | TRef (TArr t) -> t
-              | _             -> Stdlib.failwith "no array type in list comprehension"
-            end in
-          
-          let arrdecl = VDecl (drmarr, Mut, None, (EmptyList elem_t, t)) in
-          let loopcenter = [ If (cnd, [ Assn ((Id drmarr, t), (Bop (Add, (Id drmarr, t), (LitArr [e], t)), t)) ], []) ] in
-
-          let loopstmts =
-            List.fold_right
-            (fun (id,(lexp,lt)) s ->
-                let lname, iname = gensym (id^"list"), gensym "i" in
-                let elem_t =
-                  begin match lt with
-                    | TRef (TArr t) -> t
-                    | _ -> Stdlib.failwith "should be array in list comprehension expression"
-                  end in
-                [ VDecl (lname, Const, None, (lexp,lt))
-                ; For (iname, (LitInt 0L, TInt), Incl, Excl, (Proj ((Id lname,lt), "length"), TInt),
-                    [ VDecl (id, Const, None, (Subscript ((Id lname, lt), (Id iname, TInt)), elem_t)) ] @ s)
-                ]
-            )
-            vs loopcenter
-            in
-
-          
-          let allstmts = arrdecl :: loopstmts in
-          let _ = Printf.printf "%s\n" (Astannotated.print_block 0 allstmts) in
-          
-
-          let c', declstream, _ = cmp_stmt Ast.Void c [] arrdecl in
-          let _, loopstream = cmp_block Ast.Void c' [] loopstmts in
-
-          let rsym = gensym "listcomp" in
-          let (_,_,arrop) = Ctxt.get c' drmarr in
-          
-          Id rsym, cmp_ty t,
-          declstream @ loopstream @ [ I (Load (rsym, cmp_ty t, arrop)) ],
-          true
-        *)
-        
           let indexids = List.mapi (fun i _ -> gensym (Printf.sprintf "i%d" i)) vs in
           let valueids = List.map (fun (id,_) -> gensym id) vs in
           let looplbls = List.map (fun _ -> gensym "headx", gensym "bodyx", gensym "endx") vs in
@@ -816,6 +770,7 @@ module Translator = struct
               | _ -> [] (* do not attempt to gc primitives *)
             end in
           c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars
+
       | Expr (e,t) ->
           begin match e with
             | Sprintf (Printf,s,es) -> let _,_,s,_ = cmp_exp c (e, TRef TStr) in c, s, refvars
@@ -847,11 +802,13 @@ module Translator = struct
                 end
             | _ -> Stdlib.failwith "can only compile function call as expression statement"
           end
+
       | If (cnd,t,nt) -> (* conditionals are bool -> primitive -> not GC'able (same for while, do-while) *)
           let cop,_,cs,_ = cmp_exp c cnd in
           let (_,s1), (_,s2) = cmp_block rt c refvars t, cmp_block rt c refvars nt in
           let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "ifi_lbl_end" in
           c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
+
       | Denull (id,e,t,nt) ->
           let nnsym, cmpres = gensym id, gensym "cmpres" in
           let ifnonnull, ifnull, lblend = gensym "denull_lbl_nonnull", gensym "denull_lbl_null", gensym "denull_end" in
@@ -860,7 +817,7 @@ module Translator = struct
           let (_,s1), (_,s2) = cmp_block rt c' refvars t, cmp_block rt c refvars nt in
           c,
           es @ [ E (Alloca (nnsym, ellt)) ; I (Cmp (cmpres, ICmp, Eq, ellt, eop, Null)) ; T (Cbr (Id cmpres, ifnull, ifnonnull)) ; L ifnonnull ; I (Store (ellt, eop, Id nnsym)) ] @
-            s1 @ [ T (Br lblend) ; L ifnull ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
+            s1 @ [ T (Br lblend) ; L ifnull ] @ s2 @ [ T (Br lblend) ; L lblend ] @ (if egc then removeref (ellt,eop) else []), refvars
       | While (cnd,b) ->
           let cop,_,cs,_ = cmp_exp c cnd in
           let _,s = cmp_block rt c refvars b in
