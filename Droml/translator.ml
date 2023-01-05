@@ -1027,20 +1027,21 @@ module Translator = struct
     [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
         let rval, strvec = gensym "mainret", gensym "strvec" in
         let strvecty = TRef (TArr (TRef TStr)) in
-        let maincall, term =
+        let maincall, term, makestrvec =
           begin match Ctxt.get_from_any_module c "main" with
             | TRef (TFun ([], Void)), _, mainop ->
-                [ Call (None, Void, mainop, []) ], Ret (Some (I64, IConst 0L))
+                [ Call (None, Void, mainop, []) ], Ret (Some (I64, IConst 0L)), false
             | TRef (TFun ([], Ret TInt)), _, mainop ->
-                [ Call (Some rval, cmp_ty TInt, mainop, []) ], Ret (Some (I64, Id rval))
+                [ Call (Some rval, cmp_ty TInt, mainop, []) ], Ret (Some (I64, Id rval)), false
             | TRef (TFun ([TRef (TArr (TRef TStr))], Void)), _, mainop ->
-                [ Call (None, Void , mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, IConst 0L))
+                [ Call (None, Void , mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, IConst 0L)), true
             | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), _, mainop ->
-                [ Call (Some rval, cmp_ty TInt, mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, Id rval))
+                [ Call (Some rval, cmp_ty TInt, mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, Id rval)), true
             | _ -> Stdlib.failwith "bad AST: bad main function"
           end in
-        ([ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] @
-        maincall @ destream (removeref (cmp_ty strvecty, Id strvec)),
+        ((if makestrvec then [ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] else []) @
+          maincall @ 
+          (if makestrvec then destream (removeref (cmp_ty strvecty, Id strvec)) else []),
         term),
         []
     )]
