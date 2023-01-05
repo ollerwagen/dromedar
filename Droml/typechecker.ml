@@ -266,8 +266,8 @@ module TypeChecker = struct
     
   let rec is_printable (t:ty) : bool =
     begin match t with
-      | TInt | TFlt | TChar | TBool | TRef TStr -> true
-      | TRef (TArr t) -> is_printable t
+      | TInt | TFlt | TChar | TBool | TRef TStr | TNullRef TStr-> true
+      | TRef (TArr t) | TNullRef (TArr t) -> is_printable t
       | _ -> false
     end
 
@@ -294,7 +294,12 @@ module TypeChecker = struct
       | LitBool b   -> LitBool b, TBool
       | LitStr  s   -> LitStr s, TRef TStr
       | LitArr  ls  ->
-          let annt_es = List.map (check_exp c None) ls in
+          let exp_t' =
+            begin match exp_t with
+              | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> Some t
+              | _                                               -> None
+            end in
+          let annt_es = List.map (check_exp c exp_t') ls in
           let spts = List.map suptys @@ List.map snd annt_es in
           begin match intersect spts with
             | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
@@ -306,14 +311,25 @@ module TypeChecker = struct
             | TNullRef t -> Deref e', TRef t
             | _          -> raise @@ TypeError (ofnode "Expression assertion must take maybe-null type argument" e)
           end
-      | EmptyList t -> let () = check_ty c t in EmptyList t.t, TRef (TArr t.t)
+      | EmptyList None ->
+          begin match exp_t with
+            | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> EmptyList t, TRef (TArr t)
+            | Some _               -> raise @@ TypeError (ofnode "List type doesn't match here" e)
+            | _                    -> raise @@ TypeError (ofnode "Cannot infer empty list element type" e)
+          end
+      | EmptyList (Some t) -> let () = check_ty c t in EmptyList t.t, TRef (TArr t.t)
       | RangeList (e1,i1,i2,e2) ->
-          let e1',e2' = check_exp c None e1, check_exp c None e2 in
+          let e1',e2' = check_exp c (Some TInt) e1, check_exp c (Some TInt) e2 in
           begin match snd e1', snd e2' with
             | TInt,TInt -> RangeList (e1',i1,i2,e2'), TRef (TArr TInt)
-            | _ -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
+            | _         -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
           end
       | ListComp (ex,vs,cnd) ->
+          let exp_t' =
+            begin match exp_t with
+              | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> Some t
+              | _                                               -> None
+            end in
           let c',avs =
             List.fold_left
               (fun (c,res) (id,exp) ->
@@ -324,10 +340,10 @@ module TypeChecker = struct
                 end
               )
               (c,[]) vs in
-          let ae, acnd = check_exp c' None ex, check_exp c' None cnd in
+          let ae, acnd = check_exp c' exp_t' ex, check_exp c' (Some TBool) cnd in
           ListComp (ae,avs,acnd), TRef (TArr (snd ae))
       | Ternary (cnd,e1,e2) ->
-          let cnd',e1',e2' = check_exp c None cnd, check_exp c None e1, check_exp c None e2 in
+          let cnd',e1',e2' = check_exp c (Some TBool) cnd, check_exp c None e1, check_exp c None e2 in
           if snd cnd' = TBool then
             begin match intersect_single (suptys (snd e1')) (suptys (snd e2')) with
               | []    -> raise @@ TypeError (ofnode "types in ternary expression must have common supertype" e)
@@ -335,7 +351,13 @@ module TypeChecker = struct
             end
           else
             raise @@ TypeError (ofnode "ternary condition must be of type bool" cnd)
-      | Null    rt  -> let () = check_ty c (ofnode (TNullRef rt.t) rt) in Null rt.t, TNullRef rt.t
+      | Null None -> 
+          begin match exp_t with
+            | Some (TNullRef rt) -> Null rt, TNullRef rt
+            | Some _             -> raise @@ TypeError (ofnode "Maybe-null reference type doesn't match here" e)
+            | _                  -> raise @@ TypeError (ofnode "cannot infer null type" e)
+          end
+      | Null (Some rt) -> let () = check_ty c (ofnode (TNullRef rt.t) rt) in Null rt.t, TNullRef rt.t
       | Sprintf (Sprintf, s, es) ->
           let annt_es = List.map (check_exp c None) es in
           let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
@@ -411,7 +433,7 @@ module TypeChecker = struct
             | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
           end
       | Subscript (l,r) ->
-          begin match check_exp c None l, check_exp c None r with
+          begin match check_exp c None l, check_exp c (Some TInt) r with
             | (l', TRef (TArr t)), (r', TInt) -> Subscript ((l', TRef (TArr t)), (r', TInt)), t
             | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (Ast.print_ty (ofnode t l))) l)
             | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (Ast.print_ty (ofnode t r))) r)
@@ -444,10 +466,12 @@ module TypeChecker = struct
           if Ctxt.has_toplevel c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in this block" id) s)
           else
-            let et = check_exp c None e in
             begin match t with
-              | None   -> VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
+              | None   ->
+                  let et = check_exp c None e in
+                  VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
               | Some t ->
+                  let et = check_exp c (Some t.t) e in
                   let () = check_ty c t in
                   if subtype (snd et) t.t || crosstype (snd et) t.t then
                     VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false

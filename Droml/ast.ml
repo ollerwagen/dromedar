@@ -78,11 +78,11 @@ type exp =
   | LitStr    of string
   | LitArr    of exp node list
   | Deref     of exp node
-  | EmptyList of ty node
+  | EmptyList of ty node option
   | RangeList of exp node * inclusion * inclusion * exp node
   | ListComp  of exp node * (string * exp node) list * exp node
   | Ternary   of exp node * exp node * exp node
-  | Null      of rty node
+  | Null      of rty node option
   | Sprintf   of formatstr * string node * exp node list
   | Bop       of bop * exp node * exp node
   | Uop       of uop * exp node
@@ -152,11 +152,13 @@ let rec print_exp (e : exp node) : string =
     | LitStr    s           -> Printf.sprintf "\"%s\"" (String.escaped s)
     | LitArr    ls          -> Printf.sprintf "[%s]" (String.concat ", " (List.map print_exp ls))
     | Deref     e           -> Printf.sprintf "assert %s" (print_exp e)
-    | EmptyList t           -> Printf.sprintf "([] of %s)" (print_ty t)
+    | EmptyList None        -> "[]"
+    | EmptyList (Some t)    -> Printf.sprintf "([] of %s)" (print_ty t)
     | RangeList (s,i1,i2,e) -> Printf.sprintf "[%s%s%s]" (print_exp s) (print_incl (i1,i2)) (print_exp e)
     | ListComp  (e,vs,c)    -> Printf.sprintf "[%s : %s : %s]" (print_exp e) (String.concat ", " (List.map (fun (id,e) -> Printf.sprintf "%s in %s" id (print_exp e)) vs)) (print_exp c)
     | Ternary   (c,e1,e2)   -> Printf.sprintf "(?%s -> %s : %s)" (print_exp c) (print_exp e1) (print_exp e2)
-    | Null      t           -> Printf.sprintf "(null of %s)" (print_rty t)
+    | Null      None        -> "null"
+    | Null      (Some t)    -> Printf.sprintf "(null of %s)" (print_rty t)
     | Sprintf   (t,s,es)    -> Printf.sprintf "%sprintf(\"%s\"%s)" (if t = Sprintf then "s" else "") (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
     | Bop       (o,l,r)     -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)
     | Uop       (o,e)       -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)

@@ -393,23 +393,31 @@ module Parser = struct
     begin match (peek s).t with
       | KNull ->
           let s' = snd (advance s) in
-          let s'' = expect s' KOf in
-          let t,s''' = parse_rty s'' in
-          let t' = 
-            begin match t.t with
-              | TRef t     -> t
-              | TNullRef _ -> raise @@ ParseError (ofnode "null expression must use non-null reference type" (peek s'')) 
-              | _          -> raise @@ ParseError (ofnode "null expression must use reference type" (peek s''))
+          let t,s'' =
+            begin match (peek s').t with
+              | KOf ->
+                  let t,s'' = parse_ty (snd @@ advance s') in
+                  let t' =
+                    begin match t.t with
+                      | TRef t     -> t
+                      | TNullRef _ -> raise @@ ParseError (ofnode "null expression must use non-null reference type" (peek s'')) 
+                      | _          -> raise @@ ParseError (ofnode "null expression must use reference type" (peek s''))
+                    end in
+                  Some (ofnode t' t), s''
+              | _   -> None, s'
             end in
-          { t = Null (ofnode t' t) ; start = start ; length = (peek s''').start - start }, s'''
+          { t = Null t ; start = start ; length = (peek s'').start - start }, s''
       | LBrack -> (* either empty list or array literal *)
           let s' = snd (advance s) in
           begin match (peek s').t with
             | RBrack -> (* empty list *)
                 let s'' = snd (advance s') in
-                let s''' = expect s'' KOf in
-                let t,s'''' = parse_ty s''' in
-                { t = EmptyList t ; start = start ; length = (peek s'''').start - start }, s''''
+                begin match (peek s'').t with
+                  | KOf ->
+                      let t,s''' = parse_ty (snd @@ advance s'') in
+                      { t = EmptyList (Some t) ; start = start ; length = (peek s''').start - start }, s'''
+                  | _ -> { t = EmptyList None ; start = start ; length = (peek s'').start - start }, s'' 
+                end
             | _ -> (* arbitrary expression starting with '[' *)
                 parse_binary_expression 0 s
           end

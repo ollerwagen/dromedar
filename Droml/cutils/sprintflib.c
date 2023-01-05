@@ -34,13 +34,25 @@ string* _sprintf_bool(i64 b) {
     return res;
 }
 
+static string* makenullstr() {
+    string* res = allocate_string(5);
+    sprintf(res->base, "null");
+    return res;
+}
+
 string* _sprintf_str(i64 s) {
+    if ((void*) s == NULL)
+        return makenullstr();
+
     string* res = (string*) s;
     _addref((i8*) s);
     return res;
 }
 
 string* _sprintf_array(i64 ptr, i64 depth, i64 elemsize, string* (*f)(i64)) {
+    if ((void*) ptr == NULL)
+        return makenullstr();
+
     if (depth == 0)
         return f(ptr);
 

@@ -475,7 +475,7 @@ module Translator = struct
 
           let rec walk_arr (t : ty) : int * ty =
             begin match t with
-              | TRef (TArr t) -> let d,t = walk_arr t in d+1, t
+              | TRef (TArr t) | TNullRef (TArr t) -> let d,t = walk_arr t in d+1, t
               | _             -> 0, t
             end
           in
@@ -497,7 +497,7 @@ module Translator = struct
                   let rsym, casted_op = gensym "op", gensym "casted_sprintf_op" in
                   begin match t with
                     | TRef TStr -> op, [], false
-                    | TRef (TArr t) ->
+                    | TRef (TArr t) | TNullRef (TArr t) ->
                         let arrdepth, lowest_ty = walk_arr t in
                         let lowest_function =
                           begin match lowest_ty with
@@ -506,6 +506,7 @@ module Translator = struct
                             | TChar -> "_sprintf_char"
                             | TBool -> "_sprintf_bool"
                             | TRef TStr -> "_sprintf_str"
+                            | TNullRef TStr -> "_sprintf_str"
                             | _     -> Stdlib.failwith "cannot print this type"
                           end in
                         Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_array", [ I64, Id casted_op ; I64, IConst (Int64.of_int (arrdepth + 1)) ; I64, IConst (Int64.of_int (size_ty (cmp_ty lowest_ty))) ; Ptr (Func ([I64], strty)), Gid lowest_function ])) ], true
