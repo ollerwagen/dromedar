@@ -179,8 +179,8 @@ module TypeChecker = struct
   
   let rec crosstype (t1:ty) (t2:ty) : bool =
     begin match t1,t2 with
-      | TInt,TFlt | TFlt,TInt                                       -> true
-      | _                                                           -> false
+      | TInt,TFlt | TFlt,TInt -> true
+      | _                     -> false
     end
 
   let rec subtype (t1:ty) (t2:ty) : bool =

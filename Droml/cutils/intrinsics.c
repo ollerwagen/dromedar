@@ -146,3 +146,7 @@ intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend) {
         return res;
     }
 }
+
+void _print_string(string *s) {
+    printf("%s", s->base);
+}

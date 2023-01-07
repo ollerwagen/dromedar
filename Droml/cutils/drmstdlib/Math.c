@@ -2,15 +2,15 @@
 
 #include "common.h"
 
-double _Math$sin(double x) {
+double __Math$sin(IGNORE, double x) {
     return sin(x);
 }
 
-double _Math$cos(double x) {
+double __Math$cos(IGNORE, double x) {
     return cos(x);
 }
 
-double _Math$tan(double x) {
+double __Math$tan(IGNORE, double x) {
     return tan(x);
 }
 

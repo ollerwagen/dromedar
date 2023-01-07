@@ -54,3 +54,6 @@ declare void @_addref(i8*)
 
 ; adds a child to an address
 declare void @_addchild(i8*, i8*)
+
+; helper function for printf
+declare void @_print_string({i64,[0 x i8]*}*)

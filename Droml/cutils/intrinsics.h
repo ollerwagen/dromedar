@@ -22,4 +22,6 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs);
 
 intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend);
 
+void _print_string(string *s);
+
 #endif // __INTRINSICS__

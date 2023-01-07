@@ -44,24 +44,28 @@ static void mark_reachable(GCEntry &ge) {
 #include <iomanip>
 #include <iostream>
 
-static std::string print_table() {
-    std::stringstream stream;
-    stream << "BASE                   PREFS    CHILDREN\n";
-    for (const auto &it : table) {
-        stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(it.first)
-            << std::dec << std::setfill(' ') << " -> " << std::setw(6) << it.second.prefs << " -> ";
-        for (const ptr a : it.second.children)
-            stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(a) << std::dec << std::setfill(' ') << ", ";
-        stream << "\n";
+#if __DEBUG__
+    static std::string print_table() {
+        std::stringstream stream;
+        stream << "BASE                   PREFS    CHILDREN\n";
+        for (const auto &it : table) {
+            stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(it.first)
+                << std::dec << std::setfill(' ') << " -> " << std::setw(6) << it.second.prefs << " -> ";
+            for (const ptr a : it.second.children)
+                stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(a) << std::dec << std::setfill(' ') << ", ";
+            stream << "\n";
+        }
+        return stream.str();
     }
-    return stream.str();
-}
+#endif
 
 static void gcrun() {
     
     // printf("Before the GC Run:\n%s\n", print_table().c_str());
 
+#if __DEBUG__
     int64_t prev_size = table.size();
+#endif
 
     // wipe all reachability info
     for (auto &it : table)

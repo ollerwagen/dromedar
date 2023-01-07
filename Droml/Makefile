@@ -5,6 +5,7 @@ OFLAGS = -O3
 WFLAGS = -Wall
 
 COMPILE = clang $(OFLAGS) $(WFLAGS)
+COMPILE_LIB = clang $(OFLAGS) $(WFLAGS) -fpic -shared
 
 
 OUT = obj
@@ -14,7 +15,7 @@ INCL = -I cutils/
 
 
 gc:
-	clang -fpic -shared cutils/gc.cpp -o $(OUT)/gc.so -O3
+	$(COMPILE_LIB) cutils/gc.cpp -o $(OUT)/gc.so
 
 intrinsics:
 	$(COMPILE) $(INCL) -o $(OUT)/File.o  -c $(STDLIB)/File.c
@@ -25,15 +26,20 @@ intrinsics:
 	$(COMPILE) -c cutils/common.c -o $(OUT)/common.o
 	$(COMPILE) -c cutils/intrinsics.c -o $(OUT)/intrinsics.o
 	$(COMPILE) -c cutils/sprintflib.c -o $(OUT)/sprintflib.o
-	clang -fpic -shared cutils/listops.cpp -o $(OUT)/listops.so -O3
-	clang -fpic -shared -I cutils/ cutils/drmstdlib/cpputils/File.cpp -o  $(OUT)/cpputils_File.so -O3
-	clang -fpic -shared -I cutils/ cutils/drmstdlib/cpputils/Regex.cpp -o $(OUT)/cpputils_Regex.so -O3
+	$(COMPILE_LIB) cutils/listops.cpp -o $(OUT)/listops.so
+	$(COMPILE_LIB) -I cutils/ cutils/drmstdlib/cpputils/File.cpp -o  $(OUT)/cpputils_File.so
+	$(COMPILE_LIB) -I cutils/ cutils/drmstdlib/cpputils/Regex.cpp -o $(OUT)/cpputils_Regex.so
 
 compiler:
 	ocamlbuild -pkg num main.native
 	mv main.native droml
 
-all: gc intrinsics compiler
+stdlib:
+	ocamlopt -o $(STDLIB)/drmstdlib $(STDLIB)/drmstdlib.ml
+	rm -f $(STDLIB)/drmstdlib.cmi $(STDLIB)/drmstdlib.cmx $(STDLIB)/drmstdlib.o
+	./$(STDLIB)/drmstdlib
+
+all: gc intrinsics stdlib compiler
 
 clean:
 	rm -f $(OUT)/* || true

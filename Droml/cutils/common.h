@@ -1,6 +1,7 @@
 #ifndef __COMMON__
 #define __COMMON__
 
+#define IGNORE i64 *ignore
 
 #include <stdbool.h>
 #include <stdint.h>

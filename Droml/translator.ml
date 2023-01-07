@@ -525,12 +525,12 @@ module Translator = struct
           let strgcs = List.concat (List.filter_map (fun (op,_,gc) -> if gc then Some (removeref (strty,op)) else None) makestr_instrs) in
           let catargs = List.map (fun (op,_,_) -> strty, op) makestr_instrs in
           let rsym = gensym "sprintf_res" in
-          let printf_call =
+          let printf_call, printf_gc =
             begin match opt with
-              | Sprintf -> []
-              | Printf  -> [ I (Call (None, Void, Gid "_IO$print_str", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym)
+              | Sprintf -> [], true
+              | Printf  -> [ I (Call (None, Void, Gid "_print_string", [ strty, Id rsym ])) ] @ removeref (strty, Id rsym), false
             end in
-          Id rsym, strty, (args_cmpd @ makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), true
+          Id rsym, strty, (args_cmpd @ makestr_streams @ [ I (Call (Some rsym, Func ([ I64; VariadicDots ], strty), Gid "_sprintf_cat", (I64, IConst (Int64.of_int (List.length catargs))) :: catargs)) ] @ printf_call @ arggcs @ strgcs), printf_gc
 
       | Bop (op,l,r), t -> (* no GC, as all input results are primitives *)
           (* ignore gc as all inputs are primitives *)
@@ -661,6 +661,7 @@ module Translator = struct
           let rsym = gensym "callop" in
           begin match snd f with
             | TRef (TFun (argts,rt)) ->
+                let callres = if t = TypeChecker.void_placeholder then None else Some rsym in
                 let fptrsym, fsym, casptr = gensym "fclosptr", gensym "fclos", gensym "closiptr" in
                 let llrt = cmp_retty rt in
                 let args_casts =
@@ -673,8 +674,8 @@ module Translator = struct
                 [ I (Bitcast (fptrsym, fllt, fop, Ptr (cmp_llfty argts rt)))
                 ; I (Load (fsym, cmp_llfty argts rt, Id fptrsym))
                 ; I (Bitcast (casptr, fllt, fop, Ptr I64))
-                ; I (Call (Some rsym, llrt, Id fsym, (Ptr I64, Id casptr) :: argcs')) ] @ arggcops,
-                begin match t with | TRef _ | TNullRef _ -> true | _ -> false end
+                ; I (Call (callres, llrt, Id fsym, (Ptr I64, Id casptr) :: argcs')) ] @ arggcops,
+                (callres <> None) && begin match t with | TRef _ | TNullRef _ -> true | _ -> false end
             | _ -> Stdlib.failwith "not a function, abort"
           end
 
@@ -778,6 +779,9 @@ module Translator = struct
           c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars
 
       | Expr (e,t) ->
+          let op,llt,s,gc = cmp_exp c (e, match t with | None -> TypeChecker.void_placeholder | Some t -> t) in
+          c, s @ (if gc then removeref (llt,op) else []), refvars
+          (*
           begin match e with
             | Sprintf (Printf,s,es) -> let _,_,s,_ = cmp_exp c (e, TRef TStr) in c, s, refvars
             | FApp (f,a) ->
@@ -808,6 +812,7 @@ module Translator = struct
                 end
             | _ -> Stdlib.failwith "can only compile function call as expression statement"
           end
+          *)
 
       | If (cnd,t,nt) -> (* conditionals are bool -> primitive -> not GC'able (same for while, do-while) *)
           let cop,_,cs,_ = cmp_exp c cnd in

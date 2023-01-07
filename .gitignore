@@ -11,6 +11,7 @@ Droml/obj/*.*
 Droml/Notes/
 Droml/.vscode/
 Droml/a.out
+Droml/cutils/drmstdlib/drmstdlib
 Droml/droml
 Droml/Out.ll
 Droml/Out.s
