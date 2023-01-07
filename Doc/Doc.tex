@@ -10,13 +10,13 @@
 \DeclareFontShape{OT1}{cmtt}{bx}{n}{<5><6><7><8><9><10><10.95><12><14.4><17.28><20.74><24.88>cmttb10}{}
 
 \lstdefinelanguage{Dromedar}{
-	morekeywords = [1]{int,flt,char,bool,void,fn,string},
+	morekeywords = [1]{type,int,flt,char,bool,void,fn,string},
 	morekeywords = [2]{true,false,null},
 	morekeywords = [3]{return,if,else,while,do,for,denull},
 	morekeywords = [4]{let,mut,global},
 	morekeywords = [5]{of,in},
 	morekeywords = [6]{printf,sprintf,assert},
-	morekeywords = [7]{module},
+	morekeywords = [7]{module,native},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -381,6 +381,16 @@ fn main -> void
 							\end{array}
 						\right.
 				\end{align*}
+				
+		\subsection{Declared Types}
+			
+				\begin{align*}
+					\drmrule{}{T}{D}{\mc{int}}{TDInt},\ \ \drmrule{}{T}{D}{\mc{flt}}{TDFlt},\ \ 
+					\drmrule{}{T}{D}{\mc{char}}{TDChar},\ \ \drmrule{}{T}{D}{\mc{bool}}{TDBool}\\
+					\drmrule{T\ruleapp{D}\mc{t}}{T}{D}{\mc{[t]}}{TDArray},\ \ \drmrule{}{T}{D}{\mc{string}}{TDString},\ \ 
+					\drmrule{\mc{id}\in T}{T}{D}{\mc{tid}}{TDNative}\\
+					\drmrule{T\ruleapp{D}\mc{t1},\ \dots,\ T\ruleapp{D}\mc{tn}\ \ T\ruleapp{D}\mc{rt}}{T}{D}{\mc{(t1,...,tn)->rt}}{TDFunc}
+				\end{align*}
 		
 		\subsection{Builtin Operators}
 		
@@ -726,76 +736,76 @@ fn main -> void
 			\subsubsection{Local Variable Declarations}
 			
 				\begin{align*}
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt}}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt}}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
 				\end{align*}
 			
 			\subsubsection{Assignments}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t} \vee \mc{exp}\bowtie\mc{t}}{S,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
+					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t} \vee \mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
 				\end{align*}
 			
 			\subsubsection{Expression Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,\mc{rt}}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
+					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,T,\mc{rt}}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
 				\end{align*}
 				
 			\subsubsection{\code{printf} Call}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)}::\mc{string}}{S}{S}{\mc{printf("...\{j1\}...\{jm\}...", e1,...,en)} \Rightarrow S,\bot}{StmtPrintf}
+					\drmrule{S\ruleapp{E}\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)}::\mc{string}}{S,T,\mc{rt}}{S}{\mc{printf("...\{j1\}...\{jm\}...", e1,...,en)} \Rightarrow S,\bot}{StmtPrintf}
 				\end{align*}
 				
 			\subsubsection{\code{assert} Call}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp}::\mc{bool}}{S}{S}{\mc{assert exp}\Rightarrow S,\bot}{StmtAssert}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{bool}}{S,T}{S}{\mc{assert exp}\Rightarrow S,\bot}{StmtAssert}
 				\end{align*}
 			
 			\subsubsection{If Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,\mc{rt}\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,\mc{rt}}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,T,\mc{rt}\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,T,\mc{rt}}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
 				\end{align*}
 				
 			\subsubsection{Checked Null Casts}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t?}\ \ S\cup\{(\mc{r},\mc{t},c)\},\mc{rt} \ruleapp{S} \mc{b1} \Rightarrow S',R_1\ \ S,\mc{rt} \ruleapp{S}\mc{b2}\Rightarrow S'',R_2}{S,\mc{rt}}{S}{\mc{denull r := exp b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtNullCast}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t?}\ \ S\cup\{(\mc{r},\mc{t},c)\},T,\mc{rt} \ruleapp{S} \mc{b1} \Rightarrow S',R_1\ \ S,T,\mc{rt} \ruleapp{S}\mc{b2}\Rightarrow S'',R_2}{S,T,\mc{rt}}{S}{\mc{denull r := exp b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtNullCast}
 				\end{align*}
 			
 			\subsubsection{While Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{while c b} \Rightarrow S,\bot}{StmtWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{while c b} \Rightarrow S,\bot}{StmtWhile}
 				\end{align*}
 			
 			\subsubsection{Do-While Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
 				\end{align*}
 				
 			\subsubsection{For Statements}
 	
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,\mc{rt}}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},T,\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
 				\end{align*}
 			
 			\subsubsection{Return Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}\vee\mc{exp}\bowtie\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
+					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}\vee\mc{exp}\bowtie\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,T,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
 				\end{align*}
 				
 			\subsubsection{Blocks}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{\},\mc{rt}\ruleapp{S}\mc{s1} \Rightarrow S_1,\bot,\ \ S_1,\mc{rt}\ruleapp{S}\mc{s2} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mc{rt}\ruleapp{S}\mc{sn} \Rightarrow S_n,R}{S,\mc{rt}}{S}{\mc{s1 ... sn} \Rightarrow S_n,R}{StmtBlock}
+					\drmrule{S\sqcup\{\},\mc{rt}\ruleapp{S}\mc{s1} \Rightarrow S_1,\bot,\ \ S_1,T,\mc{rt}\ruleapp{S}\mc{s2} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mc{rt}\ruleapp{S}\mc{sn} \Rightarrow S_n,R}{S,\mc{rt}}{S}{\mc{s1 ... sn} \Rightarrow S_n,R}{StmtBlock}
 				\end{align*}
 		
 		\subsection{Global Statements}
@@ -803,28 +813,36 @@ fn main -> void
 			\subsubsection{Global Function Declaration}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},\mc{rt} \ruleapp{S} \mc{b} \Rightarrow S',\top\;(\textnormal{or \code{rt=void}}) \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S}{GStmtFDecl}
+					\drmrule{T\ruleapp{D}\mc{t1},\dots,T\ruleapp{D}\mc{tn},T\ruleapp{D}\mc{rt}\ \ S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},T,\mc{rt}\ruleapp{S} \mc{b} \Rightarrow S',\top\;(\textnormal{or \code{rt=void}}) \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S,T}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S,T}{GStmtFDecl}
 				\end{align*}
 			
 			\subsubsection{Global Variable Declaration}
 			
 				\begin{align*}
-					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\}}{GStmtVDeclConst}\\
-					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\}}{GStmtVDeclConst}\\
-					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}\\
-					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S}{G}{\mc{global mut id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\}}{GStmtVDeclMut}
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S,T}{G}{\mc{global id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\},T}{GStmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ T\ruleapp{D}\mc{t}\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S,T}{G}{\mc{global id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\},T}{GStmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ S\ruleapp{G}\mc{exp} :: \mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S,T}{G}{\mc{global mut id := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\},T}{GStmtVDeclMut}\\
+					\drmrule{(\mc{id},\_,\_) \not\in S\ \ T\ruleapp{D}\mc{t}\ \ S\ruleapp{GT}\mc{exp}\trianglelefteq\mc{t}\ \ \mc{t}\textnormal{ non-\code{null}}}{S,T}{G}{\mc{global mut id:t := exp} \Rightarrow S\cup\{(\mc{id},\mc{t},m)\},T}{GStmtVDeclMut}
+				\end{align*}
+				
+			\subsubsection{Native Declarations}
+			
+				\begin{align*}
+					\drmrule{\mc{t}\not\in T}{S,T}{G}{\mc{native type t} \Rightarrow S,T\cup\{\mc{t}\}}{GStmtNativeTDecl}\\
+					\drmrule{}{S,T}{G}{\mc{native fn f: t1,...,tn -> rt} \Rightarrow S,T}{GStmtNativeFDecl}\\
+					\drmrule{(\mc{id},\_,\_)\not\in S}{S,T}{G}{\mc{native t id} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\},T}{GStmtNativeVDecl}
 				\end{align*}
 				
 			\subsubsection{Module Header}
 			
 				\begin{align*}
-					\drmrule{}{S}{G}{\mc{module M} \Rightarrow S \textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module}}{GStmtModule}
+					\drmrule{}{S,T}{G}{\mc{module M} \Rightarrow S \textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module},T}{GStmtModule}
 				\end{align*}
 			
 			\subsubsection{Program}
 			
 				\begin{align*}
-					\drmrule{S_0 \ruleapp{G} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{G} \mc{gsn} \Rightarrow S_n}{S_0}{G}{\mc{gs1 ... gsn} \Rightarrow S_n}{GStmtProgram}
+					\drmrule{S_0,T_0 \ruleapp{G} \mc{gs1} \Rightarrow S_1,T_1\ \dots,\ S_{n-1},T_{n-1} \ruleapp{G} \mc{gsn} \Rightarrow S_n,T_n}{S_0,T_0}{G}{\mc{gs1 ... gsn} \Rightarrow S_n,T_n}{GStmtProgram}
 				\end{align*}
 				
 		\subsection{Context Buildup}
@@ -832,17 +850,20 @@ fn main -> void
 			\subsubsection{Global Function Declarations}
 			
 				\begin{align*}
-					\drmrule{(\mc{id},\_) \not\in S}{S}{GCF}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S \cup (\mc{id}, \mc{(t1,...,tn)->rt}, c)}{GStmtFCtxtFDecl}
+					\drmrule{(\mc{id},\_) \not\in S}{S,T}{GCF}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S \cup \{(\mc{id}, \mc{(t1,...,tn)->rt}, c)\},T}{GStmtFCtxtFDecl}\\
+					\drmrule{(\mc{id},\_) \not\in S}{S,T}{GCF}{\mc{native fn f : t1,...,tn -> rt} \Rightarrow S \cup \{(\mc{id}, \mc{(t1,...,tn)->rt}, c)\},T}{GStmtFCtxtNFDecl}
 				\end{align*}\begin{align*}
-					\drmrule{}{S}{GCF}{\mc{global X := Y} \Rightarrow S}{GStmtFCtxtVDecl}
+					\drmrule{}{S,T}{GCF}{\mc{global X := Y} \Rightarrow S,T}{GStmtFCtxtVDecl}\\
+					\drmrule{}{S,T}{GCF}{\mc{native type T} \Rightarrow S,T}{GStmtFCtxtNTDecl}\\
+					\drmrule{}{S,T}{GCF}{\mc{native t id} \Rightarrow S,T}{GStmtFCtxtNVDecl}
 				\end{align*}\begin{align*}
-					\drmrule{}{S}{GCF}{\mc{module M} \Rightarrow S\textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module}}{GStmtFCtxtModule}
+					\drmrule{}{S,T}{GCF}{\mc{module M} \Rightarrow S\textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module}, T}{GStmtFCtxtModule}
 				\end{align*}
 			
 			\subsubsection{Program: Functions}
 			
 				\begin{align*}
-					\drmrule{S_0 \ruleapp{GCF} \mc{gs1} \Rightarrow S_1,\ \dots,\ S_{n-1} \ruleapp{GCF} \mc{gsn} \Rightarrow S_n}{S_0}{GC}{\mc{gs1 ... gsn} \Rightarrow S_n \textnormal{ with no active module}}{GStmtCtxtFuncs}
+					\drmrule{S_0,T_0 \ruleapp{GCF} \mc{gs1} \Rightarrow S_1,T_1,\ \dots,\ S_{n-1},T_{n-1} \ruleapp{GCF} \mc{gsn} \Rightarrow S_n,T_n}{S_0,T_0}{GC}{\mc{gs1 ... gsn} \Rightarrow S_n,T_n \textnormal{ with no active module}}{GStmtCtxtFuncs}
 				\end{align*}
 			
 		\subsection{Rule for Program Typechecking}
@@ -873,7 +894,7 @@ fn main -> void
 			Then, the program rule \textsc{Prog} shall be:
 		
 			\begin{align*}
-				\drmrule{S^\star \ruleapp{GC} \mc{prog} \Rightarrow S' \ \ \exists!\; \mc{ft}\in\mathsf{maintys}:\;(\mc{main},\mc{ft},c)\in S'\ \ S' \ruleapp{G} \mc{prog} \Rightarrow S}{}{}{\mc{prog}}{Prog}
+				\drmrule{S^\star,\emptyset \ruleapp{GC} \mc{prog} \Rightarrow S',T_0 \ \ \exists!\; \mc{ft}\in\mathsf{maintys}:\;(\mc{main},\mc{ft},c)\in S'\ \ S',T_0 \ruleapp{G} \mc{prog} \Rightarrow S,T_1}{}{}{\mc{prog}}{Prog}
 			\end{align*}
 		
 	\section{Formal Grammar}
@@ -892,12 +913,14 @@ fn main -> void
 				Identifier   ::= /[a-zA-Z][a-zA-Z0-9_]*/
 				
 				module       ::= /module/
+				native       ::= /native/
 				
 				global       ::= /global/
 				fn           ::= /fn/
 				let          ::= /let/
 				mut          ::= /mut/
 				
+				type         ::= /type/
 				int          ::= /int/
 				flt          ::= /flt/
 				char         ::= /char/
@@ -981,6 +1004,7 @@ fn main -> void
 				                 | GVDeclaration
 				                 | GFDeclaration
 				                 | %Module %Identifier
+				                 | %Native NatDecl
 				                 
 				GVDeclaration    ::=
 				                 | %Global      %Identifier             %Assign GlobalExpression
@@ -991,6 +1015,11 @@ fn main -> void
 				GFDeclaration    ::=
 				                 | %Fn %Identifier                   %Arrow ReturnType Block
 				                 | %Fn %Identifier %Colon FArguments %Arrow ReturnType Block
+				                 
+				NatDecl          ::=
+				                 | %Type %Identifier
+				                 | %Fn %Identifier NamelessArgtyList %Arrow ReturnType
+				                 | Type %Identifier
 				                 
 				FArguments       ::=
 				                 | %Identifier %Colon Type

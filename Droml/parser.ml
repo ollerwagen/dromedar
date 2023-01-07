@@ -639,6 +639,67 @@ module Parser = struct
         | _ -> raise @@ ParseError (ofnode "Expected an identifier in module declaration" (peek s'))
       end
 
+    and parse_gnative (s : state) : gstmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KNative in
+      begin match (peek s').t with
+        | Token.KFn   -> parse_gnfdecl start s'
+        | Token.KType -> parse_gntdecl start s'
+        | Token.Id _  -> parse_gnvdecl start s'
+        | _           -> raise @@ ParseError (ofnode "Expected a native declaration" (peek s'))
+      end
+
+    and parse_gnfdecl (start : int) (s : state) : gstmt node * state =
+      let s' = expect s Token.KFn in
+      let id,s'' =
+        begin match (peek s').t with
+          | Token.Id id -> id, snd @@ advance s'
+          | _           -> raise @@ ParseError (ofnode "Expected a native function name" (peek s'))
+        end in
+      let arglist, s''' =
+        begin match advance s'' with
+          | {t=Token.Arrow;start=_;length=_}, s''' -> [], s''
+          | {t=Token.Colon;start=_;length=_}, s''' ->
+              let rec args (s:state) : (string * ty node) list * state =
+                let id,s' = begin match advance s with
+                              | {t=Token.Id i;start=_;length=_},s' -> i,s'
+                              | _                                  -> raise @@ ParseError (ofnode "Expected a function argument name" (peek s))
+                            end in
+                let s'' = expect s' Token.Colon in
+                let t,s''' = parse_ty s'' in
+                if (peek s''').t = Token.Comma then
+                  let _,s'''' = advance s''' in
+                  let l,s''''' = args s'''' in
+                  (id, t) :: l, s'''''
+                else
+                  [ id, t ], s'''
+              in
+              args s'''
+          | _ -> raise @@ ParseError (ofnode "Expected a separator in function argument list" (peek s))
+        end in
+      let s'''' = expect s''' Token.Arrow in
+      let rt,s''''' = parse_retty s'''' in
+      { t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''').start - start }, s'''''
+
+    and parse_gnvdecl (start : int) (s : state) : gstmt node * state =
+      let id,s' =
+        begin match (peek s).t with
+          | Id id -> id, snd @@ advance s
+          | _     -> raise @@ ParseError (ofnode "Expected a native variable identifier" (peek s))
+        end in
+      let s'' = expect s' Token.Colon in
+      let t,s''' = parse_ty s'' in
+      { t = GNVDecl (id,t) ; start = start ; length = (peek s''').start - start }, s'''
+    
+    and parse_gntdecl (start : int) (s : state) : gstmt node * state =
+      let s' = expect s Token.KType in
+      let id,s'' =
+        begin match (peek s').t with
+          | Id id -> id, snd @@ advance s'
+          | _     -> raise @@ ParseError (ofnode "Expected a native type identifier" (peek s'))
+        end in
+      { t = GNTDecl id ; start = start ; length = (peek s'').start - start }, s''
+
     in
 
     let s' = expect s (Token.Whitespace 0) in
@@ -646,6 +707,7 @@ module Parser = struct
       | Token.KModule -> parse_gmodule s'
       | Token.KGlobal -> parse_gvdecl s'
       | Token.KFn     -> parse_gfdecl s'
+      | Token.KNative -> parse_gnative s'
       | _             -> raise @@ ParseError (ofnode "Expected a global variable or function declaration" (peek s'))
     end
   

@@ -6,9 +6,12 @@ open Ast
 open Typechecker
 open Translator
 open Ll
+
+let read_lines (filename : string) : string list =
+  String.split_on_char '\n' (readall filename)
   
 let () =
-  let filenames = List.tl @@ Array.to_list Sys.argv in
+  let filenames = (read_lines "LibLists/drmlibs.txt") @ (List.tl @@ Array.to_list Sys.argv) in
   let programs = List.map (String.cat "\n") (List.map readall filenames) in
   let lexes =
     try List.map Lexer.lex programs
@@ -16,7 +19,7 @@ let () =
       (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
        Stdlib.failwith "Lexer Error. Aborting.")
   in
-  (*let _ = List.iter (fun t -> Printf.printf "%s\n" (Token.print_token t.t)) (List.concat lexes), Printf.printf "\n" in*)
+  (* let _ = List.iter (fun t -> Printf.printf "%s\n" (Token.print_token t.t)) (List.concat lexes), Printf.printf "\n" in *)
   let parses =
     try List.map Parser.parse lexes
     with Parser.ParseError {t=m;start=s;length=l} ->
@@ -26,7 +29,7 @@ let () =
   let parses' =
     List.map2 (fun p filename -> { t = Module (filename_to_module filename) ; start = 0 ; length = 0 } :: p) parses filenames in
   let program = List.fold_left (@) [] parses' in
-  (* let _ = Printf.printf "\n%s\n" (Ast.print_program program) in *)
+  let _ = Printf.printf "\n%s\n" (Ast.print_program program) in
 
   let annt_prog =
     try TypeChecker.check_program program
@@ -46,11 +49,12 @@ let () =
   Stdlib.close_out llfile;
   
   
+  let cppliblinks = String.concat " " (List.map (fun l -> Printf.sprintf "-L. ./%s" l) (read_lines "LibLists/cpplibs.txt")) in
 
   (*
     -v to see full linker output
     -lm to add math.h library because apparently that is necessary
    *)
   let _ = Sys.command "clang -S Out.ll -O3" in
-  let _ = Sys.command "clang -o a.out Out.ll obj/*.o -L. ./obj/gc.so ./obj/listops.so -L. ./obj/cpputils_File.so -L. ./obj/cpputils_Regex.so -lstdc++ -lm -O3" in
+  let _ = Sys.command ("clang -o a.out Out.ll obj/*.o " ^ cppliblinks ^ " -lstdc++ -lm -O3") in
   ()

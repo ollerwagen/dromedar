@@ -54,10 +54,12 @@ type token =
   | EOF
   | Whitespace of int
   | KModule
+  | KNative
   | KGlobal
   | KFn
   | KLet
   | KMut
+  | KType
   | KInt
   | KFlt
   | KChar
@@ -131,10 +133,12 @@ let print_token (t:token) : string =
     | EOF          -> "[EOF]"
     | Whitespace i -> Printf.sprintf "[Whitespace %d]" i
     | KModule      -> "[module]"
+    | KNative      -> "[native]"
     | KGlobal      -> "[global]"
     | KFn          -> "[fn]"
     | KLet         -> "[let]"
     | KMut         -> "[mut]"
+    | KType        -> "[type]"
     | KInt         -> "[int]"
     | KFlt         -> "[flt]"
     | KChar        -> "[char]"

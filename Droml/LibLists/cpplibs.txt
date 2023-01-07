@@ -1,0 +1,4 @@
+obj/gc.so
+obj/listops.so
+obj/cpputils_File.so
+obj/cpputils_Regex.so

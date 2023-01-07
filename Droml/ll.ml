@@ -75,6 +75,8 @@ type ginstr =
   | GDecl    of string * llty * operand
   | TDecl    of string * llty
   | GAssn    of string * llty * string
+  | LinkVD   of string * llty
+  | LinkFD   of string * llty * llty list
   
 let rec size_ty (t:llty) : int =
   begin match t with
@@ -253,9 +255,10 @@ let print_ginstr (gi:ginstr) : string =
           (print_operand init)
     | TDecl (id,t) -> Printf.sprintf "%s = type %s\n" (print_llty (Namedt id)) (print_llty t)
     | GAssn (t,llt,f) -> Printf.sprintf "@%s = global %s* @%s\n" t (print_llty llt) f
+    | LinkVD (id,llt) -> Printf.sprintf "@%s = external global %s\n" id (print_llty llt)
+    | LinkFD (id,rt,a) -> Printf.sprintf "declare %s @%s(%s)\n" (print_llty rt) id (String.concat ", " (List.map print_llty a))
   end
 
 let print_llprog (p : ginstr list) : string =
   (readall "cutils/intrinsics.ll") ^ "\n\n" ^
-  (readall "cutils/drmstdlib/drmstdlib.ll") ^ "\n\n" ^
   (String.concat "\n" (List.map print_ginstr p))

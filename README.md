@@ -17,19 +17,75 @@ Then, you may compile `.drm` files with `./droml <filename>`. This generates an 
 
 ## Expanding The Standard Library
 
-It is possible to write extensions to the Dromedar standard library - so far only in C, there is no possibility to write standard library functions in Dromedar yet.
+It is possible to write extensions to the Dromedar standard library - both in Dromedar and in C (the language in which most of the standard library is implemented) - or even in C++ (which is a slightly more involved process).
 
-In order to do so, follow the following instructions:
+### Expanding it in Dromedar
 
-1. In [builtins.ml](Droml/builtins.ml), add the type description of the function. The first entry corresponds to the module, the second to the name, the third to the abstract Dromedar type, and the fourth to its LLVM operand (usually `Gid`, followed by an identifier). The convention for LLVM names used is `_Module$name`. For more insight into the abstract types used internally by the compiler, consult the [ast.ml](Droml/ast.ml) file, L.(56-68)
-2. In [drmstdlib.ll](Droml/cutils/drmstdlib/drmstdlib.ll), add the LLVM type declaration of the function. In order to see how Dromedar types are transformed into LLVM types, consult the `cmp_ty` function of the [translator.ml](Droml/translator.ml) file.
-3. Either create a new `.c` file with your function definition, or append it to an existing standard library file. If you created a new file `CUSTOM.c`, you have to add `$(COMPILE) $(INCL) -o $(OUT)/CUSTOM.o -c $(STDLIB)/CUSTOM.c` to the `intrinsics` rule in the [Makefile](Droml/Makefile).
+In order to expand the standard library with functions written in pure Dromedar, you will either need to create a new `.drm` file in which to create your functions, or append them to the [existing standard libary file](Droml/Drmstdlib.drm). If you create a new file, you need to add it to the [library list](Droml/LibLists/drmlibs.txt).
 
-You should then have access to the function implementation you provided in Dromedar code.
+You can then use all the functions you created in your own Dromedar programs.
 
-If you do manual memory management, you have to use `malloc` and `free` (and free all `malloc`-ed objects before returing), or use the garbage collection facilities from the [gc.h](Droml/cutils/gc.h) header. If your function returns newly created objects, you must link them to the garbage collector (either via `_allocate` or `_addref`).
+### Expanding it using C
 
-You can also create custom named types (in the same [builtins.ml](Droml/builtins.ml) file) which all get translated to `i8*` in LLVM internally. This allows you to create objects which are memory-managed by the garbage collector but that cannot be touched from inside a Dromedar program. The only example in the Standard library that currently does this is the `Regex` module.
+Writing native functions requires the following steps:
+
+1. Write the function signatures in a `.drm` file (as if you were to expand the standard library in Dromedar - see the section above). For this, you need to create `native` functions, types and values. Native types are used by the Dromedar runtime system to hide functionality of other languages behind them (e.g. a `std::regex` object as used by the `Regex` module of the standard library). They are treated like blackbox types by Dromedar programs.
+2. You can then take a look at the LLVM output of any Dromedar program. Note that attempting to compile it to an executable now will most likely lead to a linker error since it cannot find the functions referred to by your signatures. The LLVM output will contain function declarations for your newly created functions. These are quite similar to how you will have to implement them in C. `#include "cutils/common.h"` will give you access to some typedefs that make your code look similar to the LLVM declarations.
+3. You now have to compile your new file(s) - either compile them by hand by following the `stdlib` rule in the [makefile](Droml/Makefile) or by adding them to the task list in said `stdlib` rule.
+
+You must make sure that the compiled `.o` file is located in the [obj](Droml/obj/) folder. Then you can use your new C functions in Dromedar using your native function signatures.
+
+Note that if you return reference objects (including blackbox native types), you need to allocate them using `_allocate(int64_t)` - the function defined in the [garbage collection header file](Droml/cutils/gc.h).
+
+### Expanding it using C++
+
+Sometimes, writing functions in C++ is a considerable reduction in complexity compared to C. If you want to write a C++ extension to the standard library, you will still have to complete the steps for a Dromedar extension and the first two steps for a C extension.
+
+Then, you can create a C++ header and source file (let's call them `l.h` and `l.cpp`) in which you will implement the core functionality of your new functions. You have to call the C++ functions from the C file which contains your functions that match the LLVM signatures.
+
+In order to make the C++ functions interoperable with the C native functions, you need to make your files look as follows:
+
+**l.h**
+
+    #ifndef __L_H__
+    #define __L_H__
+
+    #ifdef __cplusplus
+        extern "C" {
+    #endif
+
+            /*
+             * your C++ function headers
+             */
+
+    #ifdef __cplusplus
+        }
+    #endif
+
+    #endif
+
+**l.cpp**
+
+    #include "l.h"
+
+    /*
+     * static C++ functions
+     */
+    
+    extern "C" {
+
+        /*
+         * implementations of your C++ headers from l.h
+         */
+    }
+
+A good example of how your C++ and C files must look is the Regex module of the standard library: [Regex.c](Droml/cutils/drmstdlib/Regex.c), [Regex.h](Droml/cutils/drmstdlib/cpputils/Regex.h), and [Regex.cpp](Droml/cutils/drmstdlib/cpputils/Regex.cpp).
+
+You can then either compile your C++ file to a statically linkable library `.so` file by following the execution steps of the `stdlib` rule in the [Makefile](Droml/Makefile), or add it to the taks list in the rule, following the outline given by the rule in the makefile.
+
+Following that, make sure your `.so` file is located in the [obj](Droml/obj/) folder. Then, you must the path to your library in the [C++ Library List](Droml/LibLists/cpplibs.txt), following the example of the libraries which are already there.
+
+After that, you can freely use your new functions in Dromedar programs.
 
 ## Quick Introduction
 

@@ -104,9 +104,12 @@ type stmt =
   | Return  of exp node option
 
 type gstmt =
-  | GVDecl of string * mutability * ty node option * exp node
-  | GFDecl of string * (string * ty node) list * retty node * stmt node list
-  | Module of string
+  | GVDecl  of string * mutability * ty node option * exp node
+  | GFDecl  of string * (string * ty node) list * retty node * stmt node list
+  | Module  of string
+  | GNFDecl of string * (string * ty node) list * retty node
+  | GNVDecl of string * ty node
+  | GNTDecl of string
 
 type program = gstmt node list
 
@@ -198,6 +201,9 @@ let print_gstmt (gs : gstmt node) : string =
     | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s\n" id (print_retty rt) (print_block 1 b)
     | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
     | Module m                   -> Printf.sprintf "module %s\n\n\n" m
+    | GNFDecl (id,ats,rt)        -> Printf.sprintf "native fn %s%s %s -> %s\n" id (if ats=[] then "" else ":") (String.concat ", " (List.map (fun (id,t) -> id ^ ":" ^ print_ty t) ats)) (print_retty rt)
+    | GNVDecl (id,t)             -> Printf.sprintf "native %s: %s\n" id (print_ty t)
+    | GNTDecl id                 -> Printf.sprintf "native type %s\n" id
   end
 
 let print_program (prog : program) : string =

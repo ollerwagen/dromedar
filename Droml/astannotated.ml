@@ -37,9 +37,12 @@ type annt_stmt =
   | Return  of annt_exp option
 
 type annt_gstmt =
-  | GVDecl of string * mutability * ty option * annt_exp
-  | GFDecl of string * (string * ty) list * retty * annt_stmt list
-  | Module of string
+  | GVDecl  of string * mutability * ty option * annt_exp
+  | GFDecl  of string * (string * ty) list * retty * annt_stmt list
+  | Module  of string
+  | GNFDecl of string * (string * ty) list * retty
+  | GNVDecl of string * ty
+  | GNTDecl of string
 
 type annt_program = annt_gstmt list
 
@@ -130,6 +133,9 @@ let print_gstmt (gs:annt_gstmt) : string =
     | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s\n" id (print_retty rt) (print_block 1 b)
     | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
     | Module m                   -> Printf.sprintf "module %s\n\n\n" m
+    | GNFDecl (id,ats,rt)        -> Printf.sprintf "native fn %s%s %s -> %s\n" id (if ats=[] then "" else ":") (String.concat ", " (List.map (fun (id,t) -> id ^ ":" ^ print_ty t) ats)) (print_retty rt)
+    | GNVDecl (id,t)             -> Printf.sprintf "native %s: %s\n" id (print_ty t)
+    | GNTDecl id                 -> Printf.sprintf "native type %s\n" id
   end
 
 let print_program (prog:annt_program) : string =

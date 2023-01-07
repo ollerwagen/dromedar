@@ -54,10 +54,12 @@ module Lexer = struct
   
   let keywords : (string * token) list = [
       "module",  KModule
+    ; "native",  KNative
     ; "global",  KGlobal
     ; "fn",      KFn
     ; "let",     KLet
     ; "mut",     KMut
+    ; "type",    KType
     ; "int",     KInt
     ; "flt",     KFlt
     ; "char",    KChar

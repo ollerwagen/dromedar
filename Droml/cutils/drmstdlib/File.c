@@ -2,6 +2,6 @@
 #include "cpputils/File.h"
 
 
-strlist* __File$readall(IGNORE, string* filename) {
+strlist* _File$readall(IGNORE, string* filename) {
     return _cpputils_File$readall(filename);
 }

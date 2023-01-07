@@ -2,7 +2,6 @@ open Common
 open Token
 open Ast
 open Astannotated
-open Builtins
 
 module TypeChecker = struct
 
@@ -92,6 +91,8 @@ module TypeChecker = struct
 
     let add_binding (c:t) (bnd : string*(ty*mutability)) : t = add_binding_to_module c (fst c) bnd
 
+    let get_current_module : t -> string = fst
+
     let set_current_module (c:t) (id:string) : t =
       if List.mem_assoc id (snd c) then
         id, snd c
@@ -139,9 +140,7 @@ module TypeChecker = struct
       | x::xs -> if List.mem x xs then false else alldistinct xs
     end
   
-  let startcontext : Ctxt.t =
-    let c' = List.fold_left (fun c (m,id) -> Ctxt.add_modnamedt c m id) Ctxt.empty builtin_tys in
-    List.fold_left (fun c (m,id,f,_) -> Ctxt.add_binding_to_module c m (id, (f, Const))) c' builtins
+  let startcontext : Ctxt.t = Ctxt.empty
 
   let uop_types : (uop * (ty * ty) list) list =
     [ Neg, [ 
@@ -606,6 +605,18 @@ module TypeChecker = struct
               raise @@ TypeError (ofnode "Function must return" gs)
           else
             raise @@ TypeError (ofnode "Function argument names must be distinct" gs)
+      | GNVDecl (id,t) ->
+          if Ctxt.has c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
+          else
+            GNVDecl (id,t.t), Ctxt.add_binding c (id,(t.t,Const))
+      | GNFDecl (id,args,rt) ->
+          GNFDecl (id, List.map (fun (id,t) -> id, t.t) args, rt.t), c
+      | GNTDecl id ->
+          if Ctxt.has_namedt c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
+          else
+            GNTDecl id, Ctxt.add_namedt c id
     end
   
   let check_gstmt_program (c:Ctxt.t) (gs : gstmt node list) : (annt_gstmt list * Ctxt.t) =
@@ -614,8 +625,9 @@ module TypeChecker = struct
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
       | Module m              -> Ctxt.set_current_module c m
-      | GFDecl (id,args,rt,_) -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
-      | GVDecl _              -> c
+      | GFDecl (id,args,rt,_)
+      | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
+      | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
     end
   
   let create_fctxt_program : Ctxt.t -> gstmt node list -> Ctxt.t = List.fold_left create_fctxt

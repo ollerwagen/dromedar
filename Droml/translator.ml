@@ -2,7 +2,6 @@ open Common
 open Ast
 open Astannotated
 open Ll
-open Builtins
 open Typechecker
 
 module Translator = struct
@@ -42,20 +41,23 @@ module Translator = struct
 
     let empty : t = default_module_name, [[]]
 
+    let get_current_module : t -> string = fst
+
     let set_current_module (c:t) (m:string) : t = m, snd c
 
     let get_raw (c:t) (id:string) : Ast.ty * Ll.llty * Ll.operand =
       let found,res = List.fold_left (fun (f,r) c -> if f then true,r else if List.mem_assoc id c then true,List.assoc id c else f,r) (false,(TInt,Ll.I64,Ll.IConst 0L)) (snd c) in
       if found then res else raise Not_found
 
-    let module_mangle (c:t) (id:string) : string = Printf.sprintf "%s$%s" (fst c) id
+    let full_mangle (m:string) (id:string) : string = Printf.sprintf "%s$%s" m id
+    let module_mangle (c:t) (id:string) : string = full_mangle (fst c) id
 
     let add_level (c:t) : t = fst c, [] :: (snd c)
 
     let top_level (c:t) = List.hd (snd c)
 
     let add_binding_to_module (c:t) (m:string) (id,bnd : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
-      fst c, ((Printf.sprintf "%s$%s" m id, bnd) :: List.hd (snd c)) :: List.tl (snd c)
+      fst c, ((full_mangle m id, bnd) :: List.hd (snd c)) :: List.tl (snd c)
 
     let add_binding (c:t) (b : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
       add_binding_to_module c (fst c) b
@@ -64,7 +66,7 @@ module Translator = struct
       get_raw c @@ module_mangle c id
     
     let get_from_module (c:t) (m:string) (id:string) : Ast.ty * Ll.llty * Ll.operand =
-      get_raw c @@ Printf.sprintf "%s$%s" m id
+      get_raw c @@ full_mangle m id
 
     let get_from_any_module (c:t) (id:string) : Ast.ty * Ll.llty * Ll.operand =
       let rec aux (c : (string * (Ast.ty * Ll.llty * Ll.operand)) list) =
@@ -122,9 +124,7 @@ module Translator = struct
   and cmp_llfty (a : ty list) (retty : Ast.retty) : Ll.llty =
     Ptr (Func (Ptr I64 :: List.map cmp_ty a, cmp_retty retty))
 
-  (* context buildup with all builtin functions (see builtins.ml) *)
-  let base_ctxt =
-    List.fold_left (fun c (m,id,t,op) -> Ctxt.add_binding_to_module c m (id,(t, cmp_ty t, op))) Ctxt.empty builtins
+  let base_ctxt = Ctxt.empty
 
   
   let allocate (size : Ll.operand) (t : Ll.llty) (name : string) : stream =
@@ -1018,6 +1018,24 @@ module Translator = struct
           ; GDecl (giterm, deptr fllt, SConst [ fun_llt, Gid gfid ])
           ; GAssn (fid, deptr fllt, giterm)
           ]
+      | GNVDecl (id,t) ->
+          let name = Ctxt.module_mangle c id in
+          Ctxt.add_binding c (id, (t, cmp_ty t, Gid (Ctxt.module_mangle c id))),
+          [ LinkVD (name, cmp_ty t) ]
+      | GNFDecl (id,a,rt) ->
+          let name = Ctxt.module_mangle c id in
+          let fllt = cmp_ty (TRef (TFun (List.map snd a, rt))) in
+          let fun_llt =
+            begin match fllt with
+              | Ptr (Struct [t]) -> t
+              | _                -> Stdlib.failwith "bad compiled global function type"
+            end in
+          c,
+          [ LinkFD ("_" ^ name, cmp_retty rt, Ptr I64 :: List.map (fun (_,t) -> cmp_ty t) a)
+          ; GDecl (name ^ "$c", deptr fllt, SConst [ fun_llt, Gid ("_" ^ name) ])
+          ; GAssn (name, deptr fllt, name ^ "$c")
+          ]
+      | GNTDecl _ -> c, []
     end
   
   let create_fctxt (prog : annt_program) : Ctxt.t =
@@ -1025,9 +1043,9 @@ module Translator = struct
       (fun c gs ->
         begin match gs with
           | Module m -> Ctxt.set_current_module c m
-          | GFDecl (id,args,rt,_) ->
+          | GFDecl (id,args,rt,_) | GNFDecl (id,args,rt) ->
               let ft = TRef (TFun (List.map snd args, rt)) in
-              Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (gensym id)))
+              Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (Ctxt.module_mangle c id)))
           | _ -> c
         end
       )
