@@ -2,7 +2,10 @@
 declare { i64 , [0 x i8]* }* @_Str$of_int(i64)
 declare { i64 , [0 x i8]* }* @_Str$of_flt(double)
 
-declare void @_IO$print_int(i64)
+declare i64 @_IO$print_int1(i64*, i64)
+@_IO$print_int2 = global { i64(i64*, i64)* } { i64(i64*, i64)* @_IO$print_int1 }
+@_IO$print_int = global { i64(i64*, i64)* }* @_IO$print_int2
+
 declare void @_IO$print_flt(double)
 declare void @_IO$print_str({ i64 , [0 x i8]* }*)
 declare void @_IO$print_char(i8)

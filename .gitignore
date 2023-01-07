@@ -7,7 +7,7 @@ TODO.txt
 .vscode/
 Droml/DEBUG.txt
 Droml/_build/
-Droml/obj/
+Droml/obj/*.*
 Droml/Notes/
 Droml/.vscode/
 Droml/a.out

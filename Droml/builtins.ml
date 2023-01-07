@@ -5,7 +5,7 @@ let builtins : (string * string * ty * operand) list =
   [ "Str", "of_int", TRef (TFun ([TInt], Ret (TRef TStr))), Gid "_Str$of_int"
   ; "Str", "of_flt", TRef (TFun ([TFlt], Ret (TRef TStr))), Gid "_Str$of_flt"
     
-  ; "IO", "print_int",  TRef (TFun ([TInt], Void)),      Gid "_IO$print_int"
+  ; "IO", "print_int",  TRef (TFun ([TInt], Ret TInt)),  Gid "_IO$print_int"
   ; "IO", "print_flt",  TRef (TFun ([TFlt], Void)),      Gid "_IO$print_flt"
   ; "IO", "print_str",  TRef (TFun ([TRef TStr], Void)), Gid "_IO$print_str"
   ; "IO", "print_char", TRef (TFun ([TChar], Void)),     Gid "_IO$print_char"

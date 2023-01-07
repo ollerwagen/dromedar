@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-void _IO$print_int(i64 i) {
+void _IO$print_int1(i64 *ignore, i64 i) {
     printf("%ld\n", i);
 }
 

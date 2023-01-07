@@ -73,6 +73,8 @@ type block = string * instr list * term
 type ginstr =
   | FDecl    of string * llty * (llty * string) list * (firstblock * block list)
   | GDecl    of string * llty * operand
+  | TDecl    of string * llty
+  | GAssn    of string * llty * string
   
 let rec size_ty (t:llty) : int =
   begin match t with
@@ -90,7 +92,7 @@ let rec print_llty (t:llty) : string =
   begin match t with
     | Void         -> "void"
     | VariadicDots -> "..."
-    | Namedt s     -> "%s"
+    | Namedt s     -> "%%%s"
     | Struct ts    -> Printf.sprintf "{%s}" (String.concat ", " (List.map print_llty ts))
     | Func   (a,r) -> Printf.sprintf "%s(%s)" (print_llty r) (String.concat ", " (List.map print_llty a))
     | Array  (s,t) -> Printf.sprintf "[%Ld x %s]" s (print_llty t)
@@ -249,6 +251,8 @@ let print_ginstr (gi:ginstr) : string =
           id
           (print_llty t)
           (print_operand init)
+    | TDecl (id,t) -> Printf.sprintf "%s = type %s\n" (print_llty (Namedt id)) (print_llty t)
+    | GAssn (t,llt,f) -> Printf.sprintf "@%s = global %s* @%s\n" t (print_llty llt) f
   end
 
 let print_llprog (p : ginstr list) : string =

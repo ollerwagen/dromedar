@@ -108,9 +108,9 @@ module Translator = struct
     begin match rt with
       | TStr         -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
       | TArr t       -> Struct [ I64 ; Ptr (Array (0L, cmp_ty t)) ]
-      | TFun (a,rt)  -> Func ((List.map cmp_ty a), cmp_retty rt)
       | TNamed _     -> I8
       | TModNamed _  -> I8
+      | TFun (a,rt)  -> Struct [ cmp_llfty a rt ]
     end
   
   and cmp_retty (t : Ast.retty) : Ll.llty =
@@ -118,6 +118,9 @@ module Translator = struct
       | Ast.Void  -> Ll.Void
       | Ast.Ret t -> cmp_ty t
     end
+
+  and cmp_llfty (a : ty list) (retty : Ast.retty) : Ll.llty =
+    Ptr (Func (Ptr I64 :: List.map cmp_ty a, cmp_retty retty))
 
   (* context buildup with all builtin functions (see builtins.ml) *)
   let base_ctxt =
@@ -279,7 +282,7 @@ module Translator = struct
           let lsym = gensym "lstr" in
           let size_ptr, str_ptr = gensym "arrsize", gensym "arrdata" in
           let lsym_as_ptr, strsym_as_ptr = gensym "lsym_ptr", gensym "strsym_ptr" in
-          let alloc_obj = allocate (IConst 16L) str_obj_ty rsym in
+          let alloc_obj = allocate (IConst 24L) str_obj_ty rsym in
           let alloc_str = allocate (IConst strlen) str_ty strsym in
 
           Id rsym, str_obj_ty,
@@ -293,9 +296,7 @@ module Translator = struct
           [ G (GDecl (gsym, gsym_t, Str s))
             (* cast global char array to char pointer *)
           ; I (Bitcast (lsym, Ptr gsym_t, Gid gsym, str_ty))
-            (* size_ptr points to size field in string structure *)
           ; I (Gep (size_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 0L ]))
-            (* str_ptr points to string field in string structure *)
           ; I (Gep (str_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 1L ]))
             (* copy char array into string symbol *)
           ; I (Bitcast (lsym_as_ptr, str_ty, Id lsym, Ptr I8))
@@ -660,6 +661,7 @@ module Translator = struct
           let rsym = gensym "callop" in
           begin match snd f with
             | TRef (TFun (argts,rt)) ->
+                let fptrsym, fsym, casptr = gensym "fclosptr", gensym "fclos", gensym "closiptr" in
                 let llrt = cmp_retty rt in
                 let args_casts =
                   List.map2
@@ -668,7 +670,10 @@ module Translator = struct
                 let argcs', caststreams = List.map fst args_casts, List.concat @@ List.map snd args_casts in
                 Id rsym, llrt,
                 fs @ List.concat (List.map getstream argcs) @ caststreams @
-                [ I (Call (Some rsym, llrt, fop, argcs')) ] @ arggcops,
+                [ I (Bitcast (fptrsym, fllt, fop, Ptr (cmp_llfty argts rt)))
+                ; I (Load (fsym, cmp_llfty argts rt, Id fptrsym))
+                ; I (Bitcast (casptr, fllt, fop, Ptr I64))
+                ; I (Call (Some rsym, llrt, Id fsym, (Ptr I64, Id casptr) :: argcs')) ] @ arggcops,
                 begin match t with | TRef _ | TNullRef _ -> true | _ -> false end
             | _ -> Stdlib.failwith "not a function, abort"
           end
@@ -977,6 +982,11 @@ module Translator = struct
           Ctxt.add_binding c (id, (vt, vllt, Gid llid)),
           s @ [ GDecl (llid, vllt, op) ]
       | GFDecl (id,args,rt,b) ->
+          let ft,fllt,fid =
+            begin match Ctxt.get c id with
+              | t,ft,Gid id -> t, ft, id
+              | _          -> Stdlib.failwith "function should return a Gid"
+            end in
           (* allocate a stack slot for all variables *)
           let create_fstart (args : (string * ty) list) : Ctxt.t * stream =
             let c' = Ctxt.add_level c in
@@ -988,15 +998,20 @@ module Translator = struct
               )
               (c',[]) args
           in
+          let gfid, giterm = gensym id, gensym id in
+          let fun_llt =
+            begin match fllt with
+              | Ptr (Struct [t]) -> t
+              | _                -> Stdlib.failwith "bad compiled global function type"
+            end in
           let c',inits = create_fstart args in
           let gis,cfg = make_cfg (inits @ snd (cmp_block rt c' [] b)) in
+        
           c,
-          gis @ Ll.[ FDecl (
-              (fun (_,_,op) -> begin match op with | Gid id -> id | _ -> Stdlib.failwith "bad create_fctxt" end) (Ctxt.get c id)
-            , cmp_retty rt
-            , List.map (fun (id,t) -> cmp_ty t, id) args
-            , cfg
-            )
+          gis @ [
+            FDecl (gfid, cmp_retty rt, (Ptr I64, gensym "empty_closure") :: List.map (fun (id,t) -> cmp_ty t, id) args, cfg)
+          ; GDecl (giterm, deptr fllt, SConst [ fun_llt, Gid gfid ])
+          ; GAssn (fid, deptr fllt, giterm)
           ]
     end
   
@@ -1026,21 +1041,35 @@ module Translator = struct
     (snd @@ List.fold_left (fun (c,res) gs -> let c',g = cmp_gstmt c gs in c',res@g) (c, []) prog) @
     [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
         let rval, strvec = gensym "mainret", gensym "strvec" in
+        let main_fppp, main_fpp, main_fp, main_asip = gensym "main_ppp", gensym "main_pp", gensym "main_p", gensym "main_ip" in
         let strvecty = TRef (TArr (TRef TStr)) in
-        let maincall, term, makestrvec =
-          begin match Ctxt.get_from_any_module c "main" with
-            | TRef (TFun ([], Void)), _, mainop ->
-                [ Call (None, Void, mainop, []) ], Ret (Some (I64, IConst 0L)), false
-            | TRef (TFun ([], Ret TInt)), _, mainop ->
-                [ Call (Some rval, cmp_ty TInt, mainop, []) ], Ret (Some (I64, Id rval)), false
-            | TRef (TFun ([TRef (TArr (TRef TStr))], Void)), _, mainop ->
-                [ Call (None, Void , mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, IConst 0L)), true
-            | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), _, mainop ->
-                [ Call (Some rval, cmp_ty TInt, mainop, [ cmp_ty strvecty, Id strvec ])], Ret (Some (I64, Id rval)), true
-            | _ -> Stdlib.failwith "bad AST: bad main function"
+        let mt, mllt, mainop = Ctxt.get_from_any_module c "main" in
+        let mainargs, mainret =
+          begin match mt with
+            | TRef (TFun (a, rt)) -> a, rt
+            | _                   -> Stdlib.failwith "main is not a function"
+          end in
+        let mft = cmp_llfty mainargs mainret in
+        let mainprep =
+          [ Bitcast (main_fppp, Ptr mllt, mainop, Ptr (Ptr mft))
+          ; Load (main_fpp, Ptr mft, Id main_fppp)
+          ; Load (main_fp, mft, Id main_fpp)
+          ; Bitcast (main_asip, Ptr mllt, mainop, Ptr I64)
+          ] in
+        let maincall, term, makestrvec = 
+          begin match mt with
+            | TRef (TFun ([], Void)) ->
+                [ Call (None, Void, Id main_fp, [ Ptr I64, Id main_asip ]) ], Ret (Some (I64, IConst 0L)), false
+            | TRef (TFun ([], Ret TInt)) ->
+                [ Call (Some rval, cmp_ty TInt, Id main_fp, [ Ptr I64, Id main_asip ]) ], Ret (Some (I64, Id rval)), false
+            | TRef (TFun ([TRef (TArr (TRef TStr))], Void)) ->
+                [ Call (None, Void, Id main_fp, [ Ptr I64, Id main_asip ; cmp_ty strvecty, Id strvec ]) ], Ret (Some (I64, IConst 0L)), true
+            | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)) ->
+              [ Call (Some rval, cmp_ty TInt, Id main_fp, [ Ptr I64, Id main_asip ; cmp_ty strvecty, Id strvec ]) ], Ret (Some (I64, Id rval)), true
+            | _ -> Stdlib.failwith "bad main function"
           end in
         ((if makestrvec then [ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] else []) @
-          maincall @ 
+          mainprep @ maincall @ 
           (if makestrvec then destream (removeref (cmp_ty strvecty, Id strvec)) else []),
         term),
         []
