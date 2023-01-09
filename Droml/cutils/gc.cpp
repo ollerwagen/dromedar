@@ -117,17 +117,19 @@ extern "C" {
         printf("allocate(%llu)\n", s);
 #endif
 
-        ptr res = (ptr)malloc(s);
+        if (used_memory >= next_gc) {
+            used_memory = 0;
+            gcrun();
+        }
+
+        ptr res = (ptr) malloc(s);
         table[res].prefs++;
 
 #if __AGGRESSIVE_GC__
         gcrun();
 #else
         used_memory += s;
-        if (used_memory >= next_gc) {
-            used_memory = 0;
-            gcrun();
-        }
+
 #endif
 
         return res;

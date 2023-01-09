@@ -781,38 +781,6 @@ module Translator = struct
       | Expr (e,t) ->
           let op,llt,s,gc = cmp_exp c (e, match t with | None -> TypeChecker.void_placeholder | Some t -> t) in
           c, s @ (if gc then removeref (llt,op) else []), refvars
-          (*
-          begin match e with
-            | Sprintf (Printf,s,es) -> let _,_,s,_ = cmp_exp c (e, TRef TStr) in c, s, refvars
-            | FApp (f,a) ->
-                let getstream (_,_,s,_) = s in
-                (* fgc must be = false since functions are not garbage-collectable (yet) *)
-                let (fop,fllt,fs,fgc), argcs = cmp_exp c f, List.map (cmp_exp c) a in
-                let arggcops = List.concat (List.map2 (fun (op,llt,_,gc) (_,t) -> if gc then removeref (llt,op) else []) argcs a) in
-                begin match snd f with
-                  | TRef (TFun (argts,rt)) ->
-                      let removerefretstream, retval =
-                        begin match rt with 
-                          | Ret (TRef t) ->
-                              let ret_name, cd_retty = gensym "ret_ref", cmp_retty (Ret (TRef t)) in
-                              removeref (cd_retty, Id ret_name), Some ret_name
-                          | _ -> [], None
-                        end in
-                      let llrt = cmp_retty rt in
-                      let args_casts =
-                        List.map2
-                          (fun ((op,llt,_,_),(_,pt)) et -> cross_cast et (pt,llt,op))
-                          (List.combine argcs a) argts in
-                      let argcs', caststreams = List.map fst args_casts, List.concat @@ List.map snd args_casts in
-                      c,
-                      fs @ List.concat (List.map getstream argcs) @ caststreams @
-                      [ I (Call (retval, llrt, fop, argcs')) ] @ removerefretstream @ arggcops,
-                      refvars
-                  | _ -> Stdlib.failwith "not a function, abort"
-                end
-            | _ -> Stdlib.failwith "can only compile function call as expression statement"
-          end
-          *)
 
       | If (cnd,t,nt) -> (* conditionals are bool -> primitive -> not GC'able (same for while, do-while) *)
           let cop,_,cs,_ = cmp_exp c cnd in
@@ -1079,6 +1047,16 @@ module Translator = struct
           ; Load (main_fp, mft, Id main_fpp)
           ; Bitcast (main_asip, Ptr mllt, mainop, Ptr I64)
           ] in
+        let gcaddrefs =
+          List.concat (List.filter_map
+            (fun (id,(t,llt,op)) ->
+              begin match t with
+                | TRef _ | TNullRef _ -> Some (destream (addref (Ptr llt,op)))
+                | _                   -> None
+              end
+            )
+            (List.hd (snd c))
+          ) in
         let maincall, term, makestrvec = 
           begin match mt with
             | TRef (TFun ([], Void)) ->
@@ -1092,7 +1070,7 @@ module Translator = struct
             | _ -> Stdlib.failwith "bad main function"
           end in
         ((if makestrvec then [ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] else []) @
-          mainprep @ maincall @ 
+          mainprep @ gcaddrefs @ maincall @ 
           (if makestrvec then destream (removeref (cmp_ty strvecty, Id strvec)) else []),
         term),
         []
