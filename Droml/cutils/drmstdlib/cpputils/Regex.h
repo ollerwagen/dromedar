@@ -10,6 +10,9 @@ extern "C" {
     i8* _cpputils_Regex$compile(string* rstr);
     i1  _cpputils_Regex$matches(i8 *r, string* s);
 
+    string* _cpputils_Regex$first_match(i8* r, string* s);
+    stringarr* _cpputils_Regex$all_matches(i8* r, string* s);
+
 #ifdef __cplusplus
 }
 #endif

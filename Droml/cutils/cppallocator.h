@@ -1,6 +1,8 @@
 #ifndef __CPP_ALLOCATOR__
 #define __CPP_ALLOCATOR__
 
+#include <stdlib.h>
+
 #include "gc.h"
 
 namespace drm {

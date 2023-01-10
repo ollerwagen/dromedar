@@ -32,3 +32,27 @@ module Regex
 native type R
 native fn compile : p:string -> R?
 native fn matches : p:R, s:string -> bool
+native fn first_match : p:R, s:string -> string?
+native fn all_matches : p:R, s:string -> [string]
+
+
+module Sys
+
+native fn cmd : s:string -> int
+native fn fork -> int
+
+
+module Time
+
+native type P
+native type D
+
+native fn clock -> int
+native fn time  -> int
+
+native fn now -> P
+native fn dt : a:P, b:P -> D
+
+native fn s  : t:D -> int
+native fn ms : t:D -> int
+native fn us : t:D -> int
