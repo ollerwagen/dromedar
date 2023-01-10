@@ -467,7 +467,7 @@ module TypeChecker = struct
           end
     end
   
-  let rec check_stmt (rt : retty) (c : Ctxt.t) (s : stmt node) : annt_stmt * Ctxt.t * bool = 
+  let rec check_stmt (rt : retty) (inloop : bool) (c : Ctxt.t) (s : stmt node) : annt_stmt * Ctxt.t * bool = 
     begin match s.t with
       | VDecl (id,m,t,e) ->
           if Ctxt.has_toplevel c id then
@@ -510,7 +510,7 @@ module TypeChecker = struct
       | If (cd,t,n) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let (t',_,r1),(n',_,r2) = check_stmt_block rt c t, check_stmt_block rt c n in If (ct,t',n'), c, r1 && r2
+            let (t',_,r1),(n',_,r2) = check_stmt_block rt inloop c t, check_stmt_block rt inloop c n in If (ct,t',n'), c, r1 && r2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
       | Denull (id,e,t,n) ->
@@ -518,29 +518,35 @@ module TypeChecker = struct
           begin match et with
             | TNullRef r ->
                 let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (TRef r, Const)) in
-                let (t',_,r1), (n',_,r2) = check_stmt_block rt c' t, check_stmt_block rt c n in
+                let (t',_,r1), (n',_,r2) = check_stmt_block rt inloop c' t, check_stmt_block rt inloop c n in
                 Denull (id,(e',et),t',n'), c, r1 && r2
             | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
           end
       | While (cd,b) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let b',_,_ = check_stmt_block rt c b in While (ct,b'), c, false
+            let b',_,_ = check_stmt_block rt true c b in While (ct,b'), c, false
           else
             raise @@ TypeError (ofnode "while condition must be of type bool" cd)
       | DoWhile (cd,b) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let b',_,r = check_stmt_block rt c b in DoWhile (ct,b'), c, r
+            let b',_,r = check_stmt_block rt true c b in DoWhile (ct,b'), c, r
           else
             raise @@ TypeError (ofnode "do-while condition must be of type bool" cd)
       | For (id,exps,incl1,incl2,expe,b) ->
           let sty, ety = check_exp c None false exps, check_exp c None false expe in
           if snd sty = TInt && snd ety = TInt then
             let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(TInt,Const)) in
-            let b',_,_ = check_stmt_block rt c' b in For (id,sty,incl1,incl2,ety,b'), c, false
+            let b',_,_ = check_stmt_block rt true c' b in For (id,sty,incl1,incl2,ety,b'), c, false
           else
             raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
+      | Break ->
+          if inloop then Break, c, false
+          else raise @@ TypeError (ofnode "cannot use break statement outside of loop" s)
+      | Continue ->
+          if inloop then Continue, c, false
+          else raise @@ TypeError (ofnode "cannot use continue statement outside of loop" s)
       | Return None ->
           if rt = Void then Return None, c, true
           else raise @@ TypeError (ofnode "cannot return without expression in non-void function" s)
@@ -555,8 +561,8 @@ module TypeChecker = struct
                   raise @@ TypeError (ofnode "return type doesn't match with function return type" s)
           end
     end
-  and check_stmt_block (rt : retty) (c : Ctxt.t) : stmt node list -> (annt_stmt list * Ctxt.t * bool) =
-    List.fold_left (fun (b,c,r) s -> if r then raise (TypeError (ofnode "unreachable statement" s)) else let s',c',r' = check_stmt rt c s in b@[s'], c', r') ([],c,false)
+  and check_stmt_block (rt : retty) (inloop : bool) (c : Ctxt.t) : stmt node list -> (annt_stmt list * Ctxt.t * bool) =
+    List.fold_left (fun (b,c,r) s -> if r then raise (TypeError (ofnode "unreachable statement" s)) else let s',c',r' = check_stmt rt inloop c s in b@[s'], c', r') ([],c,false)
 
   let rec check_gexp (c : Ctxt.t) (ge : exp node) : annt_exp =
     begin match ge.t with
@@ -596,7 +602,7 @@ module TypeChecker = struct
           if alldistinct (List.map fst args) then
             let c' = Ctxt.add_level c in
             let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in
-            let b',_,returns = check_stmt_block rt.t c'' b in
+            let b',_,returns = check_stmt_block rt.t false c'' b in
             if returns then
               GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b'), c
             else if rt.t = Void then

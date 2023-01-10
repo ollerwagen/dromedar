@@ -12,7 +12,7 @@
 \lstdefinelanguage{Dromedar}{
 	morekeywords = [1]{type,int,flt,char,bool,void,fn,string},
 	morekeywords = [2]{true,false,null},
-	morekeywords = [3]{return,if,else,while,do,for,denull},
+	morekeywords = [3]{return,if,else,while,do,for,denull,break,continue},
 	morekeywords = [4]{let,mut,global},
 	morekeywords = [5]{of,in},
 	morekeywords = [6]{printf,sprintf,assert},
@@ -732,80 +732,89 @@ fn main -> void
 			In the statement typing rules, a statement rule produces a tuple $(S,r)$ where $S$ stands for the newly updated context, and $r\in\{\bot,\top\}$, where $\bot$ means that a statement might not return and $\top$ means that a statement definitely returns.
 			
 			To prevent potential mistakes, the typechecker prevents statements which are deemed unreachable at compile time. The logical operators $\vee$ and $\wedge$ operate as if $\bot\equiv0$ and $\top\equiv1$.
+			
+			The $\top$ or $\bot$ on the LHS of a statement represents whether the current statement is in a block or not (this determines whether \code{break}/\code{continue} statements are applicable).
 		
 			\subsubsection{Local Variable Declarations}
 			
 				\begin{align*}
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt}}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt}}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
-					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt},L}{S}{\mc{let id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt},L}{S}{\mc{let id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},c)),\bot}{StmtVTDeclConst}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ S\ruleapp{E}\mc{exp} :: \mc{t}}{S,T,\mc{rt},L}{S}{\mc{mut id := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVDeclMut}\\
+					\drmrule{(\mc{id},\_,\_)\not\in_0 S\ \ T\ruleapp{D}\mc{t}\ \  S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{t}\vee\mc{exp}\bowtie\mc{t}}{S,T,\mc{rt},L}{S}{\mc{mut id:t := exp} \Rightarrow (S \cup (\mc{id},\mc{t},m)),\bot}{StmtVTDeclMut}
 				\end{align*}
 			
 			\subsubsection{Assignments}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t} \vee \mc{exp}\bowtie\mc{t}}{S,T,\mc{rt}}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
+					\drmrule{S\ruleapp{A}\mc{lhs}\ \ S\ruleapp{E}\mc{lhs} :: \mc{t}\ \ S\ruleapp{ET}\mc{exp} \trianglelefteq \mc{t} \vee \mc{exp}\bowtie\mc{t}}{S,T,\mc{rt},L}{S}{\mc{lhs := exp} \Rightarrow S,\bot}{StmtAssn}
 				\end{align*}
 			
 			\subsubsection{Expression Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,T,\mc{rt}}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
+					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,T,\mc{rt},L}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot}{StmtExprVoid}
 				\end{align*}
 				
 			\subsubsection{\code{printf} Call}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)}::\mc{string}}{S,T,\mc{rt}}{S}{\mc{printf("...\{j1\}...\{jm\}...", e1,...,en)} \Rightarrow S,\bot}{StmtPrintf}
+					\drmrule{S\ruleapp{E}\mc{sprintf("...\{j1\}...\{jm\}...", e1,...,en)}::\mc{string}}{S,T,\mc{rt},L}{S}{\mc{printf("...\{j1\}...\{jm\}...", e1,...,en)} \Rightarrow S,\bot}{StmtPrintf}
 				\end{align*}
 				
 			\subsubsection{\code{assert} Call}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp}::\mc{bool}}{S,T}{S}{\mc{assert exp}\Rightarrow S,\bot}{StmtAssert}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{bool}}{S,T,\mc{rt},L}{S}{\mc{assert exp}\Rightarrow S,\bot}{StmtAssert}
 				\end{align*}
 			
 			\subsubsection{If Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,T,\mc{rt}\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,T,\mc{rt}}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt},L\ruleapp{S}\mc{b1}\Rightarrow S_1,R_1\ \ S,T,\mc{rt},L\ruleapp{S}\mc{b2}\Rightarrow S_2,R_2}{S,T,\mc{rt},L}{S}{\mc{if c b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtIf}
 				\end{align*}
 				
 			\subsubsection{Checked Null Casts}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t?}\ \ S\cup\{(\mc{r},\mc{t},c)\},T,\mc{rt} \ruleapp{S} \mc{b1} \Rightarrow S',R_1\ \ S,T,\mc{rt} \ruleapp{S}\mc{b2}\Rightarrow S'',R_2}{S,T,\mc{rt}}{S}{\mc{denull r := exp b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtNullCast}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{t?}\ \ S\cup\{(\mc{r},\mc{t},c)\},T,\mc{rt},L \ruleapp{S} \mc{b1} \Rightarrow S',R_1\ \ S,T,\mc{rt},L \ruleapp{S}\mc{b2}\Rightarrow S'',R_2}{S,T,\mc{rt},L}{S}{\mc{denull r := exp b1 else b2} \Rightarrow S,R_1\wedge R_2}{StmtNullCast}
 				\end{align*}
 			
 			\subsubsection{While Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{while c b} \Rightarrow S,\bot}{StmtWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt},\top\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt},L}{S}{\mc{while c b} \Rightarrow S,\bot}{StmtWhile}
 				\end{align*}
 			
 			\subsubsection{Do-While Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt}\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
+					\drmrule{S\ruleapp{E}\mc{c} :: \mc{bool}\ \ S,T,\mc{rt},\top\ruleapp{S}\mc{b}\Rightarrow S',R}{S,T,\mc{rt},L}{S}{\mc{do b while c} \Rightarrow S,R}{StmtDoWhile}
 				\end{align*}
 				
 			\subsubsection{For Statements}
 	
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},T,\mc{rt}\ruleapp{S} \mc{b}\Rightarrow S',R}{S,T,\mc{rt}}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
+					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},T,\mc{rt},\top\ruleapp{S} \mc{b}\Rightarrow S',R}{S,T,\mc{rt},L}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot}{StmtFor}
+				\end{align*}
+				
+			\subsubsection{Break and Continue}
+			
+				\begin{align*}
+					\drmrule{}{S,T,\mc{rt},\top}{S}{\mc{break} \Rightarrow S,\bot}{StmtBreak},\ \ 
+					\drmrule{}{S,T,\mc{rt},\top}{S}{\mc{continue} \Rightarrow S,\bot}{StmtContinue}
 				\end{align*}
 			
 			\subsubsection{Return Statements}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}\vee\mc{exp}\bowtie\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,T,\mc{void}}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
+					\drmrule{S\ruleapp{ET}\mc{exp}\trianglelefteq\mc{rt}\vee\mc{exp}\bowtie\mc{rt}}{S,\mc{rt}}{S}{\mc{return exp} \Rightarrow S,\top}{StmtReturnExp},\ \  \drmrule{}{S,T,\mc{void},L}{S}{\mc{return}\Rightarrow S,\top}{StmtReturn}
 				\end{align*}
 				
 			\subsubsection{Blocks}
 			
 				\begin{align*}
-					\drmrule{S\sqcup\{\},\mc{rt}\ruleapp{S}\mc{s1} \Rightarrow S_1,\bot,\ \ S_1,T,\mc{rt}\ruleapp{S}\mc{s2} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mc{rt}\ruleapp{S}\mc{sn} \Rightarrow S_n,R}{S,\mc{rt}}{S}{\mc{s1 ... sn} \Rightarrow S_n,R}{StmtBlock}
+					\drmrule{S\sqcup\{\},\mc{rt},L\ruleapp{S}\mc{s1} \Rightarrow S_1,\bot,\ \ S_1,T,\mc{rt},L\ruleapp{S}\mc{s2} \Rightarrow S_2,\bot,\ \dots,\ S_{n-1},\mc{rt},L\ruleapp{S}\mc{sn} \Rightarrow S_n,R}{S,\mc{rt},L}{S}{\mc{s1 ... sn} \Rightarrow S_n,R}{StmtBlock}
 				\end{align*}
 		
 		\subsection{Global Statements}
@@ -813,7 +822,7 @@ fn main -> void
 			\subsubsection{Global Function Declaration}
 			
 				\begin{align*}
-					\drmrule{T\ruleapp{D}\mc{t1},\dots,T\ruleapp{D}\mc{tn},T\ruleapp{D}\mc{rt}\ \ S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},T,\mc{rt}\ruleapp{S} \mc{b} \Rightarrow S',\top\;(\textnormal{or \code{rt=void}}) \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S,T}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S,T}{GStmtFDecl}
+					\drmrule{T\ruleapp{D}\mc{t1},\dots,T\ruleapp{D}\mc{tn},T\ruleapp{D}\mc{rt}\ \ S\sqcup\{(\mc{a1},\mc{t1},c),\dots,(\mc{an},\mc{tn},c)\},T,\mc{rt},\bot\ruleapp{S} \mc{b} \Rightarrow S',\top\;(\textnormal{or \code{rt=void}}) \ \ \mc{a1},\dots,\mc{an} \textnormal{ distinct}}{S,T}{G}{\mc{fn id : a1:t1, ..., an:tn -> rt b} \Rightarrow S,T}{GStmtFDecl}
 				\end{align*}
 			
 			\subsubsection{Global Variable Declaration}
@@ -941,6 +950,9 @@ fn main -> void
 				while        ::= /while/
 				for          ::= /for/
 				
+				break        ::= /break/
+				continue     ::= /continue/
+				
 				printf       ::= /printf/
 				sprintf      ::= /sprintf/
 				assert       ::= /assert/
@@ -1043,6 +1055,8 @@ fn main -> void
 				                 | ForStmt
 				                 | ExprStmt
 				                 | ReturnStmt
+				                 | %Break
+				                 | %Continue
 				                 
 				VDeclaration     ::=
 				                 | %Let %Identifier             %Assign Expression

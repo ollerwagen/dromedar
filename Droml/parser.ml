@@ -538,6 +538,16 @@ module Parser = struct
       let b,s''''''' = parse_block s'''''' (indent+1) in
       { t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
 
+    and parse_break_stmt (s : state) : stmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KBreak in
+      { t = Break ; start = start ; length = (peek s').start - start }, s'
+
+    and parse_continue_stmt (s : state) : stmt node * state =
+      let start = (peek s).start in
+      let s' = expect s Token.KContinue in
+      { t = Continue ; start = start ; length = (peek s').start - start }, s'
+
     and parse_return_stmt (s : state) (indent : int) : stmt node * state =
       let start = (peek s).start in
       let s' = expect s Token.KReturn in
@@ -560,6 +570,8 @@ module Parser = struct
       | Token.KWhile            -> parse_while_stmt        s' indent
       | Token.KDo               -> parse_dowhile_stmt      s' indent
       | Token.KFor              -> parse_for_stmt          s' indent
+      | Token.KBreak            -> parse_break_stmt        s'
+      | Token.KContinue         -> parse_continue_stmt     s'
       | Token.KReturn           -> parse_return_stmt       s' indent
       | _                       -> parse_expr_or_assn_stmt s' indent
     end

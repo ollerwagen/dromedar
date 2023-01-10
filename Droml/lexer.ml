@@ -53,35 +53,37 @@ module Lexer = struct
     List.map (fun (s,t) -> Str.regexp_string s, t) (List.sort f simple_regex_strings)
   
   let keywords : (string * token) list = [
-      "module",  KModule
-    ; "native",  KNative
-    ; "global",  KGlobal
-    ; "fn",      KFn
-    ; "let",     KLet
-    ; "mut",     KMut
-    ; "type",    KType
-    ; "int",     KInt
-    ; "flt",     KFlt
-    ; "char",    KChar
-    ; "bool",    KBool
-    ; "string",  KString
-    ; "void",    KVoid
-    ; "null",    KNull
-    ; "of",      KOf
-    ; "in",      KIn
-    ; "printf",  KPrintf
-    ; "sprintf", KSprintf
-    ; "assert",  KAssert
-    ; "if",      KIf
-    ; "elif",    KElif
-    ; "else",    KElse
-    ; "denull",  KDenull
-    ; "while",   KWhile
-    ; "for",     KFor
-    ; "do",      KDo
-    ; "return",  KReturn
-    ; "true",    LBool true
-    ; "false",   LBool false
+      "module",   KModule
+    ; "native",   KNative
+    ; "global",   KGlobal
+    ; "fn",       KFn
+    ; "let",      KLet
+    ; "mut",      KMut
+    ; "type",     KType
+    ; "int",      KInt
+    ; "flt",      KFlt
+    ; "char",     KChar
+    ; "bool",     KBool
+    ; "string",   KString
+    ; "void",     KVoid
+    ; "null",     KNull
+    ; "of",       KOf
+    ; "in",       KIn
+    ; "printf",   KPrintf
+    ; "sprintf",  KSprintf
+    ; "assert",   KAssert
+    ; "if",       KIf
+    ; "elif",     KElif
+    ; "else",     KElse
+    ; "denull",   KDenull
+    ; "while",    KWhile
+    ; "for",      KFor
+    ; "do",       KDo
+    ; "break",    KBreak
+    ; "continue", KContinue
+    ; "return",   KReturn
+    ; "true",     LBool true
+    ; "false",    LBool false
     ]
   
   type other_regexes = | Id | Flt | Int | Char | CharEscape | Whitespace | Comment

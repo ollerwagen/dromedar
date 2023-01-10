@@ -1,5 +1,5 @@
-#define __DEBUG__ 0
-#define __AGGRESSIVE_GC__ 0
+#define __DEBUG__         1
+#define __AGGRESSIVE_GC__ 1
 
 
 #include <vector>

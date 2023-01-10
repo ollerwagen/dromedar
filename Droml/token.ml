@@ -79,6 +79,8 @@ type token =
   | KWhile
   | KDo
   | KFor
+  | KBreak
+  | KContinue
   | KReturn
 
 let print_token (t:token) : string =
@@ -158,5 +160,7 @@ let print_token (t:token) : string =
     | KWhile       -> "[while]"
     | KDo          -> "[do]"
     | KFor         -> "[for]"
+    | KBreak       -> "[break]"
+    | KContinue    -> "[continue]"
     | KReturn      -> "[return]"
   end

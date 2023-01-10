@@ -187,6 +187,8 @@ module Translator = struct
     ; I (Load (rsym, I64, Id iptr))
     ]
 
+  let difference (a : 'a list) (b : 'a list) : 'a list = List.filter (fun elem -> not @@ List.mem elem b) a
+
 
   (* last return value: true <=> value is linked to its own pref <=> needs to be GC'd *)
   let rec cmp_exp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * bool =
@@ -724,7 +726,19 @@ module Translator = struct
     end
   
   (* string list is list of all variables that need to be gc'd at a return statement *)
-  and cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list =
+  (* refvars: all GC-able variables in scope in the function at any given moment *)
+  (* bcvars: all GC-able variables created in the innermost loop *)
+  and cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (bcvars : (llty * operand) list) (bclbls : string * string) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list * (llty * operand) list =
+    let free_vars (l : (llty * operand) list) : stream =
+      List.concat (List.map
+        (fun (llt,op) ->
+          let refptr = gensym "existstmtdel" in
+          I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)
+        )
+        l
+      )
+    in
+  
     begin match s with
       | VDecl (id, _, t, e) ->
           let op,ellt,s,gc = cmp_exp c e in
@@ -747,6 +761,10 @@ module Translator = struct
           begin match vt with
             | TRef _ | TNullRef _ -> (vllt, Id llid) :: refvars
             | _      -> refvars
+          end,
+          begin match vt with
+            | TRef _ | TNullRef _ -> (vllt, Id llid) :: bcvars
+            | _                   -> bcvars
           end
           (* add pref and remove it from %op: cancel each other out *)
           
@@ -759,12 +777,13 @@ module Translator = struct
           s @
           [ T (Cbr (op, lbltrue, lblfalse)) ; L lblfalse ] @
           fs @
-          [ I (Call (None, Void, Gid "print_str", [ fllt, fop ]))
+          [ I (Call (None, Void, Gid "_print_string", [ fllt, fop ]))
           ; I (Call (None, Void, Gid "_abort", [ I64, IConst 134L ]))
           ; T (Br lbltrue)
           ] @
           [ L lbltrue ],
-          refvars
+          refvars,
+          bcvars
 
       | Assn (l,r) ->
           let (lop,lllt,ls,lgc), (rop,rllt,rs,rgc) = cmp_lhs c l, cmp_exp c r in
@@ -776,37 +795,37 @@ module Translator = struct
                   [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt',Id gcobj) @ (if rgc then [] else addref (rllt, rop))
               | _ -> [] (* do not attempt to gc primitives *)
             end in
-          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars
+          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars, bcvars
 
       | Expr (e,t) ->
           let op,llt,s,gc = cmp_exp c (e, match t with | None -> TypeChecker.void_placeholder | Some t -> t) in
-          c, s @ (if gc then removeref (llt,op) else []), refvars
+          c, s @ (if gc then removeref (llt,op) else []), refvars, bcvars
 
       | If (cnd,t,nt) -> (* conditionals are bool -> primitive -> not GC'able (same for while, do-while) *)
           let cop,_,cs,_ = cmp_exp c cnd in
-          let (_,s1), (_,s2) = cmp_block rt c refvars t, cmp_block rt c refvars nt in
-          let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "ifi_lbl_end" in
-          c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars
+          let (_,s1), (_,s2) = cmp_block rt c refvars bcvars bclbls t, cmp_block rt c refvars bcvars bclbls nt in
+          let lbl1, lbl2, lblend = gensym "if_lbl", gensym "if_lbl", gensym "if_lbl_end" in
+          c, cs @ [ T (Cbr (cop, lbl1, lbl2)) ; L lbl1 ] @ s1 @ [ T (Br lblend) ; L lbl2 ] @ s2 @ [ T (Br lblend) ; L lblend ], refvars, bcvars
 
       | Denull (id,e,t,nt) ->
           let nnsym, cmpres = gensym id, gensym "cmpres" in
           let ifnonnull, ifnull, lblend = gensym "denull_lbl_nonnull", gensym "denull_lbl_null", gensym "denull_end" in
           let eop,ellt,es,egc = cmp_exp c e in
           let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (snd e, ellt, Id nnsym)) in
-          let (_,s1), (_,s2) = cmp_block rt c' refvars t, cmp_block rt c refvars nt in
+          let (_,s1), (_,s2) = cmp_block rt c' refvars bcvars bclbls t, cmp_block rt c refvars bcvars bclbls nt in
           c,
           es @ [ E (Alloca (nnsym, ellt)) ; I (Cmp (cmpres, ICmp, Eq, ellt, eop, Null)) ; T (Cbr (Id cmpres, ifnull, ifnonnull)) ; L ifnonnull ; I (Store (ellt, eop, Id nnsym)) ] @
-            s1 @ [ T (Br lblend) ; L ifnull ] @ s2 @ [ T (Br lblend) ; L lblend ] @ (if egc then removeref (ellt,eop) else []), refvars
+            s1 @ [ T (Br lblend) ; L ifnull ] @ s2 @ [ T (Br lblend) ; L lblend ] @ (if egc then removeref (ellt,eop) else []), refvars, bcvars
       | While (cnd,b) ->
-          let cop,_,cs,_ = cmp_exp c cnd in
-          let _,s = cmp_block rt c refvars b in
           let lblstart, lblbody, lblend = gensym "while_lbl", gensym "while_lbl", gensym "while_lbl" in
-          c, [ T (Br lblstart) ; L lblstart ] @ cs @ [ T (Cbr (cop, lblbody, lblend)) ; L lblbody ] @ s @ [ T (Br lblstart); L lblend ], refvars
-      | DoWhile (cnd,b) ->
           let cop,_,cs,_ = cmp_exp c cnd in
-          let _,s = cmp_block rt c refvars b in
-          let lblstart, lblend = gensym "dowhile_lbl", gensym "dowhile_lbl" in
-          c, [ T (Br lblstart) ; L lblstart ] @ s @ cs @ [ T (Cbr (cop, lblstart, lblend)) ; L lblend ], refvars
+          let _,s = cmp_block rt c refvars [] (lblend,lblstart) b in
+          c, [ T (Br lblstart) ; L lblstart ] @ cs @ [ T (Cbr (cop, lblbody, lblend)) ; L lblbody ] @ s @ [ T (Br lblstart); L lblend ], refvars, bcvars
+      | DoWhile (cnd,b) ->
+          let lblstart, lblcond, lblend = gensym "dowhile_lbl", gensym "dowhile_lblcond", gensym "dowhile_lbl" in
+          let cop,_,cs,_ = cmp_exp c cnd in
+          let _,s = cmp_block rt c refvars [] (lblend, lblcond) b in
+          c, [ T (Br lblstart) ; L lblstart ] @ s @ [ T (Br lblcond) ; L lblcond ] @ cs @ [ T (Cbr (cop, lblstart, lblend)) ; L lblend ], refvars, bcvars
       | For (id,s,incl1,incl2,e,b) ->
           let diff, i = gensym "diff", gensym "for_var" in
           let lbl_cmp_up, lbl_cmp_dn = gensym "lbl_cmp_up", gensym "lbl_cmp_dn" in
@@ -815,13 +834,13 @@ module Translator = struct
           let incr_i, incrd_i = gensym "for_inc_i", gensym "for_incd_i" in
           let calc_step_up, calc_step_dn, after_calc_step = gensym "for_calc_up", gensym "for_calc_dn", gensym "for_calc_after" in 
           let step_ptr, step = gensym "for_step_ptr", gensym "step" in
-          let lblstart = gensym "for_start" in
+          let lblstart,lblupdate = gensym "for_start", gensym "for_update" in
 
           let c' = Ctxt.add_binding c (id, (TInt, I64, Id i)) in
 
           (* bounds are of type int -> not GC'able (primitive) *)
           let (sop,_,ss,_), (eop,_,es,_) = cmp_exp c s, cmp_exp c e in
-          let _,bs = cmp_block rt c' refvars b in
+          let _,bs = cmp_block rt c' refvars [] (lblend,lblupdate) b in
 
           c,
           ss @ es @
@@ -860,36 +879,35 @@ module Translator = struct
           ; T (Cbr (Id cmp_dn, lblbody, lblend))
           ; L lblbody
           ] @ bs @
-          [ I (Load (incr_i, I64, Id i))
+          [ T (Br lblupdate)
+          ; L lblupdate
+          ; I (Load (incr_i, I64, Id i))
           ; I (Binop (incrd_i, Add, I64, Id incr_i, Id step))
           ; I (Store (I64, Id incrd_i, Id i))
           ; T (Br lblstart)
           ; L lblend
           ],
-          refvars
+          refvars,
+          bcvars
+
+      | Break ->    c, free_vars bcvars @ [ T (Br (fst bclbls)) ], difference refvars bcvars, []
+      | Continue -> c, free_vars bcvars @ [ T (Br (snd bclbls)) ], difference refvars bcvars, []
 
       | Return e ->
-          let free_vars = List.concat (List.map
-            (fun (llt,op) ->
-                let refptr = gensym "returndel" in
-                I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)
-            )
-            refvars
-          ) in
           begin match e with
-            | None   -> c, free_vars @ [ T (Ll.Ret None) ], refvars
+            | None   -> c, free_vars refvars @ [ T (Ll.Ret None) ], [], []
             | Some e ->
                 begin match rt with
                   | Ret rt ->
                       let op,lt,s,gc = cmp_exp c e in
                       let (lt',op'),caststream = cross_cast rt (snd e, lt, op) in
-                      c, s @ (if gc then [] else maybe_addref (snd e) (lt,op)) @ free_vars @ caststream @ [ T (Ret (Some (lt', op'))) ], refvars
+                      c, s @ (if gc then [] else maybe_addref (snd e) (lt,op)) @ free_vars refvars @ caststream @ [ T (Ret (Some (lt', op'))) ], [], []
                   | Void -> Stdlib.failwith "bad AST: return-value statement in void function"
                 end
           end
     end
-  and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (b : annt_stmt list) : Ctxt.t * stream =
-    let c',s,rv' = List.fold_left (fun (c,s,rv) st -> let c',sta,rv' = cmp_stmt rt c rv st in c',s@sta,rv') (Ctxt.add_level c,[],refvars) b in
+  and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (bcvars : (llty * operand) list) (bclbls : string * string) (b : annt_stmt list) : Ctxt.t * stream =
+    let c',s,rv',bv' = List.fold_left (fun (c,s,rv,bv) st -> let c',sta,rv',bv' = cmp_stmt rt c rv bv bclbls st in c',s@sta,rv',bv') (Ctxt.add_level c,[],refvars,bcvars) b in
     c', s @ List.concat (List.map (fun (_,(_,llt,op)) -> let refptr = gensym "returndel" in I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)) (Ctxt.top_level c'))
   
   let make_cfg (s : stream) : ginstr list * (Ll.firstblock * Ll.block list) =
@@ -905,7 +923,7 @@ module Translator = struct
                   | None -> Stdlib.failwith "entry block has no terminator"
                   | _    ->
                       begin match cl with
-                        | Some l -> g,ei,et,Some s,[],bs@[l,[],Br s]
+                        | Some l -> g,ei,et,Some s,[],bs@[l,ci,Br s]
                         | None   -> g,ei,et,Some s,[],bs
                       end
                 end
@@ -978,7 +996,7 @@ module Translator = struct
               | _                -> Stdlib.failwith "bad compiled global function type"
             end in
           let c',inits = create_fstart args in
-          let gis,cfg = make_cfg (inits @ snd (cmp_block rt c' [] b)) in
+          let gis,cfg = make_cfg (inits @ snd (cmp_block rt c' [] [] ("","") b)) in
         
           c,
           gis @ [
@@ -1048,7 +1066,7 @@ module Translator = struct
           ; Bitcast (main_asip, Ptr mllt, mainop, Ptr I64)
           ] in
         let gcaddrefs =
-          List.concat (List.filter_map
+          (List.concat (List.filter_map
             (fun (id,(t,llt,op)) ->
               begin match t with
                 | TRef _ | TNullRef _ -> Some (destream (addref (Ptr llt,op)))
@@ -1056,7 +1074,7 @@ module Translator = struct
               end
             )
             (List.hd (snd c))
-          ) in
+          )) in
         let maincall, term, makestrvec = 
           begin match mt with
             | TRef (TFun ([], Void)) ->
@@ -1070,7 +1088,7 @@ module Translator = struct
             | _ -> Stdlib.failwith "bad main function"
           end in
         ((if makestrvec then [ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] else []) @
-          mainprep @ gcaddrefs @ maincall @ 
+          mainprep @ gcaddrefs @ maincall @
           (if makestrvec then destream (removeref (cmp_ty strvecty, Id strvec)) else []),
         term),
         []
