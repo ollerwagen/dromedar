@@ -21,3 +21,13 @@ let filename_to_module (filename : string) : string =
     Str.matched_string filename
   else
     default_module_name
+
+let difference (a : 'a list) (b : 'a list) : 'a list = List.filter (fun elem -> not @@ List.mem elem b) a
+
+let union (a : 'a list) (b : 'a list) : 'a list =
+  (*
+  let a' = List.map (fun (a,b) -> Printf.sprintf "%s.%s" a b) b in
+  let b' = List.map (fun (a,b) -> Printf.sprintf "%s.%s" a b) a in
+  let () = Printf.printf "union [%s] [%s]\n" (String.concat ", " a') (String.concat ", " b') in
+  *)
+  a @ difference b a

@@ -467,7 +467,7 @@ module TypeChecker = struct
           end
     end
   
-  let rec check_stmt (rt : retty) (inloop : bool) (c : Ctxt.t) (s : stmt node) : annt_stmt * Ctxt.t * bool = 
+  let rec check_stmt (rt : retty) (inloop : bool) (c : Ctxt.t) (s : stmt node) : annt_stmt * Ctxt.t * bool * bool = 
     begin match s.t with
       | VDecl (id,m,t,e) ->
           if Ctxt.has_toplevel c id then
@@ -476,26 +476,26 @@ module TypeChecker = struct
             begin match t with
               | None   ->
                   let et = check_exp c None false e in
-                  VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false
+                  VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false, false
               | Some t ->
                   let et = check_exp c (Some t.t) false e in
                   let () = check_ty c t in
                   if subtype (snd et) t.t || crosstype (snd et) t.t then
-                    VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false
+                    VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false, false
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (Ast.print_ty t) (Ast.print_ty (ofnode (snd et) e))) s)
             end
       | Assert e ->
           let e' = check_exp c None false e in
           begin match snd e' with
-            | TBool -> Assert e', c, false
+            | TBool -> Assert e', c, false, false
             | _     -> raise @@ TypeError (ofnode ("assertion expression needs to be of type bool") e)
           end
       | Assn (l,r) ->
           let lt,rt = check_exp c None false l, check_exp c None false r in
           if is_assignable c l then
             if subtype (snd rt) (snd lt) || crosstype (snd lt) (snd rt) then
-              Assn (lt,rt), c, false
+              Assn (lt,rt), c, false, false
             else
               raise @@ TypeError (ofnode (Printf.sprintf "expression type doesn't match assignment target") r)
           else
@@ -504,13 +504,13 @@ module TypeChecker = struct
           begin match e.t with
             | FApp _ | Sprintf (Printf,_,_) ->
                 let e',t = check_exp c None true e in
-                Expr (e', if t = void_placeholder then None else Some t), c, false
+                Expr (e', if t = void_placeholder then None else Some t), c, false, false
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
           end
       | If (cd,t,n) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let (t',_,r1),(n',_,r2) = check_stmt_block rt inloop c t, check_stmt_block rt inloop c n in If (ct,t',n'), c, r1 && r2
+            let (t',_,r1,b1),(n',_,r2,b2) = check_stmt_block rt inloop c t, check_stmt_block rt inloop c n in If (ct,t',n'), c, r1 && r2, b1 && b2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
       | Denull (id,e,t,n) ->
@@ -518,51 +518,51 @@ module TypeChecker = struct
           begin match et with
             | TNullRef r ->
                 let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (TRef r, Const)) in
-                let (t',_,r1), (n',_,r2) = check_stmt_block rt inloop c' t, check_stmt_block rt inloop c n in
-                Denull (id,(e',et),t',n'), c, r1 && r2
+                let (t',_,r1,b1), (n',_,r2,b2) = check_stmt_block rt inloop c' t, check_stmt_block rt inloop c n in
+                Denull (id,(e',et),t',n'), c, r1 && r2, b1 && b2
             | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
           end
       | While (cd,b) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let b',_,_ = check_stmt_block rt true c b in While (ct,b'), c, false
+            let b',_,_,_ = check_stmt_block rt true c b in While (ct,b'), c, false, false
           else
             raise @@ TypeError (ofnode "while condition must be of type bool" cd)
       | DoWhile (cd,b) ->
           let ct = check_exp c None false cd in
           if snd ct = TBool then
-            let b',_,r = check_stmt_block rt true c b in DoWhile (ct,b'), c, r
+            let b',_,r,b = check_stmt_block rt true c b in DoWhile (ct,b'), c, r, false
           else
             raise @@ TypeError (ofnode "do-while condition must be of type bool" cd)
       | For (id,exps,incl1,incl2,expe,b) ->
           let sty, ety = check_exp c None false exps, check_exp c None false expe in
           if snd sty = TInt && snd ety = TInt then
             let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(TInt,Const)) in
-            let b',_,_ = check_stmt_block rt true c' b in For (id,sty,incl1,incl2,ety,b'), c, false
+            let b',_,_,_ = check_stmt_block rt true c' b in For (id,sty,incl1,incl2,ety,b'), c, false, false
           else
             raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
       | Break ->
-          if inloop then Break, c, false
+          if inloop then Break, c, false, true
           else raise @@ TypeError (ofnode "cannot use break statement outside of loop" s)
       | Continue ->
-          if inloop then Continue, c, false
+          if inloop then Continue, c, false, true
           else raise @@ TypeError (ofnode "cannot use continue statement outside of loop" s)
       | Return None ->
-          if rt = Void then Return None, c, true
+          if rt = Void then Return None, c, true, false
           else raise @@ TypeError (ofnode "cannot return without expression in non-void function" s)
       | Return (Some e) ->
-          let et = check_exp c None false e in
           begin match rt with
             | Void  -> raise @@ TypeError (ofnode "cannot return with expression in void function" s)
             | Ret t ->
+                let et = check_exp c (Some t) false e in
                 if subtype (snd et) t || crosstype (snd et) t then
-                  Return (Some et), c, true
+                  Return (Some et), c, true, false
                 else
                   raise @@ TypeError (ofnode "return type doesn't match with function return type" s)
           end
     end
-  and check_stmt_block (rt : retty) (inloop : bool) (c : Ctxt.t) : stmt node list -> (annt_stmt list * Ctxt.t * bool) =
-    List.fold_left (fun (b,c,r) s -> if r then raise (TypeError (ofnode "unreachable statement" s)) else let s',c',r' = check_stmt rt inloop c s in b@[s'], c', r') ([],c,false)
+  and check_stmt_block (rt : retty) (inloop : bool) (c : Ctxt.t) : stmt node list -> (annt_stmt list * Ctxt.t * bool * bool) =
+    List.fold_left (fun (b,c,r,brs) s -> if r||brs then raise (TypeError (ofnode "unreachable statement" s)) else let s',c',r',br' = check_stmt rt inloop c s in b@[s'], c', r', br') ([],c,false,false)
 
   let rec check_gexp (c : Ctxt.t) (ge : exp node) : annt_exp =
     begin match ge.t with
@@ -602,7 +602,7 @@ module TypeChecker = struct
           if alldistinct (List.map fst args) then
             let c' = Ctxt.add_level c in
             let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in
-            let b',_,returns = check_stmt_block rt.t false c'' b in
+            let b',_,returns,_ = check_stmt_block rt.t false c'' b in (* know that this doesn't break as break/continue only legal in loops *)
             if returns then
               GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b'), c
             else if rt.t = Void then
