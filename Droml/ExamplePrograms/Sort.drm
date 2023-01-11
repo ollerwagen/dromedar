@@ -1,0 +1,6 @@
+fn main -> void
+    let x := [Util.randflt() : x in [1...100]]
+    printf("{0}\n", sort(x))
+
+fn sort : l:[flt] -> [flt]
+    return ? l.length <= 1 -> l : sort([ x : x in l : x < l[0] ]) + [l[0]] + sort([ x : x in l : x > l[0]])

@@ -37,6 +37,7 @@ stdlib:
 	$(COMPILE) $(INCL) -o $(OUT)/Regex.o -c $(STDLIB)/Regex.c
 	$(COMPILE) $(INCL) -o $(OUT)/Sys.o   -c $(STDLIB)/Sys.c
 	$(COMPILE) $(INCL) -o $(OUT)/Time.o  -c $(STDLIB)/Time.c
+	$(COMPILE) $(INCL) -o $(OUT)/Util.o  -c $(STDLIB)/Util.c
 	$(COMPILE_LIB) -I cutils/ cutils/drmstdlib/cpputils/File.cpp  -o $(OUT)/cpputils_File.so
 	$(COMPILE_LIB) -I cutils/ cutils/drmstdlib/cpputils/Regex.cpp -o $(OUT)/cpputils_Regex.so
 	$(COMPILE_LIB) -I cutils/ cutils/drmstdlib/cpputils/Time.cpp  -o $(OUT)/cpputils_Time.so

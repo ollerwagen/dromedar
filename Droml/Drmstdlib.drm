@@ -13,6 +13,12 @@ native fn print_char : c:char  -> void
 native fn print_bool : b:bool  -> void
 
 
+module Util
+
+native fn randint -> int
+native fn randflt -> flt
+
+
 module File
 
 native fn readall : f:string -> [string]
