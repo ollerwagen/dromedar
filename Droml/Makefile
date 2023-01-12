@@ -14,7 +14,11 @@ STDLIB = cutils/drmstdlib
 INCL = -I cutils/
 
 setup:
+	chmod +x togglegc.sh
 	[ -d obj ] || mkdir obj
+
+togglegc: setup
+	./togglegc.sh
 
 gc:
 	$(COMPILE_LIB) cutils/gc.cpp -o $(OUT)/gc.so
