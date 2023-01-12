@@ -101,6 +101,7 @@ type stmt =
   | While   of exp node * stmt node list
   | DoWhile of exp node * stmt node list
   | For     of string * exp node * inclusion * inclusion * exp node * stmt node list
+  | ForIn   of string * exp node * stmt node list
   | Break
   | Continue
   | Return  of exp node option
@@ -188,6 +189,7 @@ let rec print_stmt (indent : int) (s : stmt node) : string =
     | While   (c,b)               -> Printf.sprintf "%swhile %s\n%s"                ind (print_exp c) (print_block (indent+1) b)
     | DoWhile (c,b)               -> Printf.sprintf "%sdo\n%s\n%swhile %s\n"        ind (print_block (indent+1) b) ind (print_exp c)
     | For     (i,s,i1,i2,e,b)     -> Printf.sprintf "%sfor %s := %s %s %s\n%s"      ind i (print_exp s) (print_incl (i1,i2)) (print_exp e) (print_block (indent+1) b)
+    | ForIn   (i,l,b)             -> Printf.sprintf "%sfor %s in %s\n%s"            ind i (print_exp l) (print_block (indent+1) b)
     | Break                       -> Printf.sprintf "%sbreak\n"                     ind
     | Continue                    -> Printf.sprintf "%scontinue\n"                  ind
     | Return  None                -> Printf.sprintf "%sreturn\n"                    ind

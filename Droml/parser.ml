@@ -524,19 +524,28 @@ module Parser = struct
           | Token.Id i -> i, snd @@ advance s'
           | _          -> raise @@ ParseError (ofnode "For loop requires loop variable" (fst @@ advance s'))
         end in
-      let s''' = expect s'' Token.Assign in
-      let startexp,s'''' = parse_exp s''' in
-      let incl1,incl2,s''''' =
-        begin match (peek s'''').t with
-          | Token.Dots        -> Incl, Incl, snd @@ advance s''''
-          | Token.DotsPipe    -> Incl, Excl, snd @@ advance s''''
-          | Token.PipeDots    -> Excl, Incl, snd @@ advance s''''
-          | Token.PipeDotPipe -> Excl, Excl, snd @@ advance s''''
-          | _              -> raise @@ ParseError (ofnode "expect a range indicator in for header" (fst @@ advance s''''))
-        end in
-      let endexp,s'''''' = parse_exp s''''' in
-      let b,s''''''' = parse_block s'''''' (indent+1) in
-      { t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
+      begin match (peek s'').t with
+        | Token.Assign ->
+            let s''' = snd @@ advance s'' in
+            let startexp,s'''' = parse_exp s''' in
+            let incl1,incl2,s''''' =
+              begin match (peek s'''').t with
+                | Token.Dots        -> Incl, Incl, snd @@ advance s''''
+                | Token.DotsPipe    -> Incl, Excl, snd @@ advance s''''
+                | Token.PipeDots    -> Excl, Incl, snd @@ advance s''''
+                | Token.PipeDotPipe -> Excl, Excl, snd @@ advance s''''
+                | _              -> raise @@ ParseError (ofnode "expect a range indicator in for header" (fst @@ advance s''''))
+              end in
+            let endexp,s'''''' = parse_exp s''''' in
+            let b,s''''''' = parse_block s'''''' (indent+1) in
+            { t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''').start - start }, s'''''''
+        | Token.KIn ->
+            let s''' = snd @@ advance s'' in
+            let lexp,s'''' = parse_exp s''' in
+            let b,s''''' = parse_block s'''' (indent+1) in
+            { t = ForIn (id,lexp,b) ; start = start ; length = (peek s''''').start - start }, s'''''
+        | _ -> raise @@ ParseError (ofnode "expected either an assignment or a range list with 'in'" (peek s''))
+      end
 
     and parse_break_stmt (s : state) : stmt node * state =
       let start = (peek s).start in

@@ -112,7 +112,7 @@ module Translator = struct
   and cmp_rty (rt : Ast.rty) : Ll.llty =
     begin match rt with
       | TStr         -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
-      | TArr t       -> Struct [ I64 ; Ptr (Array (0L, cmp_ty t)) ]
+      | TArr t       -> Struct [ I64 ; cmp_lllty t ]
       | TNamed _     -> I8
       | TModNamed _  -> I8
       | TFun (a,rt)  -> Struct [ cmp_llfty a rt ]
@@ -126,6 +126,8 @@ module Translator = struct
 
   and cmp_llfty (a : ty list) (retty : Ast.retty) : Ll.llty =
     Ptr (Func (Ptr I64 :: List.map cmp_ty a, cmp_retty retty))
+
+  and cmp_lllty (a : ty) : Ll.llty = Ptr (Array (0L, cmp_ty a))
 
   let base_ctxt = Ctxt.empty
 
@@ -915,6 +917,53 @@ module Translator = struct
           bcvars,
           union bfs (union sfs efs)
 
+      | ForIn (id,le,b) ->
+          let i,x = gensym "for_in_ix", gensym "for_in_var" in
+          let arrptr, arrval, arrelemptr, arrelemval = gensym "for_in_lptr", gensym "for_in_lval", gensym "for_in_lelemptr", gensym "for_in_lelemvar" in
+          let icmpval, ixsetval, iincval, iincdval = gensym "for_in_ix_cmp_val", gensym "for_in_ix_set_val", gensym "for_in_ix_inc_val", gensym "for_in_ix_inc_val_incd" in
+          let size_ptr, size_val, ixcmp = gensym "for_in_l_ptr", gensym "for_in_l_val", gensym "for_in_index_cmp" in
+          let lblhead,lblbody,lblinc,lblend = gensym "for_in_head", gensym "for_in_body", gensym "for_in_inc", gensym "for_in_end" in
+          let et =
+            begin match snd le with
+              | TRef (TArr t) -> t
+              | _             -> Stdlib.failwith "bad for-in type"
+            end in
+          let c' = Ctxt.add_binding c (id, (et, cmp_ty et, Id x)) in
+          let _,bs,bfs = cmp_block rt c' refvars [] (lblend,lblinc) b in
+          let lop,lllt,ls,lgc,lfs = cmp_exp c le in
+          c,
+          ls @
+            [ I (Gep (size_ptr, lllt, lop, [ IConst 0L ; IConst 0L ]))
+            ; I (Load (size_val, I64, Id size_ptr))
+            ; E (Alloca (i, I64))
+            ; E (Alloca (x, cmp_ty et))
+            ; I (Store (I64, IConst 0L, Id i))
+            ; T (Br lblhead)
+            ; L lblhead
+            ; I (Load (icmpval, I64, Id i))
+            ; I (Cmp (ixcmp, ICmp, Less, I64, Id icmpval, Id size_val))
+            ; T (Cbr (Id ixcmp, lblbody, lblend))
+            ; L lblbody
+            ; I (Load (ixsetval, I64, Id i))
+            ; I (Gep (arrptr, lllt, lop, [ IConst 0L ; IConst 1L ]))
+            ; I (Load (arrval, cmp_lllty et, Id arrptr))
+            ; I (Gep (arrelemptr, cmp_lllty et, Id arrval, [ IConst 0L ; Id ixsetval ]))
+            ; I (Load (arrelemval, cmp_ty et, Id arrelemptr))
+            ; I (Store (cmp_ty et, Id arrelemval, Id x))
+            ] @
+            bs @
+            [ L lblinc
+            ; I (Load (iincval, I64, Id i))
+            ; I (Binop (iincdval, Add, I64, Id iincval, IConst 1L))
+            ; I (Store (I64, Id iincdval, Id i))
+            ; T (Br lblhead)
+            ; L lblend
+            ] @
+            (if lgc then removeref (lllt,lop) else []),
+            refvars,
+            bcvars,
+            union bfs lfs
+
       | Break ->    c, free_vars bcvars @ [ T (Br (fst bclbls)) ], difference refvars bcvars, [], []
       | Continue -> c, free_vars bcvars @ [ T (Br (snd bclbls)) ], difference refvars bcvars, [], []
 
@@ -933,7 +982,7 @@ module Translator = struct
     end
   and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (bcvars : (llty * operand) list) (bclbls : string * string) (b : annt_stmt list) : Ctxt.t * stream * (string * string) list =
     let c',s,rv',bv',fs = List.fold_left (fun (c,s,rv,bv,fs) st -> let c',sta,rv',bv',fs' = cmp_stmt rt c rv bv bclbls st in c',s@sta,rv',bv',union fs fs') (Ctxt.add_level c,[],refvars,bcvars,[]) b in
-    c', s @ List.concat (List.map (fun (_,(_,llt,op)) -> let refptr = gensym "returndel" in I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)) (Ctxt.top_level c')), fs
+    c', s @ List.concat (List.map (fun (llt,op) -> let refptr = gensym "returndel" in I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)) refvars), fs
   
   let make_cfg (s : stream) : ginstr list * (Ll.firstblock * Ll.block list) =
     let g,ei,et,cl,ci,bs =

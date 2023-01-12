@@ -541,6 +541,15 @@ module TypeChecker = struct
             let b',_,_,_ = check_stmt_block rt true c' b in For (id,sty,incl1,incl2,ety,b'), c, false, false
           else
             raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
+      | ForIn (id,lexp,b) ->
+          let l',lt = check_exp c None false lexp in
+          begin match lt with
+            | TRef (TArr et) ->
+                let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(et,Const)) in
+                let b',_,_,_ = check_stmt_block rt true c' b in
+                ForIn (id,(l',lt),b'), c, false, false
+            | _ -> raise @@ TypeError (ofnode "for-in loop must have an array expression" lexp)
+          end
       | Break ->
           if inloop then Break, c, false, true
           else raise @@ TypeError (ofnode "cannot use break statement outside of loop" s)

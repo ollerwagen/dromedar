@@ -88,7 +88,7 @@ static void gcrun() {
 
 #if __DEBUG__
     printf("After GC Run: %ld freed objects, new %ld objects in table\n", prev_size - table.size(), table.size());
-    // printf("After the GC Run:\n%s\n", print_table().c_str());
+    printf("After the GC Run:\n%s\n", print_table().c_str());
 #endif
 }
 

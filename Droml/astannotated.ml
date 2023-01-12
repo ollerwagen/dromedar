@@ -34,6 +34,7 @@ type annt_stmt =
   | While   of annt_exp * annt_stmt list
   | DoWhile of annt_exp * annt_stmt list
   | For     of string * annt_exp * inclusion * inclusion * annt_exp * annt_stmt list
+  | ForIn   of string * annt_exp * annt_stmt list
   | Break
   | Continue
   | Return  of annt_exp option
@@ -47,6 +48,7 @@ type annt_gstmt =
   | GNTDecl of string
 
 type annt_program = annt_gstmt list
+
 
 let rec print_ty (t : ty) : string =
   begin match t with
@@ -120,6 +122,7 @@ let rec print_stmt (indent:int) (s:annt_stmt) : string =
     | While   (c,b)               -> Printf.sprintf "%swhile %s\n%s"                ind (print_exp c) (print_block (indent+1) b)
     | DoWhile (c,b)               -> Printf.sprintf "%sdo\n%s\n%swhile %s\n"        ind (print_block (indent+1) b) ind (print_exp c)
     | For     (i,s,i1,i2,e,b)     -> Printf.sprintf "%sfor %s := %s %s %s\n%s"      ind i (print_exp s) (print_incl (i1,i2)) (print_exp e) (print_block (indent+1) b)
+    | ForIn   (i,l,b)             -> Printf.sprintf "%sfor %s in %s\n%s"            ind i (print_exp l) (print_block (indent+1) b)
     | Break                       -> Printf.sprintf "%sbreak\n"                     ind
     | Continue                    -> Printf.sprintf "%scontinue\n"                  ind
     | Return  None                -> Printf.sprintf "%sreturn\n"                    ind

@@ -796,6 +796,8 @@ fn main -> void
 	
 				\begin{align*}
 					\drmrule{S\ruleapp{E}\mc{estart}::\mc{int}\ \ S\ruleapp{E}\mc{eend}::\mc{int}\ \ S\cup \{ (\mc{id},\mc{int},c) \},T,\mc{rt},\top\ruleapp{S} \mc{b}\Rightarrow S',R,B}{S,T,\mc{rt},L}{S}{\mc{for id := estart \%RangeSpecifier eend b} \Rightarrow S,\bot,\bot}{StmtFor}
+				\end{align*}\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{exp}::\mc{[t]}\ \ S\cup\{(\mc{id},\mc{t},c)\},T,\mc{rt},\top\ruleapp{S}b\Rightarrow S',R,B}{S,T,\mc{rt},L}{S}{\mc{for id in exp b} \Rightarrow S,\bot,\bot}{StmtForIn}
 				\end{align*}
 				
 			\subsubsection{Break and Continue}
@@ -1087,6 +1089,7 @@ fn main -> void
 				                 
 				ForStmt          ::=
 				                 | %For %Id %Assign Expr RangeSpecifier Expr Block
+				                 | %For %Id %In Expr Block
 				                 
 				RangeSpecifier   ::=
 				                 | %Dots
