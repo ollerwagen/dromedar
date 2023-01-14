@@ -1190,14 +1190,14 @@ module Translator = struct
           [ LinkVD (name, cmp_ty t) ], []
       | GNFDecl (id,a,rt) ->
           let name = Ctxt.module_mangle c id in
-          let fllt = cmp_ty (TRef (TFun (List.map snd a, rt))) in
+          let fllt = cmp_ty (TRef (TFun (a, rt))) in
           let fun_llt =
             begin match fllt with
               | Ptr (Struct [t]) -> t
               | _                -> Stdlib.failwith "bad compiled global function type"
             end in
           c,
-          [ LinkFD ("_" ^ name, cmp_retty rt, Ptr I64 :: List.map (fun (_,t) -> cmp_ty t) a)
+          [ LinkFD ("_" ^ name, cmp_retty rt, Ptr I64 :: List.map cmp_ty a)
           ; GDecl (name ^ "$c", deptr fllt, SConst [ fun_llt, Gid ("_" ^ name) ])
           ; GAssn (name, deptr fllt, name ^ "$c")
           ],
@@ -1210,8 +1210,11 @@ module Translator = struct
       (fun c gs ->
         begin match gs with
           | Module m -> Ctxt.set_current_module c m
-          | GFDecl (id,args,rt,_) | GNFDecl (id,args,rt) ->
+          | GFDecl (id,args,rt,_) ->
               let ft = TRef (TFun (List.map snd args, rt)) in
+              Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (Ctxt.module_mangle c id)))
+          | GNFDecl (id,args,rt) ->
+              let ft = TRef (TFun (args, rt)) in
               Ctxt.add_binding c (id, (ft, cmp_ty ft, Gid (Ctxt.module_mangle c id)))
           | _ -> c
         end

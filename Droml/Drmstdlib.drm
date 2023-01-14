@@ -1,51 +1,51 @@
 module Str
 
-native fn of_int : i:int => string
-native fn of_flt : f:flt => string
+native fn of_int (int) -> string
+native fn of_flt (flt) -> string
 
 
 module IO
 
-native fn print_int : i:int    => void
-native fn print_flt : f:flt    => void
-native fn print_str : s:string => void
-native fn print_char : c:char  => void
-native fn print_bool : b:bool  => void
+native fn print_int  (int)    -> void
+native fn print_flt  (flt)    -> void
+native fn print_str  (string) -> void
+native fn print_char (char)   -> void
+native fn print_bool (bool)   -> void
 
 
 module Util
 
-native fn randint => int
-native fn randflt => flt
+native fn randint -> int
+native fn randflt -> flt
 
 
 module File
 
-native fn readall : f:string => [string]
+native fn readall (string) -> [string]
 
 
 module Math
-
-native fn sin : x:flt => flt
-native fn cos : x:flt => flt
-native fn tan : x:flt => flt
-native e:  flt
-native pi: flt
+ 
+native fn sin (flt) -> flt
+native fn cos (flt) -> flt
+native fn tan (flt) -> flt
+native e  : flt
+native pi : flt
 
 
 module Regex
 
 native type R
-native fn compile : p:string => R?
-native fn matches : p:R, s:string => bool
-native fn first_match : p:R, s:string => string?
-native fn all_matches : p:R, s:string => [string]
+native fn compile     (string)   -> R?
+native fn matches     (R,string) -> bool
+native fn first_match (R,string) -> string?
+native fn all_matches (R,string) -> [string]
 
 
 module Sys
 
-native fn cmd : s:string => int
-native fn fork => int
+native fn cmd  (string) -> int
+native fn fork          -> int
 
 
 module Time
@@ -53,12 +53,12 @@ module Time
 native type P
 native type D
 
-native fn clock => int
-native fn time  => int
+native fn clock -> int
+native fn time  -> int
 
-native fn now => P
-native fn dt : a:P, b:P => D
+native fn now      -> P
+native fn dt (P,P) -> D
 
-native fn s  : t:D => int
-native fn ms : t:D => int
-native fn us : t:D => int
+native fn s  (D) -> int
+native fn ms (D) -> int
+native fn us (D) -> int

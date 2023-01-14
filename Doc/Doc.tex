@@ -264,6 +264,15 @@ fn main -> void
 					\code{IO.print_bool} & \code{bool -> void} & prints \code{"true"} or \code{"false"} to the console
 				\end{longtable}
 			
+			\subsubsection{\code{Util}: Miscellaneous Utility Functions}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{Util.randint} & \code{() -> int} & random integer from $-2^63$ to $2^63-1$ \\
+					\code{Util.randflt} & \code{() -> flt} & random floating point number in $[0,1)$
+				\end{longtable}
+			
 			\subsubsection{\code{File}: File I/O}
 			
 				\begin{longtable}{l|l|l}
@@ -282,6 +291,43 @@ fn main -> void
 					\code{Math.tan} & \code{flt -> flt} & tangent function \\
 					\code{Math.e} & \code{flt} & Euler's constant \\
 					\code{Math.pi} & \code{flt} & $\pi$ constant
+				\end{longtable}
+			
+			\subsubsection{\code{Regex}: Regular Expressions}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{<type>} & \code{R} & blackbox type that represents a regex automaton \\
+					\code{compile} & \code{string -> R?} & returns \code{null} if the compilation to a regex automaton fails \\
+					\code{matches} & \code{(R,string) -> bool} & finds whether a partial match in the given string exists \\
+					\code{first_match} & \code{(R,string) -> string?} & returns the first regex match (if it exists, else \code{null}) \\
+					\code{all_matches} & \code{(R,string) -> [string]} & finds all matches
+				\end{longtable}
+			
+			\subsubsection{\code{Sys} : System Calls, etc.}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{cmd} & \code{string -> int} & executes a shell command \\
+					\code{fork} & \code{() -> int} & executes the \code{fork()} \textsc{Unix} system call
+				\end{longtable}
+			
+			\subsubsection{\code{Time} : Date and Time Utilities}
+			
+				\begin{longtable}{l|l|l}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{<type>} & \code{P} & blackbox type representing a point in time \\
+					\code{<type>} & \code{D} & blackbox type representing a duration \\
+					\code{clock} & \code{() -> int} & the number of clock ticks since the start of the program \\
+					\code{time} & \code{() -> int} & returns the \textsc{Unix} time \\
+					\code{now} & \code{() -> P} & the time point representing the point when \code{now()} was called \\
+					\code{dt} & \code{(P,P) -> D} & calculates the time difference between the first and the second time point \\
+					\code{s} & \code{D -> int} & duration in seconds \\
+					\code{ms} & \code{D -> int} & duration in milliseconds \\
+					\code{us} & \code{D -> int} & duration in microseconds
 				\end{longtable}
 		
 	\section{Garbage Collection}
@@ -895,13 +941,7 @@ fn main -> void
 			Let $S^\star$ be the starting context which contains the builtin context. It looks as follows:
 			
 			\begin{align*}
-				S^\star := \{\}\sqcup \left\{
-					\begin{array}{lll}
-						(\mc{string\_of\_int},&\mc{int -> string},&c),\\ (\mc{string\_of\_flt},&\mc{flt -> string},&c),\\
-						(\mc{string\_concat},&\mc{(string,string) -> string},&c),\\
-						(\mc{io\_print},&\mc{string -> void},&c)
-					\end{array}
-				\right\}
+				S^\star := \{\}\sqcup \left\{ (\mc{id}, \mathsf{t}, c) \ \mid\ \mc{id}\textnormal{ is builtin with type \textsf{t}} \right\}
 			\end{align*}
 			
 			Let $\mathsf{maintys}$ be the legal set of types of main functions -- one of which must be contained in a program.
@@ -927,7 +967,7 @@ fn main -> void
 		
 			The Lexer Grammar is specified using \textbf{regular expressions}:
 			
-			\begin{verbatim}
+			\begin{small}\begin{verbatim}
 				LiteralInt   ::= /[1-9]\d*/
 				LiteralFlt   ::= /\d+\.\d+/
 				LiteralChar  ::= /'([^'\\]|(\\[\\nrt']))'/
@@ -1016,229 +1056,109 @@ fn main -> void
 				RBrack       ::= /\]/
 				
 				QuestionMark ::= /\?/
-			\end{verbatim}
+			\end{verbatim}\end{small}
 			
 		\subsection{Parser Grammar}
 		
-			The following grammar specification uses a preceding \texttt{\%} for lexer tokens.
+			The following grammar specification uses a preceding \texttt{\%} for lexer tokens. In order to support human readability of the grammar, it is given in EBNF.
 		
-			\begin{verbatim}
-				Program          ::=
-				                 | €
-				                 | GlobalStatement Program
+			\begin{small}\begin{verbatim}
+				Program          ::= { GlobalStatement }
 				                 
-				GlobalStatement  ::=
-				                 | GVDeclaration
-				                 | GFDeclaration
-				                 | %Module %Identifier
-				                 | %Native NatDecl
+				GlobalStatement  ::= GVDeclaration | GFDeclaration | %Module %Identifier | %Native NatDecl
 				                 
-				GVDeclaration    ::=
-				                 | %Global      %Identifier             %Assign GlobalExpression
-				                 | %Global      %Identifier %Colon Type %Assign GlobalExpression
-				                 | %Global %Mut %Identifier             %Assign GlobalExpression
-				                 | %Global %Mut %Identifier %Colon Type %Assign GlobalExpression
-				                 
-				GFDeclaration    ::=
-				                 | %Fn %Identifier                   %Arrow ReturnType Block
-				                 | %Fn %Identifier %Colon FArguments %Arrow ReturnType Block
-				                 
+				GVDeclaration    ::=  %Global [ %Mut ] %Identifier [ %Colon Type ] %Assign GlobalExpression
+				GFDeclaration    ::= %Fn %Identifier [ %LParen FArguments %Rparen ] %Arrow ReturnType Block
 				NatDecl          ::=
-				                 | %Type %Identifier
-				                 | %Fn %Identifier NamelessArgtyList %Arrow ReturnType
-				                 | Type %Identifier
+				    %Type %Identifier | Type %Identifier
+				    | %Fn %Identifier [ %LParen FArguments %RParen ] %Arrow ReturnType
 				                 
-				FArguments       ::=
-				                 | %Identifier %Colon Type
-				                 | %Identifier %Colon Type %Comma FArguments
+				FArguments       ::= [ %Identifier %Colon Type { %Comma %Identifier %Colon Type } ]
 				
-				ReturnType       ::=
-				                 | %Void
-				                 | Type
+				ReturnType       ::= %Void | Type
 				                 
-				Block            ::=
-				                 | €
-				                 | Statement Block
+				Block            ::= { Statement }
 				
 				Statement        ::=
-				                 | VDeclaration
-				                 | AssignStmt
-				                 | IfStmt
-				                 | NullCastStmt
-				                 | WhileStmt
-				                 | DoWhileStmt
-				                 | ForStmt
-				                 | ExprStmt
-				                 | ReturnStmt
-				                 | %Break
-				                 | %Continue
+				    VDeclaration | AssignStmt
+				    | IfStmt | NullCastStmt
+				    | WhileStmt | DoWhileStmt | ForStmt
+				    | ExprStmt
+				    | %Break | %Continue
+				    | ReturnStmt
 				                 
-				VDeclaration     ::=
-				                 | %Let %Identifier             %Assign Expression
-				                 | %Let %Identifier %Colon Type %Assign Expression
-				                 | %Mut %Identifier             %Assign Expression
-				                 | %Mut %Identifier %Colon Type %Assign Expression
+				VDeclaration     ::= [ %Let | %Mut ] %Identifier [ %Colon Type ] %Assign Expression
 				                 
-				AssignStmt       ::=
-				                 | LHS %Assign Expression
+				AssignStmt       ::= LHS %Assign Expression
 				                 
-				IfStmt           ::=
-				                 | %If Expression Block ElifStmt
+				IfStmt           ::= %If Expression Block { %Elif Expression Block } [ %Else Block ]
 				                 
-				ElifStmt         ::=
-				                 | %Elif Expression Block ElifStmt
-				                 | %Else Block
-				                 | €
+				NullCastStmt     ::= %Denull %Id %Assign Expression Block [ %Else Block ]
 				                 
-				NullCastStmt     ::=
-				                 | %Denull %Id %Assign Expression Block
-				                 | %Denull %Id %Assign Expression Block %Else Block
-				                 
-				WhileStmt        ::=
-				                 | %While Expression Block
-				
-				DoWhileStmt      ::=
-				                 | %Do Block %While Expression
-				                 
+				WhileStmt        ::= %While Expression Block
+				DoWhileStmt      ::= %Do Block %While Expression
 				ForStmt          ::=
-				                 | %For %Id %Assign Expr RangeSpecifier Expr Block
-				                 | %For %Id %In Expr Block
+				    %For %Id %Assign Expr RangeSpecifier Expr Block
+				    | %For %Id %In Expr Block
 				                 
-				RangeSpecifier   ::=
-				                 | %Dots
-				                 | %DotsPipe
-				                 | %PipeDots
-				                 | %PipeDotPipe
+				RangeSpecifier   ::= %Dots | %DotsPipe | %PipeDots | %PipeDotPipe
 				                 
 				ExprStmt         ::=
-				                 | Expression
-				                 | %Printf %LParen %LiteralStr PrintfArglist %RParen
-				                 | %Assert Expression
+				    Expression
+				    | %Printf %LParen %LiteralStr PrintfArglist %RParen
+				    | %Assert Expression
 				                 
-				ReturnStmt       ::=
-				                 | %Return
-				                 | %Return Expression
+				ReturnStmt       ::= %Return [ Expression ]
 				                 
-				LHS              ::=
-				                 | %Identifier
+				LHS              ::= BaseExpression { Application }
 				                 
-				Type             ::=
-				                 | %Int
-				                 | %Flt
-				                 | %Char
-				                 | %Bool
-				                 | RefType
-				                 | RefType %QuestionMark
+				Type             ::= %Int | %Flt | %Char | %Bool | RefType [ %QuestionMark ]
 				                 
-				RefType          ::=
-				                 | %String
-				                 | %LBrack Type %RBrack
-				                 | %Identifier
-				                 | %Identifier %Dot %Identifier
+				RefType          ::= %String | %LBrack Type %RBrack | %Identifier [ %Dot %Identifier ]
 				                 
-				GlobalExpression ::= Expression*
+				GlobalExpression ::= Expression
 			
 				Expression       ::=
-				                 | %Null %Of RefType
-				                 | %LBrack %RBrack %Of Type
-				                 | %QuestionMark Expression %Arrow Expression %Colon Expression
- 				                 | %Assert Expression
-				                 | ExprPrec30
+				    %Null %Of RefType
+				    | %LBrack %RBrack %Of Type
+				    | %QuestionMark Expression %Arrow Expression %Colon Expression
+ 				    | %Assert Expression
+				    | ExprPrec30
 				
-				ExprPrec20       ::= 
-				                 | ExprPrec30
-				                 | ExprPrec30 %Equal       ExprPrec20
-				                 | ExprPrec30 %NotEqual    ExprPrec20
-				                 | ExprPrec30 %Greater     ExprPrec20
-				                 | ExprPrec30 %Less        ExprPrec20
-				                 | ExprPrec30 %GreaterEq   ExprPrec20
-				                 | ExprPrec30 %LessEq      ExprPrec20
-				                 | ExprPrec30 %RefEqual    ExprPrec20
-				                 | ExprPrec30 %RefNotEqual ExprPrec20
-				ExprPrec30       ::=
-				                 | ExprPrec40
-				                 | ExprPrec40 %Bitor ExprPrec30
-				ExprPrec40       ::=
-				                 | ExprPrec50
-				                 | ExprPrec50 %Xor ExprPrec40
-				ExprPrec50       ::=
-				                 | ExprPrec60
-				                 | ExprPrec60 %Bitand ExprPrec50
-				ExprPrec60       ::=
-				                 | ExprPrec70
-				                 | ExprPrec70 %LShift ExprPrec60
-				                 | ExprPrec70 %RShift ExprPrec60
-				                 | ExprPrec70 %AShift ExprPrec60
-				ExprPrec70       ::=
-				                 | ExprPrec80
-				                 | ExprPrec80 %Plus ExprPrec70
-				                 | ExprPrec80 %Minus ExprPrec70
-				ExprPrec80       ::=
-				                 | ExprPrec90
-				                 | ExprPrec90 %Star ExprPrec80
-				ExprPrec90       ::=
-				                 | ExprPrec100
-				                 | ExprPrec100 %StarStar ExprPrec90
-				ExprPrec100      ::=
-				                 | SimpleExpression
-				                 | %Dash ExprPrec100
-				                 | %Bang ExprPrec100
+				ExprPrec20       ::=
+				     ExprPrec30 [ (%Equal | %NotEqual | %Greater | %Less | %GreaterEq
+				         | %LessEq | %RefEqual | %RefNotEqual) ExprPrec20 ]
+				         
+				ExprPrec30       ::= ExprPrec40 [ %Bitor ExprPrec30 ]
+				ExprPrec40       ::= ExprPrec50 [ %Xor ExprPrec40 ]
+				ExprPrec50       ::= ExprPrec60 [ %Bitand ExprPrec50 ]
+				ExprPrec60       ::= ExprPrec70 [ (%LShift | %RShift | %Ashift) ExprPrec60 ]
+				ExprPrec70       ::= ExprPrec80 [ (%Plus | %Minus) ExprPrec70 ]
+				ExprPrec80       ::= ExprPrec90 [ %Star ExprPrec80 ]
+				ExprPrec90       ::= ExprPrec100 [ %StarStar ExprPrec90 ]
+				ExprPrec100      ::= SimpleExpression | (%Dash | %Bang) ExprPrec100
 				                 
-				SimpleExpression ::=
-				                 | BaseExpression Application
-				                 | BaseExpression
+				SimpleExpression ::= BaseExpression { Application }
 				
 				BaseExpression   ::=
-				                 | %LParen Expression %RParen
-				                 | %LBrack CommaExpList %RBrack
-				                 | %LBrack Expression RangeSpecifier Expression %RBrack
-				                 | %LBrack Expression %Colon ListCmpVars %RBrack
-				                 | %LBrack Expression %Colon ListCmpVars %Colon Expression %RBrack
-				                 | %LiteralInt
-				                 | %LiteralFlt
-				                 | %LiteralChar
-				                 | %LiteralBool
-				                 | %LiteralStr
-				                 | %Identifier
-				                 | %Sprintf %LParen %LiteralStr PrintfArglist %RParen
-				                 
-				PrintfArgList    ::=
-				                 | €
-				                 | %Comma Expression PrintfArgList
-				                 
-				ListCmpVars      ::=
-				                 | €
-				                 | ListCmpVarsNE
-				                 
-				ListCmpVarsNE    ::=
-				                 | %Identifier %In Expression
-				                 | %Identifier %In Expression %Comma ListCmpVarsNE
+				    %LParen Expression %RParen
+				    | %LBrack [ Expression { %Comma Expression } ] %RBrack
+				    | %LBrack Expression RangeSpecifier Expression %RBrack
+				    | %LBrack Expression %Colon
+				        [ %Identifier %In Expression { %Comma %Identifier %In Expression } ]
+				        [ %Colon Expression ] %RBrack
+				    | %LiteralInt | %LiteralFlt | %LiteralChar | %LiteralBool | %LiteralStr
+				    | %Identifier
+				    | %Sprintf %LParen %LiteralStr
+				        [ Expression { %Comma PrintfArglist } ] %RParen
 				                 
 				Application      ::=
-				                 | %LParen CommaArgList %RParen
-				                 | %LParen CommaArgList %RParen Application
-				                 | %LBrack Expression %RBrack
-				                 | %LBrack Expression %RBrack Application
-				                 | %Dot Identifier
-				                 | %Dot Identifier Application
-				                
-				CommaArgList     ::=
-				                 | €
-				                 | CommaArgListNE
+				    %LParen [ FArg { %Comma FArg } ] %RParen
+				    | %LBrack Expression %RBrack
+				    | %Dot Identifier
 				                 
-				CommaArgListNE   ::=
-				                 | Expression
-				                 | %Underscore
-				                 | Expression %Comma CommaArgListNE
-				                 | %Underscore %Comma CommaArgListNE
-				
-				CommaExpList     ::=
-				                 | €
-				                 | CommaExpListNE
-				CommaExpListNE   ::=
-				                 | Expression
-				                 | Expression %Comma CommaExpListNE
-			\end{verbatim}
+				FArg             ::= Expression | %Underscore
+			\end{verbatim}\end{small}
 	
 \end{document}
 

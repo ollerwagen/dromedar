@@ -1,4 +1,4 @@
-fn main => void
+fn main -> void
     for i := 99 ..| 0
         printf("{0} bottles of beer on the wall. Take one down, pass it around.\n", i)
     printf("No bottles left.\n")

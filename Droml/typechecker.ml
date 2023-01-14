@@ -631,7 +631,7 @@ module TypeChecker = struct
           else
             GNVDecl (id,t.t), Ctxt.add_binding c (id,(t.t,Const))
       | GNFDecl (id,args,rt) ->
-          GNFDecl (id, List.map (fun (id,t) -> id, t.t) args, rt.t), c
+          GNFDecl (id, List.map (fun t -> t.t) args, rt.t), c
       | GNTDecl id ->
           if Ctxt.has_namedt c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
@@ -645,8 +645,8 @@ module TypeChecker = struct
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
       | Module m              -> Ctxt.set_current_module c m
-      | GFDecl (id,args,rt,_)
-      | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
+      | GFDecl (id,args,rt,_) -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
+      | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> t.t) args, rt.t)), Const))
       | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
     end
   

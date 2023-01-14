@@ -627,13 +627,14 @@ module Parser = struct
         end in
       let arglist, s''' =
         begin match advance s'' with
-          | {t=Token.DoubleArrow;start=_;length=_}, s''' -> [], s''
-          | {t=Token.Colon;start=_;length=_}, s''' ->
+          | {t=Token.Arrow;start=_;length=_}, s''' -> [], s''
+          | {t=Token.LParen;start=_;length=_}, s''' ->
               let rec args (s:state) : (string * ty node) list * state =
-                let id,s' = begin match advance s with
-                              | {t=Token.Id i;start=_;length=_},s' -> i,s'
-                              | _                                  -> raise @@ ParseError (ofnode "Expected a function argument name" (peek s))
-                            end in
+                let id,s' =
+                  begin match advance s with
+                    | {t=Token.Id i;start=_;length=_},s' -> i,s'
+                    | _                                  -> raise @@ ParseError (ofnode "Expected a function argument name" (peek s))
+                  end in
                 let s'' = expect s' Token.Colon in
                 let t,s''' = parse_ty s'' in
                 if (peek s''').t = Token.Comma then
@@ -643,10 +644,12 @@ module Parser = struct
                 else
                   [ id, t ], s'''
               in
-              args s'''
+              let arglist, s'''' = args s''' in
+              let s''''' = expect s'''' Token.RParen in
+              arglist, s'''''
           | _ -> raise @@ ParseError (ofnode "Expected a separator in function argument list" (peek s))
         end in
-      let s'''' = expect s''' Token.DoubleArrow in
+      let s'''' = expect s''' Token.Arrow in
       let rt,s''''' = parse_retty s'''' in
       let b,s'''''' = parse_block s''''' 1 in
       { t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''').start - start }, s''''''
@@ -680,26 +683,23 @@ module Parser = struct
         end in
       let arglist, s''' =
         begin match advance s'' with
-          | {t=Token.DoubleArrow;start=_;length=_}, s''' -> [], s''
-          | {t=Token.Colon;start=_;length=_}, s''' ->
-              let rec args (s:state) : (string * ty node) list * state =
-                let id,s' = begin match advance s with
-                              | {t=Token.Id i;start=_;length=_},s' -> i,s'
-                              | _                                  -> raise @@ ParseError (ofnode "Expected a function argument name" (peek s))
-                            end in
-                let s'' = expect s' Token.Colon in
-                let t,s''' = parse_ty s'' in
-                if (peek s''').t = Token.Comma then
-                  let _,s'''' = advance s''' in
-                  let l,s''''' = args s'''' in
-                  (id, t) :: l, s'''''
+          | {t=Token.Arrow;start=_;length=_}, s''' -> [], s''
+          | {t=Token.LParen;start=_;length=_}, s''' ->
+              let rec args (s:state) : ty node list * state =
+                let t,s' = parse_ty s in
+                if (peek s').t = Token.Comma then
+                  let s'' = snd @@ advance s' in
+                  let l,s''' = args s'' in
+                  t :: l, s'''
                 else
-                  [ id, t ], s'''
+                  [ t ], s'
               in
-              args s'''
-          | _ -> raise @@ ParseError (ofnode "Expected a separator in function argument list" (peek s))
+              let arglist, s'''' = args s''' in
+              let s''''' = expect s'''' Token.RParen in
+              arglist, s'''''
+          | _ -> raise @@ ParseError (ofnode "Expected a function argument list or ->" (peek s))
         end in
-      let s'''' = expect s''' Token.DoubleArrow in
+      let s'''' = expect s''' Token.Arrow in
       let rt,s''''' = parse_retty s'''' in
       { t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''').start - start }, s'''''
 
