@@ -20,6 +20,7 @@ type exp' =
   | Uop       of uop * annt_exp
   | Cmps      of annt_exp * (cmpop * annt_exp) list
   | FApp      of annt_exp * annt_exp list
+  | ParFApp   of annt_exp * annt_exp option list
   | Subscript of annt_exp * annt_exp
   | Proj      of annt_exp * string
 and annt_exp = exp' * ty
@@ -103,6 +104,7 @@ let rec print_exp (e:annt_exp) : string =
     | Uop       (o,e)       -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)
     | Cmps      (e,ls)      -> Printf.sprintf "(%s%s)" (print_exp e) (List.fold_left (fun s (o,e) -> Printf.sprintf "%s %s %s" s (List.assoc o cmp_string) (print_exp e)) "" ls)
     | FApp      (f,ls)      -> Printf.sprintf "%s(%s)" (print_exp f) (String.concat ", " (List.map print_exp ls))
+    | ParFApp   (f,ls)      -> Printf.sprintf "%s(%s)" (print_exp f) (String.concat ", " (List.map (function | None -> "_" | Some e -> print_exp e) ls))
     | Subscript (l,r)       -> Printf.sprintf "%s[%s]" (print_exp l) (print_exp r)
     | Proj      (e,s)       -> Printf.sprintf "%s.%s" (print_exp e) s
   end
@@ -137,10 +139,10 @@ let print_gstmt (gs:annt_gstmt) : string =
     | GVDecl (id,Const,Some t,e) -> Printf.sprintf "global %s:%s := %s\n\n" id (print_ty t) (print_exp e)
     | GVDecl (id,Mut,None,e)     -> Printf.sprintf "global mut %s := %s\n\n" id (print_exp e)
     | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n\n" id (print_ty t) (print_exp e)
-    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s -> %s\n%s\n" id (print_retty rt) (print_block 1 b)
-    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s -> %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s => %s\n%s\n" id (print_retty rt) (print_block 1 b)
+    | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s => %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
     | Module m                   -> Printf.sprintf "module %s\n\n\n" m
-    | GNFDecl (id,ats,rt)        -> Printf.sprintf "native fn %s%s %s -> %s\n" id (if ats=[] then "" else ":") (String.concat ", " (List.map (fun (id,t) -> id ^ ":" ^ print_ty t) ats)) (print_retty rt)
+    | GNFDecl (id,ats,rt)        -> Printf.sprintf "native fn %s%s %s => %s\n" id (if ats=[] then "" else ":") (String.concat ", " (List.map (fun (id,t) -> id ^ ":" ^ print_ty t) ats)) (print_retty rt)
     | GNVDecl (id,t)             -> Printf.sprintf "native %s: %s\n" id (print_ty t)
     | GNTDecl id                 -> Printf.sprintf "native type %s\n" id
   end

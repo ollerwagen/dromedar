@@ -1,0 +1,6 @@
+fn main => void
+    let f := add(3,_)
+    printf("{0}\n", f(2))
+
+fn add : x:int, y:int => int
+    return x + y

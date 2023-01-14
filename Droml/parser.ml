@@ -251,11 +251,15 @@ module Parser = struct
         | _            -> lhs, s
       end
     
-    and parse_commasep_explist (s : state) (delim : token) (allow_empty : bool) : exp node list * state =
+    and parse_commasep_explist (s : state) (delim : token) (allow_empty : bool) : exp option node list * state =
       if (peek s).t = delim && allow_empty then
         [], s
       else
-        let e,s' = parse_exp s in
+        let e,s' =
+          begin match (peek s).t with
+            | Token.Underscore -> ofnode None (peek s), snd @@ advance s
+            | _                -> let e,s' = parse_exp s in ofnode (Some e.t) e, s'
+          end in
         if (peek s').t = Comma then
           let s'' = snd (advance s') in
           let rest, s''' = parse_commasep_explist s'' delim false in
@@ -320,10 +324,7 @@ module Parser = struct
                   let s'''' = expect s''' RBrack in
                   { t = RangeList (e,incl,excl,ee) ; start = start ; length = (peek s''').start - start }, s''''
             end
-(*
-            let exps,s'' = parse_commasep_explist s' RBrack false in
-            let s''' = expect s'' RBrack in
-            { t = LitArr exps ; start = start ; length = (peek s''').start - start }, s'''*)
+            
         | KPrintf  -> parse_sprintf_expression s KPrintf
         | KSprintf -> parse_sprintf_expression s KSprintf
         | LInt  i -> let _,s' = advance s in { t = LitInt  i ; start = start ; length = (peek s').start - start }, s'
@@ -626,7 +627,7 @@ module Parser = struct
         end in
       let arglist, s''' =
         begin match advance s'' with
-          | {t=Token.Arrow;start=_;length=_}, s''' -> [], s''
+          | {t=Token.DoubleArrow;start=_;length=_}, s''' -> [], s''
           | {t=Token.Colon;start=_;length=_}, s''' ->
               let rec args (s:state) : (string * ty node) list * state =
                 let id,s' = begin match advance s with
@@ -645,7 +646,7 @@ module Parser = struct
               args s'''
           | _ -> raise @@ ParseError (ofnode "Expected a separator in function argument list" (peek s))
         end in
-      let s'''' = expect s''' Token.Arrow in
+      let s'''' = expect s''' Token.DoubleArrow in
       let rt,s''''' = parse_retty s'''' in
       let b,s'''''' = parse_block s''''' 1 in
       { t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''').start - start }, s''''''
@@ -679,7 +680,7 @@ module Parser = struct
         end in
       let arglist, s''' =
         begin match advance s'' with
-          | {t=Token.Arrow;start=_;length=_}, s''' -> [], s''
+          | {t=Token.DoubleArrow;start=_;length=_}, s''' -> [], s''
           | {t=Token.Colon;start=_;length=_}, s''' ->
               let rec args (s:state) : (string * ty node) list * state =
                 let id,s' = begin match advance s with
@@ -698,7 +699,7 @@ module Parser = struct
               args s'''
           | _ -> raise @@ ParseError (ofnode "Expected a separator in function argument list" (peek s))
         end in
-      let s'''' = expect s''' Token.Arrow in
+      let s'''' = expect s''' Token.DoubleArrow in
       let rt,s''''' = parse_retty s'''' in
       { t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''').start - start }, s'''''
 

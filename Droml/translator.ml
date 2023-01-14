@@ -267,12 +267,9 @@ module Translator = struct
     begin match e with
       | Id id, t | ModAccess (_,id), t ->
           let op,llt,s,gc,fs = cmp_lhs c e in
-          begin match deptr llt with
-            | Ptr (Func _) -> op, llt, s, false, fs (* do not dereference functions *)
-            | llt' ->
-                let idsym = gensym id in
-                Id idsym, llt', [ I (Load (idsym, llt', op)) ] @ gc, false, fs 
-          end
+          let idsym = gensym id in
+          let llt' = deptr llt in
+          Id idsym, llt', [ I (Load (idsym, llt', op)) ] @ gc, false, fs
       | LitInt  i, t  -> Ll.IConst i, cmp_ty t, [], false, []
       | LitFlt  f, t  -> Ll.FConst f, cmp_ty t, [], false, []
       | LitChar c, t  -> Ll.IConst (Int64.of_int @@ Char.code c), cmp_ty t, [], false, []
@@ -690,11 +687,118 @@ module Translator = struct
                 [ I (Bitcast (fptrsym, fllt, fop, Ptr (cmp_llfty argts rt)))
                 ; I (Load (fsym, cmp_llfty argts rt, Id fptrsym))
                 ; I (Bitcast (casptr, fllt, fop, Ptr I64))
-                ; I (Call (callres, llrt, Id fsym, (Ptr I64, Id casptr) :: argcs')) ] @ arggcops,
+                ; I (Call (callres, llrt, Id fsym, (Ptr I64, Id casptr) :: argcs')) ] @ arggcops @
+                (if fgc then removeref (fllt,fop) else []),
                 (callres <> None) && begin match t with | TRef _ | TNullRef _ -> true | _ -> false end,
                 List.fold_left (fun res (_,_,_,_,fs) -> union res fs) ffs argcs
             | _ -> Stdlib.failwith "not a function, abort"
           end
+
+      | ParFApp (f,a), TRef (TFun (ats,rt)) ->
+          (*
+            1. create a function taking i64* and the remaining arguments (including the outer closure)
+               this function opens the outer closure to get access to its function, and passes it the 
+               outer closure as well as all the arguments derived from the inner closure, as well as the
+               function's arguments (the remaining <None> arguments)
+            2. allocate a closure, link it to the GC, copy the arguments into the closure
+           *)
+          
+          let outer_args =
+            begin match snd f with
+              | TRef (TFun (a, _)) -> a
+              | _ -> Stdlib.failwith "bad outer function type"
+            end in
+
+          let res_f_t = cmp_llfty ats rt in
+          let res_ty = cmp_ty (TRef (TFun (ats,rt))) in
+          
+          let closure_t = Ptr (Struct ([ res_f_t ; Ptr I64 ] @ List.concat (List.map2 (fun e t -> match e,t with | Some _,t -> [cmp_ty t] | _ -> []) a outer_args))) in
+
+          let closure_arg, closure = gensym "inner_clos", gensym "inner_clos" in
+          let innerfunction = gensym "clos_inner" in
+          let outerclosure_ip, outerclosure_i = gensym "clos_outer", gensym "clos_outer" in
+          let outerclosure_function, outerclosure_function_p = gensym "clos_outer_f", gensym "clos_outer_fp" in
+          let inner_res = gensym "call_res" in
+          let rsym = gensym "partial_fapp" in
+
+          let clos = gensym "allocd_closure" in
+          let inner_f_p, inner_p_outer, inner_p_outer_asi = gensym "clos_inner_func_ptr", gensym "clos_inner_outer_func", gensym "clos_inner_outer_func" in
+
+          let inner_args = List.filter_map (function | None, t -> Some (t, gensym "clos_arg") | _ -> None) (List.combine a outer_args) in
+          let stored_args = List.filter_map (function | Some (e,t) -> Some (t, gensym "stored_arg") | _ -> None) a in
+
+          (* <outerclosure_function> holds the outer function *)
+
+          let closure_function = 
+            FDecl (innerfunction, cmp_retty rt, (Ptr I64, closure_arg) :: List.map (fun (t,id) -> cmp_ty t, id) inner_args, (
+              ([ Bitcast (closure, Ptr I64, Id closure_arg, closure_t)
+              ; Gep (outerclosure_ip, closure_t, Id closure, [ IConst 0L ; IConst 1L ])
+              ; Load (outerclosure_i, Ptr I64, Id outerclosure_ip)
+              ; Bitcast (outerclosure_function_p, Ptr I64, Id outerclosure_i, Ptr (cmp_llfty outer_args rt))
+              ; Load (outerclosure_function, cmp_llfty outer_args rt, Id outerclosure_function_p)
+              ] @
+              (* load args from inner closure *)
+              (List.concat @@ List.mapi
+                  (fun i (t,id) ->
+                    let arg_ptr = gensym "stored_arg_p" in
+                    [ Gep (arg_ptr, closure_t, Id closure, [ IConst 0L ; IConst (Int64.of_int @@ 2 + i) ]) ; Load (id, cmp_ty t, Id arg_ptr) ]
+                  )
+                  stored_args)  @
+              [ Call ((if rt <> Void then Some inner_res else None), cmp_retty rt, Id outerclosure_function,
+                ((Ptr I64, Id outerclosure_i) ::
+                  ((fun (res,_,_) -> res)
+                  (List.fold_left
+                    (fun (res,ia,sa) exp ->
+                      match exp with
+                        (* value from argument *)
+                        | None   -> let t,id = List.hd ia in res @ [cmp_ty t, Id id], List.tl ia, sa
+                        (* value from closure *)
+                        | Some _ -> let t,id = List.hd sa in res @ [cmp_ty t, Id id], ia, List.tl sa
+                    )
+                    ([],inner_args,stored_args) a  (* operands *)))))
+              ]
+              , Ret (if rt <> Void then Some (cmp_retty rt, Id inner_res) else None)(* result *)
+              ),
+              []
+            )) in
+
+          let fop,fllt,fs,fgc,ffs = cmp_exp c f in
+          let cd_args, usedfs = List.fold_left (fun (res,fs) exp -> match exp with | None -> res,fs | Some exp -> let op,llt,s,gc,efs = cmp_exp c exp in res@[op,llt,s,gc], union fs efs) ([],ffs) a in
+
+          (*
+            what the LLVM code needs to do:
+            . allocate space for the closure
+            . set the values: function, outer closure, function arguments
+            . GC the values, link them to the new closure 
+           *)
+
+          Id rsym, res_ty,
+            [ G closure_function ] @ fs @
+            allocate (IConst (Int64.of_int (size_ty (deptr closure_t)))) closure_t clos @
+            [ I (Gep (inner_f_p, closure_t, Id clos, [ IConst 0L ; IConst 0L ]))
+            ; I (Store (res_f_t, Gid innerfunction, Id inner_f_p))
+            ; I (Gep (inner_p_outer, closure_t, Id clos, [ IConst 0L ; IConst 1L ]))
+            ; I (Bitcast (inner_p_outer_asi, fllt, fop, Ptr I64))
+            ; I (Store (Ptr I64, Id inner_p_outer_asi, Id inner_p_outer))
+            ] @ addchild (closure_t, Id clos) (fllt, fop) @ (if fgc then removeref (fllt,fop) else []) @
+            List.concat (List.mapi
+              (fun i ((t,_),(op,llt,s,gc)) ->
+                let clos_loc_p = gensym "clos_arg_loc" in
+                s @
+                [ I (Gep (clos_loc_p, closure_t, Id clos, [ IConst 0L ; IConst (Int64.of_int (2+i)) ]))
+                ; I (Store (llt, op, Id clos_loc_p))
+                ] @
+                begin match t with
+                  | TRef _ | TNullRef _ ->
+                      addchild (closure_t,Id clos) (llt,op) @ if gc then removeref (llt,op) else []
+                  | _ -> []
+                end
+              )
+              (List.combine stored_args cd_args)) @
+            [ I (Bitcast (rsym, closure_t, Id clos, res_ty)) ],
+            true, usedfs
+
+      | ParFApp _, _ -> Stdlib.failwith "bad partial function application type"
 
       | Subscript (l,i), t ->
           let ptrop, pllt, s, gc, fs = cmp_lhs c (Subscript (l,i), t) in
@@ -1148,7 +1252,9 @@ module Translator = struct
             (fun (m,id) ->
               let t,llt,op = Ctxt.get_from_module c m id in
               begin match t with
-                | TRef _ | TNullRef _ -> Some (destream (addref (Ptr llt,op)))
+                | TRef _ | TNullRef _ ->
+                    let fname = gensym id in
+                    Some (Load (fname, llt, op) :: destream (addref (llt, Id fname)))
                 | _                   -> None
               end
             )

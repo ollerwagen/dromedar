@@ -674,8 +674,19 @@ fn main -> void
 			
 			\subsubsection{Function Calls}
 			
+				This type rule requires $\mc{rt}\not\equiv\mc{void}$ unless otherwise specified in another rule or if the application of the function is only partial.
+				
+				For an $n$-tuple $L$ over $U$ and a value $v\in U$, let $(L,v)$ correspond to $(L_1,\dots,L_n,v)\in U^{n+1}$.
+			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\ \ \mc{rt}\not\equiv\mc{void}\ \  S\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1}\vee\mc{e1}\bowtie\mc{t1},\ \dots,\ S\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}\vee\mc{en}\bowtie\mc{tn}}{S}{E}{\mc{f(e1,...,en)}::\mc{rt}}{ExpFunc}´
+					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt},\ \left\{ 
+						\begin{array}{rl}
+							S&\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1}\vee\mc{e1}\bowtie\mc{t1} \leadsto ()=:L_1 \bigvee
+								\mc{e1} \equiv \_ \leadsto (\mc{t1})=:L_1,\\
+							&\vdots\\
+							S&\ruleapp{ET}\mc{en}\trianglelefteq\mc{tn}\vee\mc{en}\bowtie\mc{tn} \leadsto L_{n-1}=:L_n \bigvee
+								\mc{e1} \equiv \_ \leadsto (L_{n-1},\mc{tn})=:L_n
+						\end{array}\right.}{S}{E}{\mc{f(e1,...,en)}:: \mathbf{if}\ L_n=()\ \mathbf{then}\ \mc{rt} \ \mathbf{else}\ L_n\mc{->rt}}{ExpFunc}´
 				\end{align*}
 				
 			\subsubsection{\code{sprintf} call}
@@ -752,8 +763,10 @@ fn main -> void
 			
 			\subsubsection{Expression Statements}
 			
+				This rule allows \code{void} return types for functions for the first rule application in the proof tree above.
+			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}\ \ \drmrule{S\ruleapp{E}\mc{(t1,...,tn)->void}}{S,T,\mc{rt},L}{S}{\mc{exp(a1,...,an)} \Rightarrow S,\bot,\bot}{StmtExprVoid}
+					\drmrule{S\ruleapp{E}\mc{exp} :: \mc{t}}{S,\mc{rt}}{S}{\mc{exp} \Rightarrow S,\bot}{StmtExpr}
 				\end{align*}
 				
 			\subsubsection{\code{printf} Call}
@@ -1202,12 +1215,22 @@ fn main -> void
 				                 | %Identifier %In Expression %Comma ListCmpVarsNE
 				                 
 				Application      ::=
-				                 | %LParen CommaExpList %RParen
-				                 | %LParen CommaExpList %RParen Application
+				                 | %LParen CommaArgList %RParen
+				                 | %LParen CommaArgList %RParen Application
 				                 | %LBrack Expression %RBrack
 				                 | %LBrack Expression %RBrack Application
 				                 | %Dot Identifier
 				                 | %Dot Identifier Application
+				                
+				CommaArgList     ::=
+				                 | €
+				                 | CommaArgListNE
+				                 
+				CommaArgListNE   ::=
+				                 | Expression
+				                 | %Underscore
+				                 | Expression %Comma CommaArgListNE
+				                 | %Underscore %Comma CommaArgListNE
 				
 				CommaExpList     ::=
 				                 | €

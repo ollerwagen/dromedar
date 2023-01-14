@@ -422,20 +422,25 @@ module TypeChecker = struct
           begin match check_exp c None false f with
             | f', TRef (TFun (a,rt)) ->
                 let _ = if List.length a <> List.length args then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
-                let argts = List.map2
-                  (fun aexp fet ->
-                    let e',et = check_exp c (Some fet) false aexp in
-                    if subtype et fet || crosstype et fet then e',et
-                    else raise @@ TypeError (ofnode (Printf.sprintf "Argument type mismatch in function application: type %s vs expected type %s" (Ast.print_ty (ofnode et e)) (Ast.print_ty (ofnode fet f))) e)  
+                let argts,tlist = List.fold_left2
+                  (fun (ares,tres) arg fet ->
+                    begin match arg.t with
+                      | None   -> ares @ [None], tres @ [fet]
+                      | Some e ->
+                          let e',et = check_exp c (Some fet) false (ofnode e arg) in
+                          if subtype et fet || crosstype et fet then ares @ [ Some (e',et) ], tres
+                          else raise @@ TypeError (ofnode (Printf.sprintf "argument type mismatch in function application") arg)
+                    end
                   )
-                  args a in
-                begin match rt with
-                  | Void  ->
-                      if perm_void then
-                        FApp ((f', TRef (TFun (a,rt))), argts), void_placeholder
-                      else
-                        raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
-                  | Ret t -> FApp ((f', TRef (TFun (a,rt))), argts), t 
+                  ([],[]) args a in
+                begin match tlist with
+                  | [] ->
+                      begin match rt, perm_void with
+                        | Void, true  -> FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), void_placeholder
+                        | Void, false -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
+                        | Ret t, _    -> FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), t
+                      end
+                  | _ -> ParFApp ((f', TRef (TFun (a,rt))), argts) , TRef (TFun (tlist, rt))
                 end
             | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
           end

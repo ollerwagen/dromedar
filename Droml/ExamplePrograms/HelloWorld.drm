@@ -1,2 +1,2 @@
-fn main -> void
+fn main => void
     printf("Hello, World!")

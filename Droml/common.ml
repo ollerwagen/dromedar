@@ -31,3 +31,5 @@ let union (a : 'a list) (b : 'a list) : 'a list =
   let () = Printf.printf "union [%s] [%s]\n" (String.concat ", " a') (String.concat ", " b') in
   *)
   a @ difference b a
+
+let identity (x:'a) : 'a = x

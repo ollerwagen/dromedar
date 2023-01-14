@@ -35,6 +35,8 @@ module Lexer = struct
     ; ":",   Colon
     ; ",",   Comma
     ; "->",  Arrow
+    ; "=>",  DoubleArrow
+    ; "_",   Underscore
     ; "(",   LParen
     ; ")",   RParen
     ; "[",   LBrack

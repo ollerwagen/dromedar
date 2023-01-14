@@ -42,6 +42,8 @@ type token =
   | Colon
   | Comma
   | Arrow
+  | DoubleArrow
+  | Underscore
   | LParen
   | RParen
   | LBrack
@@ -123,6 +125,8 @@ let print_token (t:token) : string =
     | Colon        -> "[Colon]"
     | Comma        -> "[Comma]"
     | Arrow        -> "[Arrow]"
+    | DoubleArrow  -> "[DoubleArrow]"
+    | Underscore   -> "[Underscore]"
     | LParen       -> "[LParen]"
     | RParen       -> "[RParen]"
     | LBrack       -> "[LBrack]"
