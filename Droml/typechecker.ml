@@ -381,8 +381,8 @@ module TypeChecker = struct
       | Bop (op,l,r) ->
           let opts = List.assoc op bop_types in
           let lt,rt = check_exp c None false l, check_exp c None false r in
-          begin match snd lt, snd rt with
-            | TRef (TArr t1), TRef (TArr t2) ->
+          begin match snd lt, snd rt, op with
+            | TRef (TArr t1), TRef (TArr t2), Add ->
                 begin match intersect_single (suptys t1) (suptys t2) with
                   | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
                   | t::ts -> Bop (op,lt,rt), TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))

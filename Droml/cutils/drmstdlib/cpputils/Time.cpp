@@ -1,4 +1,6 @@
 #include <chrono>
+#include <thread>
+
 #include <stdio.h>
 
 #include "cppallocator.h"
@@ -25,6 +27,10 @@ extern "C" {
         return (i8*) res;
     }
 
+    void _cpputils_Time$sleep_for(i8* d) {
+        std::this_thread::sleep_for(* (D*) d);
+    }
+
     i64 _cpputils_Time$s(i8* d) {
         return std::chrono::duration_cast<std::chrono::seconds>(* (D*) d).count();
     }
@@ -35,5 +41,24 @@ extern "C" {
 
     i64 _cpputils_Time$us(i8* d) {
         return std::chrono::duration_cast<std::chrono::microseconds>(* (D*) d).count();
+    }
+
+    i8* _cpputils_Time$of_s(i64 i) {
+        D* res = (D*) _allocate(sizeof(D));
+        new (res) D();
+        *res = std::chrono::nanoseconds(i * 1000000000L);
+        return (i8*) res;
+    }
+
+    i8* _cpputils_Time$of_ms(i64 i) {
+        D* res = (D*) _allocate(sizeof(D));
+        new (res) D(std::chrono::nanoseconds(i * 1000000L));
+        return (i8*) res;
+    }
+
+    i8* _cpputils_Time$of_us(i64 i) {
+        D* res = (D*) _allocate(sizeof(D));
+        new (res) D(std::chrono::nanoseconds(i * 1000L));
+        return (i8*) res;
     }
 }

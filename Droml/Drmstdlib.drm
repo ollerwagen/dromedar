@@ -56,9 +56,15 @@ native type D
 native fn clock -> int
 native fn time  -> int
 
+native fn sleep_for (D) -> void
+
 native fn now      -> P
 native fn dt (P,P) -> D
 
 native fn s  (D) -> int
 native fn ms (D) -> int
 native fn us (D) -> int
+
+native fn of_s  (int) -> D
+native fn of_ms (int) -> D
+native fn of_us (int) -> D

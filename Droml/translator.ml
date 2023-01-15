@@ -191,6 +191,13 @@ module Translator = struct
     ; I (Bitcast (iptr, Ptr Double, Id fptr, Ptr I64))
     ; I (Load (rsym, I64, Id iptr))
     ]
+  
+  let destream : stream -> Ll.instr list =
+    List.map
+    (function
+      | I i -> i
+      | _   -> Stdlib.failwith "bad instruction stream in destream() call"
+    )
 
   (* last return value: true <=> value is linked to its own pref <=> needs to be GC'd *)
   let rec cmp_exp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * bool * (string * string) list =
@@ -280,7 +287,6 @@ module Translator = struct
           let str_obj_ty, str_ty = cmp_ty st, Ptr (Array (0L, I8)) in
           let rsym, strsym = gensym "str", gensym "str" in
           let gsym, gsym_t = gensym "gstr", Array (strlen, I8) in
-          let lsym = gensym "lstr" in
           let size_ptr, str_ptr = gensym "arrsize", gensym "arrdata" in
           let lsym_as_ptr, strsym_as_ptr = gensym "lsym_ptr", gensym "strsym_ptr" in
           let alloc_obj = allocate (IConst 24L) str_obj_ty rsym in
@@ -296,11 +302,10 @@ module Translator = struct
             (* create global string symbol *)
           [ G (GDecl (gsym, gsym_t, Str s))
             (* cast global char array to char pointer *)
-          ; I (Bitcast (lsym, Ptr gsym_t, Gid gsym, str_ty))
           ; I (Gep (size_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 0L ]))
           ; I (Gep (str_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 1L ]))
             (* copy char array into string symbol *)
-          ; I (Bitcast (lsym_as_ptr, str_ty, Id lsym, Ptr I8))
+          ; I (Bitcast (lsym_as_ptr, Ptr gsym_t, Gid gsym, Ptr I8))
           ; I (Bitcast (strsym_as_ptr, str_ty, Id strsym, Ptr I8))
           ; I (Call (None, Void, Gid "_memcpy", [Ptr I8, Id lsym_as_ptr ; Ptr I8, Id strsym_as_ptr ; I64, IConst strlen]))
             (* store that pointer in the string pointer in the char structure *)
@@ -1127,20 +1132,39 @@ module Translator = struct
           end
     end
     
-  let cmp_gexp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * ginstr list =
+  (* instr list is list of instructions the main function will have to do before calling main() *)
+  let cmp_gexp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * ginstr list * Ll.instr list =
     begin match e with
-      | LitInt  i, t -> IConst i, cmp_ty t, []
-      | LitFlt  f, t -> FConst f, cmp_ty t, []
-      | LitBool b, t -> IConst (if b then 1L else 0L), cmp_ty t, []
-      | LitChar c, t -> IConst (Int64.of_int (Char.code c)), cmp_ty t, []
+      | LitInt  i, t -> IConst i, cmp_ty t, [], []
+      | LitFlt  f, t -> FConst f, cmp_ty t, [], []
+      | LitBool b, t -> IConst (if b then 1L else 0L), cmp_ty t, [], []
+      | LitChar c, t -> IConst (Int64.of_int (Char.code c)), cmp_ty t, [], []
+      | LitStr  s, t ->
+          let rsym, strsym, strsym' = gensym "globalstring", gensym "globalstring", gensym "globalstring" in
+          let strp, data_p, strp_datap = gensym "globalstring", gensym "globalstring_chararr", gensym "globalstring_chararr_casted" in
+          let strlen = Int64.of_int @@ String.length s + 1 in
+          Gid rsym, cmp_ty (TRef TStr),
+          [ GDecl (rsym, deptr (cmp_ty (TRef TStr)), SConst [ I64, IConst strlen ; cmp_lllty TChar, Null ])
+          ; GDecl (strsym, Array (strlen, I8), Str s)
+          ],
+          destream (addref (cmp_ty (TRef TStr), Gid rsym)) @
+          destream (allocate (IConst strlen) (Ptr I8) strp) @
+          [ Gep (data_p, cmp_ty (TRef TStr), Gid rsym, [ IConst 0L ; IConst 1L ])
+          ; Bitcast (strsym', Ptr (Array (strlen, I8)), Gid strsym, Ptr I8)
+          ; Call (None, Void, Gid "_memcpy", [ Ptr I8, Id strsym' ; Ptr I8, Id strp ; I64, IConst strlen ])
+          ; Bitcast (strp_datap, Ptr I8, Id strp, cmp_lllty TChar)
+          ; Store (cmp_lllty TChar, Id strp_datap, Id data_p)
+          ] @
+          destream (addchild (cmp_ty (TRef TStr), Gid rsym) (Ptr I8, Id strp)) @
+          destream (removeref (Ptr I8, Id strp))
       | _ -> Stdlib.failwith "bad AST: cannot have these expressions in global scope"
     end
   
-  let cmp_gstmt (c : Ctxt.t) (gs : annt_gstmt) : Ctxt.t * ginstr list * (string * string) list =
+  let cmp_gstmt (c : Ctxt.t) (gs : annt_gstmt) : Ctxt.t * ginstr list * Ll.instr list * (string * string) list =
     begin match gs with
-      | Module m -> Ctxt.set_current_module c m, [], []
+      | Module m -> Ctxt.set_current_module c m, [], [], []
       | GVDecl (id,_,t,e) ->
-          let op,ellt,s = cmp_gexp c e in
+          let op,ellt,s,main_s = cmp_gexp c e in
           let vt =
             begin match t with
               | None   -> snd e
@@ -1149,7 +1173,7 @@ module Translator = struct
           let vllt = cmp_ty vt in
           let llid = gensym id in
           Ctxt.add_binding c (id, (vt, vllt, Gid llid)),
-          s @ [ GDecl (llid, vllt, op) ], []
+          s @ [ GDecl (llid, vllt, op) ], main_s, []
       | GFDecl (id,args,rt,b) ->
           let ft,fllt,fid =
             begin match Ctxt.get c id with
@@ -1183,11 +1207,11 @@ module Translator = struct
           ; GDecl (giterm, deptr fllt, SConst [ fun_llt, Gid gfid ])
           ; GAssn (fid, deptr fllt, giterm)
           ],
-          bfs
+          [], bfs
       | GNVDecl (id,t) ->
           let name = Ctxt.module_mangle c id in
           Ctxt.add_binding c (id, (t, cmp_ty t, Gid (Ctxt.module_mangle c id))),
-          [ LinkVD (name, cmp_ty t) ], []
+          [ LinkVD (name, cmp_ty t) ], [], []
       | GNFDecl (id,a,rt) ->
           let name = Ctxt.module_mangle c id in
           let fllt = cmp_ty (TRef (TFun (a, rt))) in
@@ -1201,8 +1225,8 @@ module Translator = struct
           ; GDecl (name ^ "$c", deptr fllt, SConst [ fun_llt, Gid ("_" ^ name) ])
           ; GAssn (name, deptr fllt, name ^ "$c")
           ],
-          []
-      | GNTDecl _ -> c, [], []
+          [], []
+      | GNTDecl _ -> c, [], [], []
     end
   
   let create_fctxt (prog : annt_program) : Ctxt.t =
@@ -1222,16 +1246,9 @@ module Translator = struct
       base_ctxt prog
 
   let cmp_program (prog : annt_program) : ginstr list =
-    let destream : stream -> Ll.instr list =
-      List.map
-      (function
-        | I i -> i
-        | _   -> Stdlib.failwith "bad instruction stream in destream() call"
-      )
-    in
-
+    
     let c = create_fctxt prog in
-    let _,s,usedfs = List.fold_left (fun (c,res,usedfs) gs -> let c',g,gfs = cmp_gstmt c gs in c',res@g,union usedfs gfs) (c, [], []) prog in
+    let _,s,main_s,usedfs = List.fold_left (fun (c,res,main_s,usedfs) gs -> let c',g,m_s,gfs = cmp_gstmt c gs in c', res@g, main_s@m_s, union usedfs gfs) (c, [], [], []) prog in
     s @
     [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
         let rval, strvec = gensym "mainret", gensym "strvec" in
@@ -1276,7 +1293,7 @@ module Translator = struct
             | _ -> Stdlib.failwith "bad main function"
           end in
         ((if makestrvec then [ Call (Some strvec, cmp_ty strvecty, Gid "_makestrvec", [ I64, Id "argc" ; Ptr (Ptr I8), Id "argv" ]) ] else []) @
-          mainprep @ gcaddrefs @ maincall @
+          mainprep @ gcaddrefs @ main_s @ maincall @
           (if makestrvec then destream (removeref (cmp_ty strvecty, Id strvec)) else []),
         term),
         []
