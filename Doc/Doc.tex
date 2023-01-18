@@ -17,6 +17,8 @@
 	morekeywords = [5]{of,in},
 	morekeywords = [6]{printf,sprintf,assert},
 	morekeywords = [7]{module,native},
+	morekeywords = [8]{Str,IO,Util,File,Math,Regex,Sys,Time},
+	morekeywords = [9]{main,of_int,of_flt,print_int,print_flt,print_char,print_bool,print_char,print_str,randint,randflt,readall,sin,cos,tan,e,pi,compile,matches,first_match,all_matches,cmd,fork,clock,time,sleep_for,now,dt,s,ms,us,of_s,of_ms,of_us},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -36,6 +38,10 @@
 	emphstyle=\bfseries\slshape,
 	basicstyle=\ttfamily\color{black},
 	keywordstyle=\bfseries,
+	keywordstyle=[3]\bfseries\color{black!20!purple},
+	keywordstyle=[6]\bfseries\color{black!60!blue},
+	keywordstyle=[8]\color{black!60!red},
+	keywordstyle=[9]\color{black!60!blue}\itshape,
 	commentstyle=\color{gray},
 	stringstyle=\slshape,
 	showstringspaces=false,
@@ -81,12 +87,535 @@
 	
 	\section{Introduction}
 	
+		Dromedar is a statically typed, garbage collected, \textit{safe} programming language. It is mainly imperative, but combines these constructs with some typically functional language elements like partial application.
+			
+	\section{Language Tutorial}
+	
 		\subsection{Hello, World!}
+		
+			Each Dromedar program contains a \code{main} function that serves as the start point of the execution of the program. The function is denoted by the keyword \code{fn}, its return type is specified after the arrow: \code{void} means that the function doesn't return a value.
+			
+			In order to print \textit{Hello, World!} to the console, the program calls the function \code{print\_str} from the standard library module \code{IO}.
 		
 			\begin{lstlisting}
 fn main -> void
-	print_str("Hello, World!")
+	IO.print_str("Hello, World!\n")
 			\end{lstlisting}
+			
+			Using the \textsc{Droml} compiler, the program can be compiled and executed with the following command:
+			
+			\begin{verbatim}
+				droml -o app <FILENAME>.drm
+				./app
+			\end{verbatim}
+			
+		\subsection{Types}
+		
+			Dromedar knows two families of types: Primitive \textit{value} types and \textit{reference} types. Value types are small types that are stored on the stack, whereas reference types are garbage-collected objects on the heap.
+			
+			Value types include the following: \code{bool} (for truth values \code{true} and \code{false}), \code{char} (for 1-byte characters represented in single quotes), \code{int} (for 64-bit signed integers), and \code{flt} (64-bit real numbers). Reference types come in two classes: Definitely-not-\code{null}, and Maybe-\code{null} types (as denoted by a \code{?} following the type name).
+			
+			There are two categories of reference types: Arrays and \code{string}s. Arrays are denoted by the element type, enclosed in square brackets. For example, \code{[int]} represents an integer array, whereas \code{[[[char]]]} stands for a three-dimensional character array. \code{string} represents a string of characters, \code{string?} represents values which are either \code{string} objects, or \code{null} -- a state used for values which do not represent any object.
+			
+			These types can be nested within arrays: \code{[[[[string]?]]?]?} is a maybe-\code{null} array of maybe-\code{null} arrays containing two-dimensional arrays of maybe-\code{null} string arrays.
+			
+			Functions are also handled as reference types.
+			
+			It is not possible to access objects of maybe-null types in order to ensure null pointer safety. More on maybe-null reference types in later sections in this tutorial.
+			
+			\subsubsection{Subtypes and Crosstypes}
+			
+				Consider the subtype relation $\prec$ and the crosstype commutation relation $\asymp$, as defined in the section on the typing rules.
+				
+				These relations define which type of values can be assigned to variables of certain types (and passed as function arguments, and so on).
+				
+				These typing relations are more precisely explained in the typing rule section. Here a quick summary:
+				
+				Non-\code{null} types are subtypes of their corresponding maybe-\code{null} types, e.g. meaning that a non-\code{null} string expression (such as a string literal) can be assigned to a variable of type \code{string?}. The same goes for arrays.
+				
+				Integers and real numbers are cross-types, meaning that it is possible to assign a real number to an integer variable. In that case, the real number is cast to an integer before the assignment takes place.
+			
+		\subsection{Expressions}
+		
+			Dromedar knows the typical mathematical expressions and precedence rules as known by most programming languages in the C family. The precise types of the different operators are explained in detail in the section on the typing rules. Here is a quick summary:
+			
+			Apart from \code{+}, \code{-}, \code{*}, \code{/}, \code{\%}, the shifting operators \code{<<}, \code{>>}, and \code{>>>}, the bitwise operators \code{\&}, \code{|}, \code{^}, and the logical operators \code{\&\&} and \code{||} using short-circuit evaluation, the language also knows \code{**} for exponentiation, and \code{^}\code{^} for boolean (instead of bitwise) exclusive or.
+			
+			Dromedar also allows comparisons using the operators \code{=}, \code{!=}, \code{>}, \code{>=}, \code{<}, and \code{<=}, and allows combining them into comparison chains. For example, \code{3 < 5 < 7 >= 3} is a legal expression which returns \code{true} since every sub-comparison is true. Each expression in such a chain is only evaluated once and the entire comparison list is short-circuited. The first comparison that is false cuts off the rest of the evaluation, as with the \code{\&\&} and \code{||} operators.
+			
+			The operators \code{==} and \code{!==} do reference comparison: They check whether two references point at the same object, not whether these objects are structurally identical. Reference Equality thus implies structural equality, but not the other way around.
+			
+			Dromedar also knows the unary operators \code{-} and \code{!} for arithmetic and logical negation.
+			
+			These operators take pairs of the following types: \code{flt,flt} and \code{int,int} for the arithmetic, \code{int,int} for the bitwise, and \code{bool,bool} for the logical operators. The arithmetic operators also allow for mixing of \code{flt} and \code{int}, where such an operation will always cast the integer to a real number and then perform the operation.
+			
+			Addition and subtraction also allow adding and subtracting from \code{char} values using integers.
+			
+			The \code{+} operator is also used for string and array concatenation, the \code{*} operator can also perform string repetition (e.g. \code{2 * "hi" ==> "hihi"}).
+	
+		\subsection{Variables, Assignments}
+		
+			\subsubsection{Global Variables}
+			
+				Global variables are declared and assigned outside of function bodies. Their assignment expressions are quite restricted: Only value type and string literals are allowed thus far.
+				
+				These variables are reachable in all code below the point of their initialization.
+				
+				Global variables are declared using the \code{global} keyword, with the following syntax:
+				
+				\begin{verbatim}
+					global [mut] identifier [: type] := expression
+				\end{verbatim}
+				
+				Consider the following global variable declarations:
+				
+				\begin{lstlisting}
+global     x      := 3
+global     y :int := 7.2
+global mut s      := "hi!"
+				\end{lstlisting}
+				
+				The two variables \code{x} and \code{y} are immutable constants -- their value can never be changed. The string \code{s} however can be changed to hold any other string reference, as it was declared \code{mut}.
+				
+				Because the type of \code{y} was specified \code{int}, the value it was assigned to is cast to an integer before the assignment.
+				
+			\subsubsection{Local Variables}
+			
+				Local Variables are declared using the \code{let} keyword, or just \code{mut} for mutable variables. They can be of any type and the values they are assigned to can be arbitrarily complex expressions. Consider the following local variable declarations:
+				
+				\begin{lstlisting}
+let x            := 9
+let y  :flt      := x ** 7
+mut s1 :string?  := null
+let s2 :string?  := "hi!"
+let a  :[[int]?] := [ null, [] ]
+				\end{lstlisting}
+				
+				\begin{itemize}
+					\item
+						\code{x} is an immutable integer holding the value \code{7}.
+					\item
+						\code{y} is a floating point number holding the value \code{x ** 7 == 4782969}, which is then implicitly cast to a \code{flt} value, \code{4782969.0}.
+					\item
+						\code{s1} is a mutable maybe-null \code{string} value which is assigned \code{null}.
+					\item
+						\code{s2} is an immutable maybe-null string which contains the value \code{"hi!"}.
+					\item
+						Finally, \code{a} is an array of maybe-null integer arrays, of which the first value is \code{null} and the second an empty integer list.
+				\end{itemize}
+			
+			\subsubsection{Of \code{null} and empty lists}
+			
+				\code{null} and empty lists are, per se, typeless. However, Dromedar is strongly typed, doesn't know a base type like \texttt{Object} in Java\textsuperscript{TM}, and it uses type inference in variable declarations.
+				
+				Thus, in general, the type of \code{null} and the empty list must be specified: \code{null of string} is \code{null} of the type \code{string?}, whereas \code{null of [[[int]]]} is the \code{null} value corresponding to the type \code{[[[int]]]?}. On the other hand, \code{[] of int} is the empty list of \code{int} values, \code{[] of [int]} the empty list of \code{[int]} values (of type \code{[[int]]}).
+				
+				In some instances however, the type of an empty list or null reference can be ommitted: In a function call where the argument's type is already clear, or in an expression where the type can be strictly inferred: For example, consider the function \code{f: [string]? -> string} and the following code:
+				
+				\begin{lstlisting}
+let s1             := f(null) # infers null of [string]
+let s2             := f([])   # infers [] of string
+let a  : [[[int]]] := [[]]    # infers [] of [int]
+				\end{lstlisting}
+		
+		\subsection{Conditionals}
+		
+			The simplest way of decision making and control flow in Dromedar is the \code{if-elif-else} statement, with the following grammar:
+			
+			\begin{verbatim}
+				if expression
+				    <BLOCK>
+				{
+				elif expression
+				    <BLOCK>
+				}
+				[
+				else
+				    <BLOCK>
+				]
+			\end{verbatim}
+			
+			The behaviour of this construct follows most other imperative programming languages.
+			
+			The condition expression must be of type \code{bool} -- a result of a boolean function, a comparison chain, or a boolean literal \code{true} resp. \code{false}. The number of \code{elif} blocks is arbitrary, and the \code{else} block is optional.
+			
+			If the first condition expression evaluates to \code{true}, the \code{if} block gets executed, the rest is omitted. If it is \code{false}, the next block is looked at. If evaluation reaches the \code{else} branch (by the \code{if} and all \code{elif} conditions evaluating to \code{false}), it gets executed without first evaluating any condition.
+		
+		\subsection{Checked Casts, Assertions}
+		
+			In general, it is not possible to read (i.e. dereference) maybe-\code{null} variables since such a dereference might be dangerous (if the value held by the variable is, in fact, \code{null}). Using a checked cast expression, it is possible to get access to the value held by a maybe-\code{null} expression if it is not \code{null}, as follows:
+			
+			\begin{lstlisting}
+# get_maybe_string: () -> string?
+let s := get_maybe_string()
+denull ns := s
+	printf("string: {0}\n", ns)
+else
+	IO.print_str("null")
+			\end{lstlisting}
+			
+			The expression that \code{ns} is assigned to can be an arbitrary expression of a maybe-\code{null} type. It doesn't have to be a single variable. Thus, the header of the checked cast also could have been \code{denull ns := get_maybe_string()}.
+			
+			The first block is executed if \code{s} is not \code{null}. In that case, \code{ns} holds the value of \code{s} and it can be treated as a definitely-not-\code{null} variable. Note that even in this block, \code{s} is still a maybe-\code{null} variable.
+			
+			The \code{else} block gets executed if \code{s = null}.
+			
+			This is the only \textbf{safe} way to access a maybe-\code{null}'s internal value. However, for ease of use of the language, it is also possible to ``dereference'' a value using \code{assert}, as follows:
+			
+			\begin{lstlisting}
+let s := get_maybe_string()
+let ns := assert s
+printf("String: {0}\n", ns)
+			\end{lstlisting}
+			
+			Here, \code{ns} is assigned the value held by \code{s}, if \code{s != null}. If, however, \code{s = null} were to hold, the program immediately terminates with an error message to the console. Therefore, these dangerous casts are only to be used if the programmer is entirely certain that a maybe-\code{null} reference is not \code{null}. An example is the \code{Regex.compile} function of the standard library which returns a \code{null} automaton object if the input string is an illegal expression.
+			
+			However, if the expression is known at compile time, the programmer can be certain that it isn't faulty.
+			
+			\subsection{\code{assert} Statements}
+			
+				For example to ensure the program is given the proper inputs, \code{assert} statements can be used (not to be confused with the \code{assert} expressions mentioned above). They check a boolean condition and terminate if the condition is false with an error message, as follows:
+				
+				\begin{lstlisting}
+let x := 3
+assert x > 4
+				\end{lstlisting}
+				
+				This program writes the following error message before aborting:
+				
+				\begin{verbatim}
+					Assertion failure in {(3 > 4)}
+					Aborting.
+				\end{verbatim}
+		
+		\subsection{Loops, \code{break} and \code{continue}}
+		
+			There are four different kinds of loops: \code{while}, \code{do-while}, \code{for} and \code{for-in}.
+			
+			\subsubsection{\code{while} Loops}
+			
+				\begin{verbatim}
+					while expression
+					    <BLOCK>
+				\end{verbatim}
+				
+				The condition expression (of type \code{bool}) is evaluated every time before the body. If the condition holds, the body is executed -- otherwise the loop is terminated and execution continues to the next instruction.
+				
+			\subsubsection{\code{do-while} Loops}
+			
+				\begin{verbatim}
+					do
+					    <BLOCK>
+					while expression
+				\end{verbatim}
+				
+				This construct is very similar to the \code{while} loop, except that the condition is evaluated after the loop body is executed. That ensures that the loop body is executed at least once.
+				
+			\subsubsection{\code{for} Loops}
+			
+				\begin{verbatim}
+					for i := a %rangespec b
+					    <BLOCK>
+				\end{verbatim}
+				
+				This loop executes a number of times as determined by the distance between \code{a} and \code{b}, where \code{i} can be used as the loop variable within the block. It cannot be edited, and it is automatically incremented/decremented at the end of one execution of the code block.
+				
+				The \code{\%rangespec} element in the grammar specification is one of the following four syntactic elements: \code{...}, \code{..|}, \code{|..} or \code{|.|}. \code{...} means that the values of \code{i} start at \code{a} and continue executing up to and including \code{b}. \code{..|} stops at one value before \code{b}, \code{|..} starts at one step after \code{a} but includes \code{b}, and finally \code{|.|} starts at a value after \code{a} and stops one step before it reaches \code{b}.
+				
+				These loops can count upwards and downwards, and the step direction is automatically inferred. The step length is fixed at \code{1}.
+				
+				Consider the following six examples:
+				
+				\begin{lstlisting}
+# Example 1
+for x := 0 ... 10
+	printf("{0}, ", x)
+
+# Example 2
+for x := 0 ..| 10
+	printf("{0}, ", x)
+
+# Example 3
+for x := 0 |.. 10
+	printf("{0}, ", x)
+
+# Example 4
+for x := 0 |.| 10
+	printf("{0}, ", x)
+
+# Example 5
+for x := 10 ..| 0
+	printf("{0}, ", x)
+
+# Example 6
+for x := 0 |.| 1
+	printf("{0}, ", x)
+				\end{lstlisting}
+				
+				They produce the following outputs:
+				
+				\begin{verbatim}
+					0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, # Example 1
+					0, 1, 2, 3, 4, 5, 6, 7, 8, 9,     # Example 2
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10,    # Example 3
+					1, 2, 3, 4, 5, 6, 7, 8, 9,        # Example 4
+					10, 9, 8, 7, 6, 5, 4, 3, 2, 1,    # Example 5
+					                                  # Example 6
+				\end{verbatim}
+				
+				The loop boundary expressions \code{a} and \code{b} must be of type \code{int} (or \code{flt} which is a crosstype of \code{int}, in which case the expressions are first cast to \code{int} before they're evaluated). The bounds are also only evaluated once before the first loop iteration.
+				
+			\subsubsection{\code{for-in} Loops}
+			
+				\begin{verbatim}
+					for x in l
+						<BLOCK>
+				\end{verbatim}
+			
+				These loops are similar to \texttt{foreach} constructs in other languages like C\#.
+				
+				They take a list \code{l} and then iterate over all elements of the list, calling them \code{x}. These variables \code{x} are, again, immutable. The list expression is also only evaluated before the first iteration.
+				
+				Consider the following example and its output:
+				
+				\begin{lstlisting}
+for val in [1,2,17,-9]
+	IO.print_int(val)
+				\end{lstlisting}
+				
+				\begin{verbatim}
+					1
+					2
+					17
+					-9
+				\end{verbatim}
+				
+			\subsubsection{\code{break} and \code{continue}}
+			
+				It is possible to steer the flow of the program by either exiting the current loop using \code{break} or skipping the rest of the loop body using \code{continue}. If \code{continue} is used, the loop condition is evaluated again after potentially updating some loop variables (which is the case in a \code{for} or \code{for-in} loop).
+				
+				Consider the following example:
+				
+				\begin{lstlisting}
+for i := 1 ... 10
+	printf("Loop Iteration {0}\n", i)
+	if i > 7
+		break
+	elif i > 5
+		continue
+	else
+		printf("Value: {0}\n", 2 ** i)
+				\end{lstlisting}
+				
+				This code will produce the following output:
+				
+				\begin{verbatim}
+					Loop Iteration 1
+					Value: 2
+					Loop Iteration 2
+					Value: 4
+					Loop Iteration 3
+					Value: 8
+					Loop Iteration 4
+					Value: 16
+					Loop Iteration 5
+					Value: 32
+					Loop Iteration 6
+					Loop Iteration 7
+				\end{verbatim}
+		
+		\subsection{Functions}
+		
+			\subsubsection{Function Definitions}
+			
+				Functions are defined in global scope using the \code{fn} keyword. They are immutable.
+				
+				Their definition uses a name, a list of typed parameters and a return type, followed by a function body.
+				
+				If a function has a return type, it must contain at least one \code{return} statement, and at least one \code{return} statement must be reached by every possible (terminating) flow of execution -- otherwise, the compiler will return with an error.
+				
+				The following example function computes the scalar product of two real valued vectors:
+				
+				\begin{lstlisting}
+fn scalar_prod (a : [flt], b : [flt]) -> flt
+	assert a.length = b.length
+	mut res:flt := 0
+	for i := 0 ..| a.length
+		res := res + a[i] * b[i]
+	return res
+				\end{lstlisting}
+				
+			\subsubsection{Function Calls}
+			
+				Functions can be called either as expression statements (the function call as a statement), or as part of an expression -- provided the function is of type non-\code{void}.
+				
+				Consider the following example:
+				
+				\begin{lstlisting}
+let x := scalar_prod ([1,2,3], [1,2,3])
+IO.print_int (x)
+				\end{lstlisting}
+				
+				The first function call is used in an expression. It returns \texttt{14} according to the function definition in the code example above. The second function call (to \code{IO.print_int}) results in the value of \code{x} being printed to the console.
+				
+			\subsubsection{Partial Function Application}
+			
+				Functions can be partially applied (i.e. passing not all arguments to the function to create a new function). This new functor can then be used as a reference object, and it can be called.
+				
+				Consider the following function definition:
+				
+				\begin{lstlisting}
+fn add (x:int, y:int, z:int) -> int
+	return x + y + z
+				\end{lstlisting}
+				
+				Now, this function can be called (for example \code{add(2,3,4) ==> 9}), but not all arguments can be passed to it: \code{add(1,2,_)} creates a new function which takes one integer and returns a new integer. The following code shows this in more detail:
+				
+				\begin{lstlisting}
+let f1 := add(1,2,_)
+IO.print_int(f1(3))    # f1(3) === add(1,2,3)
+
+let f2 := add(_,6,_)
+IO.print_int(f2(1,-9)) # f2(1,-9) === add(1,6,-9)
+
+let f3 := f2(_,-5)
+IO.print_int(f3(0))    # f3(0) === f2(0,-5) === add(0,6,-5)
+				\end{lstlisting}
+		
+		\subsection{Strings, Arrays, Range Lists, List Comprehensions}
+		
+			\subsubsection{Array Literals}
+			
+				Array literals come in three shapes: \textbf{Value Lists}, \textbf{Range Lists}, and \textbf{List Comprehensions}. They are all enclosed by square brackets \code{[]}.
+				
+				\subsubsubsection{Value Lists}
+				
+					Value lists are simply values separated by commas: \code{[1,2,3]} creates an array of type \code{[int]} with three elements: $1$, $2$ and $3$. \code{['a','b','z']} creates a \code{[char]} object with three elements.
+					
+					In such a value list, the type of the array is the least common supertype in the $\prec$ relation of subtypes. For example, \code{["hi", null of string]} is of type \code{string?} since \code{string?} is both a supertype of \code{string} (corresponding to the string literal element), and of \code{string?} (itself, corresponding to the \code{null} element).
+					
+				\subsubsubsection{Range Lists}
+				
+					Range lists can create integer lists in given bounds, using a start and end value expression, linked by a range specifier (\code{...}, \code{..|}, \code{|..}, and \code{|.|}, as in the \code{for} statement).
+					
+					For example, \code{[1 ..| 10] === [1,2,3,4,5,6,7,8,9]}. Note that range lists can only create integer lists.
+					
+				\subsubsubsection{List Comprehensions}
+				
+					List comprehensions are the most involved way of creating arrays. A list comprehension expression has the following grammar:
+					
+					\begin{verbatim}
+						"[" expr : x in expr, ..., z in expr [ : expr ] "]"
+					\end{verbatim}
+					
+					Between the two colons, a number of variables can be defined. They iterate over the lists they are linked to by the \code{in} keyword. The optional expression after the second colon is a condition expression. If it evaluates to \code{true} (given the current variable values), the expression to the left of the list comprehension expression is evaluated and added to the list, the end result being returned.
+					
+					Consider the following example:
+					
+					\begin{lstlisting}
+let a := [ 2*x + y  :  x in [1,2,3], y in [4,5]  :  x%y = 0 ]
+					\end{lstlisting}
+					
+					In pseudocode, this list expression gets evaluated as follows:
+					
+					\begin{verbatim}
+						res <- []
+						for all x in [1,2,3] do
+						    for all y in [4,5] do
+						        if x%y = 0 then
+						            add 2*x+y to res
+						return res
+					\end{verbatim}
+					
+					This allows us to create very elegant programs to -- for example -- sort lists, or find prime numbers:
+					
+					\begin{lstlisting}
+fn primes (limit:int) -> [int]
+	assert limit > 0
+	return [ x : x in [1...limit] : [ y : y in [1...x] : x%y=0 ].length = 2 ]
+
+fn sort (l:[int]) -> [int]
+	if l.length <= 1
+		return l
+	else
+		let less := sort([ x : x in l : x < l[0] ])
+		let more := sort([ x : x in l : x > l[0] ])
+		return less + [l[0]] + more
+					\end{lstlisting}
+					
+					Note that the \code{sort} expression can be written in a single line using the \code{?->:} ternary operator, but for better readability the code was broken up into multiple lines.
+		
+		\subsection{Standard Library, \code{sprintf} and \code{printf}}
+		
+			The standard library is a series of functions and values that are automatically included when a Dromedar program is compiled. It is explained in more detail in later sections.
+			
+			One specialty of Dromedar is its use of \textbf{native types}: They describe \textit{blackbox objects} which are used by standard library functions. They cannot be ``opened'' by Dromedar programs themselves and must be operated on using native functions. They are used e.g. by the \code{Regex} module of the standard library, where the type \code{Regex.R} corresponds to a finite automaton used for regular expression evaluation.
+			
+			However, the entirety of the \code{Regex} module is coded in C++ using the \texttt{<regex>} module of C++'s standard library, and \code{Regex.R} corresponds to \texttt{std::regex*}. The \code{Regex} module allows the Dromedar program to hold these automaton pointers in order to pass them to functions and in order to avoid having to recompile a regular expression every time a match is looked for.
+			
+			The following example of regular expressions shows the use of blackbox native types:
+			
+			\begin{lstlisting}
+let r := Regex.compile("\\d+")
+denull r := r
+	let matches := Regex.all_matches(r, "123 45.67")
+	printf("{0}\n", matches)
+			\end{lstlisting}
+			
+			Since \code{Regex.compile} returns an object of type \code{Regex.R?}, a checked cast must be made first. The output generated by that above code snipped is:
+			
+			\begin{verbatim}
+				[123,45,67]
+			\end{verbatim}
+		
+		\subsection{Garbage Collection}
+		
+			Reference objects in Dromedar programs are linked to its garbage collector. It mixes the reference counting and mark-sweep approaches for a very simple design -- the actual implementation of the garbage collector requires less than 50 lines of code -- with the capability to collect any structures, even circular ones\footnote{Classical reference counting GC algorithms typically have issues with circular structures}.
+		
+		\subsection{Compiling Multiple Files, Modules}
+		
+			One can compile multiple Dromedar source files at the same time by adding them all to the compiler command. Modules separate programs into logically connected chunks. Modules have a depth of 1 -- there are no nested modules.
+			
+			Modules are declared using the \code{module} keyword. Every file is automatically in a module with its own filename as the module name (stopping at the first whitespace character, and excluding the \texttt{.drm} file extenstion). This logically separates multiple files compiled together.
+			
+			The following two files define functions which mutually recursively call one another:
+			
+			\begin{lstlisting}
+# file A.drm
+fn f (x:int) -> int
+	if x = 0
+		return 0
+	return 2 * B.f(x-1)
+
+# file B.drm
+fn f (x:int) -> int
+	if x = 0
+		return 1
+	return 3 * A.f(x-1)
+			\end{lstlisting}
+			
+			The standard library is defined in a single file and features multiple modules. The following code snippet shows the separation of modules:
+			
+			\begin{lstlisting}
+# Standard Library
+# ...			
+
+module File
+
+native fn readall (string) -> [string]
+
+module Math
+
+native fn sin (flt) -> flt
+native fn cos (flt) -> flt
+native fn tan (flt) -> flt
+native e  : flt
+native pi : flt
+
+# ...
+			\end{lstlisting}
+			
+			Note that these functions are all \code{native} -- they aren't implemented in Dromedar, but rather in C/C++.
 	
 	\section{Typing System}
 	
@@ -183,7 +712,9 @@ fn main -> void
 			\midrule
 			\code{\&\&} & Logical And & 20 & left & \code{bool,bool -> bool}\\
 			\midrule
-			\code{||} & Logical Or & 10 & left & \code{bool,bool -> bool}
+			\code{||} & Logical Or & 10 & left & \code{bool,bool -> bool}\\
+			\midrule
+			\code{?->:} & Ternary Operator & 0 & non-assoc. & \code{bool,t1,t2 -> t}
 		\end{tabular}\\
 	
 		Consider the following example:
@@ -193,6 +724,8 @@ fn main -> void
 		Comparison operators work differently to other (binary) operators: Instead of comparing just two expressions, Dromedar allows chaining expressions to create one final boolean value: For example, \code{1 < 2 != 5 >= 5} holds because every single sub-expression (\code{1 < 2}, \code{2 != 5} and \code{5 >= 5}) holds. Every expression is only evaluated once for its side-effect.
 		
 		Thus, \code{A op B op C} is not necessarily semantically equivalent to \code{A op B \&\& B op C}.
+		
+		The ternary operator takes three expressions: \code{? cond -> e1 : e2}. If \code{cond} evaluates to \code{true}, \code{e1} is returned, otherwise \code{e2}. \code{e1} and \code{e2} must have a common supertype, which is returned by the expression.
 		
 	\section{Handling Whitespace}
 	
