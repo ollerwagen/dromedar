@@ -902,10 +902,10 @@ module Translator = struct
           fs
           (* add pref and remove it from %op: cancel each other out *)
           
-      | Assert e ->
+      | Assert (e,em) ->
           let lbltrue, lblfalse = gensym "assert_true", gensym "assert_false" in
           let op,llt,s,_,efs = cmp_exp c e in
-          let failstring = Printf.sprintf "Assertion failure in {%s}\nAborting.\n" (Astannotated.print_exp e) in
+          let failstring = Printf.sprintf "Assertion failure in {%s}\nAborting.\n" em in
           let fop,fllt,fs,fgc,ffs = cmp_exp c (LitStr failstring, TRef TStr) in
           c,
           s @

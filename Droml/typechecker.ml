@@ -493,7 +493,7 @@ module TypeChecker = struct
       | Assert e ->
           let e' = check_exp c None false e in
           begin match snd e' with
-            | TBool -> Assert e', c, false, false
+            | TBool -> Assert (e', print_exp e), c, false, false
             | _     -> raise @@ TypeError (ofnode ("assertion expression needs to be of type bool") e)
           end
       | Assn (l,r) ->
