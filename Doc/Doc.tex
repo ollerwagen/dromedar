@@ -881,6 +881,21 @@ native pi : flt
 		
 		The symbol $\in$ is defined as follows: $s\in S \Leftrightarrow \textnormal{$s$ is contained in \textit{any} layer of $S$}$, whereas $\in_0$ is true only if the symbol is at the top level of the symbol stack (i.e. defined in the same block). The operator $\cup$ on $S$ adds another binding to the top layer of the stack, whereas $\sqcup$ adds another layer to the stack.
 		
+		These typing rules deal with templates in an informal way: There are formal rules for template type matching, but the information about detemplated functions is not carried around through the rules in order to reduce the size of the rules and improve their readability.
+		
+		Instead, they are carried around in two global symbols: $F \in \mathsf{id} \times \mathsf{type}$ refers to a set of generic functions. For every application, all templated types must be resolved at compile-time (this includes partial application!). The symbol $R \in \mathsf{id} \mathsf{type}$ refers to a set of resolved generic functions. These are then appended to the handwritten program. This may perhaps require several steps of template resolution, and template resolution may not have a fixpoint. In that case, the compiler will throw an error.
+		
+		The following is an example of misuse of generics such that no program can be built:
+		
+		\begin{lstlisting}
+fn f (x : <a>) -> <a>
+	return f([x])[0] # resolves f's <a> to [<a>] ->
+					 # infinite recursive loop in template resolution
+
+fn main -> void
+	IO.print_int(f(0))
+		\end{lstlisting}
+		
 		The following are the typing rules for Dromedar programs:
 		
 		\subsection{Subtyping Rules}
@@ -935,6 +950,7 @@ native pi : flt
 								\mc{char} & \mapsto & \{\mc{char}\}\\
 								\mc{bool} & \mapsto & \{\mc{bool}\}\\
 								\mc{string} & \mapsto & \{\mc{string}\}\\
+								\mc{M.Id} & \mapsto & \{\mc{M.Id}\}\\
 								\mc{t?} & \mapsto & \{\mc{u},\mc{u?} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
 								\mc{[t]} & \mapsto & \{\mc{[u]} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
 								\mc{(t1...tn)->rt} & \mapsto &
@@ -949,6 +965,7 @@ native pi : flt
 								\mc{char} & \mapsto & \{\mc{char}\}\\
 								\mc{bool} & \mapsto & \{\mc{bool}\}\\
 								\mc{string} & \mapsto & \{\mc{string},\mc{string?}\}\\
+								\mc{M.Id} & \mapsto & \{\mc{M.Id},\mc{M.Id?}\}\\
 								\mc{t?} & \mapsto & \{\mc{u?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
 								\mc{[t]} & \mapsto & \{\mc{[u]}, \mc{[u]?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
 								\mc{(t1...tn)->rt} & \mapsto &
@@ -1176,24 +1193,24 @@ native pi : flt
 				\begin{itemize}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{n :: \mc{int}}{ExpLitInt}
+							\drmrule{}{S}{E}{n :: \mc{int}}{ExpLitInt}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{f :: \mc{flt}}{ExpLitFlt}
+							\drmrule{}{S}{E}{f :: \mc{flt}}{ExpLitFlt}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{c :: \mc{char}}{ExpLitChar}
+							\drmrule{}{S}{E}{c :: \mc{char}}{ExpLitChar}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{\mc{true} :: \mc{bool}}{ExpLitBoolTrue},\ \ 
-							\drmrule{}{}{E}{\mc{false} :: \mc{bool}}{ExpLitBoolFalse}
+							\drmrule{}{S}{E}{\mc{true} :: \mc{bool}}{ExpLitBoolTrue},\ \ 
+							\drmrule{}{S}{E}{\mc{false} :: \mc{bool}}{ExpLitBoolFalse}
 						\end{align*}
 					\item
 						\begin{align*}
-							\drmrule{}{}{E}{s :: \mc{string}}{ExpLitString}
+							\drmrule{}{S}{E}{s :: \mc{string}}{ExpLitString}
 						\end{align*}
 					\item
 						In arrays, the typechecker looks for the common subtypes of all array literal elements and looks for the one type \code{t} that is a supertype of all elements and which is a subtype of all other such subtypes (the minimum of the subtypes given the $\preceq$ relation on types).
@@ -1260,8 +1277,13 @@ native pi : flt
 				
 				For an $n$-tuple $L$ over $U$ and a value $v\in U$, let $(L,v)$ correspond to $(L_1,\dots,L_n,v)\in U^{n+1}$.
 			
+				\begin{small}
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt},\ \left\{ 
+					\drmrule{
+						\begin{array}{rl}
+							S&\ruleapp{E}\mc{f}::\mc{(t1,...,tn)->rt}\\
+							&\mathsf{resolve}(\mc{t1,...,tn};\mathsf{types\ of\ }\mc{e1,...,en})
+						\end{array},\ \left\{ 
 						\begin{array}{rl}
 							S&\ruleapp{ET}\mc{e1}\trianglelefteq\mc{t1}\vee\mc{e1}\bowtie\mc{t1} \leadsto ()=:L_1 \bigvee
 								\mc{e1} \equiv \_ \leadsto (\mc{t1})=:L_1,\\
@@ -1270,6 +1292,46 @@ native pi : flt
 								\mc{e1} \equiv \_ \leadsto (L_{n-1},\mc{tn})=:L_n
 						\end{array}\right.}{S}{E}{\mc{f(e1,...,en)}:: \mathbf{if}\ L_n=()\ \mathbf{then}\ \mc{rt} \ \mathbf{else}\ L_n\mc{->rt}}{ExpFunc}´
 				\end{align*}
+				\end{small}
+				
+			\subsubsection{Template Resolution}
+			
+				The function $\mathsf{resolve}$ receives a vector of expected and provided types (as used in the rule above). It, quite informally, changes the expected types by matching templates.
+				
+				\begin{verbatim}
+					resolve(t1,...,tn ; p1,...,pn)
+					    M := mappings of all template types in t1...tn: [ ty -> unknown ]
+					    for all i = 1...n do
+					        if p1 exists (for partial f-app) then
+					            attempt to match templates such that p1 is a subtype of t1*
+					            update M accordingly if it works, otherwise fail
+					        else
+					            skip
+					        end
+					    end
+					    
+					    if function with new types doesn't exist in program
+					    	add it to P to be typechecked after replacing all contained generic types
+					    	if that fails, fail
+					   	else
+					   		return
+				\end{verbatim}
+				
+				This (quite informal) algorithm attempts to assign all templated types \code{<id>} real types such that all function arguments match. If this is not possible, a matching cannot be made and the template match fails.
+				
+				The following example shows an example of template resolution:
+				
+				\begin{lstlisting}
+fn f (e1 : <a>, e2 : <a>) -> <a>
+	# do something
+
+...
+
+# [string]?       , [string?]
+f(null of [string], [null of string])
+				\end{lstlisting}
+				
+				\code{f} gets passed values of two types: \code{[string]?} and \code{[string?]}. These are not directly related by the subtyping relation $\preceq$. However, they have a common supertype \code{[string?]?}. Because this is the case, \code{<a>} can be set to that type \code{[string?]?}, and the template type matching works.
 				
 			\subsubsection{\code{sprintf} call}
 			
@@ -1649,6 +1711,7 @@ native pi : flt
 				LHS              ::= BaseExpression { Application }
 				                 
 				Type             ::= %Int | %Flt | %Char | %Bool | RefType [ %QuestionMark ]
+				                     | %Less %Identifier %Greater [ %QuestionMark ]
 				                 
 				RefType          ::= %String | %LBrack Type %RBrack | %Identifier [ %Dot %Identifier ]
 				                 

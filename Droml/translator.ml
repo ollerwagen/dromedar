@@ -102,11 +102,12 @@ module Translator = struct
 
   let rec cmp_ty (t : Ast.ty) : Ll.llty =
     begin match t with
-      | TInt                     -> I64
-      | TFlt                     -> Double
-      | TChar                    -> I8
-      | TBool                    -> I1
-      | TRef rt | TNullRef rt    -> Ptr (cmp_rty rt)
+      | TTempl _              -> Stdlib.failwith "template types not allowed in translator"
+      | TInt                  -> I64
+      | TFlt                  -> Double
+      | TChar                 -> I8
+      | TBool                 -> I1
+      | TRef rt | TNullRef rt -> Ptr (cmp_rty rt)
     end
 
   and cmp_rty (rt : Ast.rty) : Ll.llty =

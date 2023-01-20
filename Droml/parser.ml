@@ -398,13 +398,7 @@ module Parser = struct
             begin match (peek s').t with
               | KOf ->
                   let t,s'' = parse_ty (snd @@ advance s') in
-                  let t' =
-                    begin match t.t with
-                      | TRef t     -> t
-                      | TNullRef _ -> raise @@ ParseError (ofnode "null expression must use non-null reference type" (peek s'')) 
-                      | _          -> raise @@ ParseError (ofnode "null expression must use reference type" (peek s''))
-                    end in
-                  Some (ofnode t' t), s''
+                  Some t, s''
               | _   -> None, s'
             end in
           { t = Null t ; start = start ; length = (peek s'').start - start }, s''

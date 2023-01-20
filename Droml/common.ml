@@ -33,3 +33,12 @@ let union (a : 'a list) (b : 'a list) : 'a list =
   a @ difference b a
 
 let identity (x:'a) : 'a = x
+
+let intersect_single (l1 : 'a list) (l2 : 'a list) : 'a list =
+  List.fold_left (fun i x -> if List.mem x l2 then x::i else i) [] l1
+
+let intersect (l : 'a list list) : 'a list =
+  begin match l with
+    | []    -> []
+    | l::ls -> List.fold_left intersect_single l ls
+  end

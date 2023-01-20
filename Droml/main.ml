@@ -7,9 +7,20 @@ open Typechecker
 open Translator
 open Ll
 
+open Templateresolver
+
 let read_lines (filename : string) : string list =
   String.split_on_char '\n' (readall filename)
-  
+
+
+let () =
+  let ets = [ TRef (TFun ([ TTempl (true, "a") ], Ret (TTempl (true, "a")))) ] in
+  let pts = [ TRef (TFun ([ TRef TStr ], Ret (TRef TStr))) ] in
+  let res = TemplateResolver.resolve_templates @@ List.combine pts ets in
+  Printf.printf "[%s]\n" @@ String.concat ", " @@ List.map (fun (id,t) -> Printf.sprintf "<%s> -> (%s)" id (Ast.print_ty {t=t;start=0;length=0})) res
+
+
+(*
 let () =
   let argv = List.tl @@ Array.to_list Sys.argv in
 
@@ -160,3 +171,4 @@ let () =
     -v to see full linker output
     -lm to add math.h library because apparently that is necessary
    *)
+*)

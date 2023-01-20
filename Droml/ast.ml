@@ -57,6 +57,7 @@ type ty =
   | TInt | TFlt | TChar | TBool
   | TRef of rty
   | TNullRef of rty
+  | TTempl of bool * string (* bool false for <a>? *)
 and rty =
   | TStr
   | TArr of ty
@@ -82,7 +83,7 @@ type exp =
   | RangeList of exp node * inclusion * inclusion * exp node
   | ListComp  of exp node * (string * exp node) list * exp node
   | Ternary   of exp node * exp node * exp node
-  | Null      of rty node option
+  | Null      of ty node option (* not rty to include template types *)
   | Sprintf   of formatstr * string node * exp node list
   | Bop       of bop * exp node * exp node
   | Uop       of uop * exp node
@@ -122,6 +123,8 @@ let rec print_ty (t : ty node) : string =
     | TFlt       -> "flt"
     | TChar      -> "char"
     | TBool      -> "bool"
+    | TTempl(true, id) -> Printf.sprintf "<%s>" id
+    | TTempl(false,id) -> Printf.sprintf "<%s>?" id
     | TRef r     -> print_rty (ofnode r t)
     | TNullRef r -> Printf.sprintf "%s?" (print_rty (ofnode r t))
   end
@@ -164,7 +167,7 @@ let rec print_exp (e : exp node) : string =
     | ListComp  (e,vs,c)    -> Printf.sprintf "[%s : %s : %s]" (print_exp e) (String.concat ", " (List.map (fun (id,e) -> Printf.sprintf "%s in %s" id (print_exp e)) vs)) (print_exp c)
     | Ternary   (c,e1,e2)   -> Printf.sprintf "(?%s -> %s : %s)" (print_exp c) (print_exp e1) (print_exp e2)
     | Null      None        -> "null"
-    | Null      (Some t)    -> Printf.sprintf "(null of %s)" (print_rty t)
+    | Null      (Some t)    -> Printf.sprintf "(null of %s)" (print_ty t)
     | Sprintf   (t,s,es)    -> Printf.sprintf "%sprintf(\"%s\"%s)" (if t = Sprintf then "s" else "") (String.escaped s.t) (String.concat "" (List.map (fun e -> ", " ^ print_exp e) es))
     | Bop       (o,l,r)     -> Printf.sprintf "(%s %s %s)" (print_exp l) (List.assoc o bop_string) (print_exp r)
     | Uop       (o,e)       -> Printf.sprintf "(%s%s)" (List.assoc o uop_string) (print_exp e)
