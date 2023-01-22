@@ -68,3 +68,12 @@ native fn us (D) -> int
 native fn of_s  (int) -> D
 native fn of_ms (int) -> D
 native fn of_us (int) -> D
+
+
+module List
+
+fn map (f : (<a>) -> <b>, l : [<a>]) -> [<b>]
+    mut res := [] of <b>
+    for x in l
+        res := res + [f(x)]
+    return res

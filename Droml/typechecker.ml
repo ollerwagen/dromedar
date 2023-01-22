@@ -9,9 +9,9 @@ module TypeChecker = struct
 
   exception TypeError of string node
 
-  let gensym (id:string) : string =
+  let gensym : string -> string =
     let n = ref 0 in
-    incr n ; Printf.sprintf "%s%d_" id !n
+    (fun id -> incr n; Printf.sprintf "%s%d_" id !n)
 
   module Ctxt = struct
 
@@ -119,6 +119,12 @@ module TypeChecker = struct
     
     let has_generic_function (c:t) (id:string) : bool =
       has_generic_function_in_module c (get_current_module c) id
+
+    let get_generic_function_tys (c:t) (m:string) (id:string) : (string * ty node) list * retty node =
+      let a,r,_ = List.assoc (m,id) c.templfs in a,r
+
+    let get_generic_function (c:t) (m:string) (id:string) : (string * ty node) list * retty node * stmt node list =
+      List.assoc (m,id) c.templfs
     
     let resolve_generic_function_in_module (c:t) (m:string) (id:string) (ts : (string * ty) list) : t * (string * string) =
       begin match List.assoc_opt ((m,id),ts) c.res_templs with
@@ -132,6 +138,20 @@ module TypeChecker = struct
       resolve_generic_function_in_module c (get_current_module c) id ts
 
     let copy_resolved_generics_from (c_from:t) (c_to:t) : t = { c_to with res_templs = c_from.res_templs }
+
+    (* first is the resolved functions' name, then its type mappings, then the unresolved function's name *)
+    let get_resolved_generics_todo_list (c:t) : t * ((string * string) * (string * ty) list * (string * string)) list =
+      let templfs',res = List.fold_left
+        (fun (templfs,res) ((genname,resolution),(res_m,res_id,todo)) ->
+          if todo then
+            ((genname,resolution),(res_m,res_id,false)) :: templfs, ((res_m,res_id), resolution, genname) :: res
+          else
+            ((genname,resolution),(res_m,res_id,todo)) :: templfs, res
+        )
+        ([],[]) c.res_templs in
+      { c with res_templs = templfs' }, res
+
+    let has_resolved_generics_todo (c:t) : bool = List.exists (fun (_,(_,_,b)) -> b) c.res_templs
 
   end
   
@@ -361,17 +381,18 @@ module TypeChecker = struct
               (snd first_exp, [], c') xs in
           c'', (Cmps (first_exp, clist), TBool)
       | FApp (f,args) ->
+          let c',es = List.fold_left (fun (c,res) e -> match e.t with | None -> c,res@[None] | Some exp -> let c',e' = check_exp c None false (ofnode exp e) in c',res@[Some e']) (c,[]) args in
           let isgeneric,m,id =
             begin match f.t with
               | Id id ->
-                  if Ctxt.has_generic_function c id then
-                    true, Ctxt.get_current_module c, id
+                  if Ctxt.has_generic_function c' id then
+                    true, Ctxt.get_current_module c', id
                   else
                     false, "", ""
               | Proj (l,r) ->
                   begin match l.t with
                     | Id m ->
-                        if Ctxt.has_generic_function_in_module c m r.t then
+                        if Ctxt.has_generic_function_in_module c' m r.t then
                           true, m, r.t
                         else
                           false, "", ""
@@ -379,34 +400,49 @@ module TypeChecker = struct
                   end
               | _ -> false, "", ""
             end in
-          if isgeneric then
-            raise @@ TypeError (ofnode ("functions may not be generic yet") e)
-          else
-            begin match check_exp c None false f with
-              | c', (f', TRef (TFun (a,rt))) ->
-                  let _ = if List.length a <> List.length args then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
-                  let argts,tlist,c'' = List.fold_left2
-                    (fun (ares,tres,c) arg fet ->
-                      begin match arg.t with
-                        | None   -> ares @ [None], tres @ [fet], c
-                        | Some e ->
-                            let c',(e',et) = check_exp c (Some fet) false (ofnode e arg) in
-                            if subtype et fet || crosstype et fet then ares @ [ Some (e',et) ], tres, c'
-                            else raise @@ TypeError (ofnode (Printf.sprintf "argument type mismatch in function application") arg)
-                      end
-                    )
-                    ([],[],c') args a in
-                  begin match tlist with
-                    | [] ->
-                        begin match rt, perm_void with
-                          | Void, true  -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), void_placeholder)
-                          | Void, false -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
-                          | Ret t, _    -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), t)
-                        end
-                    | _ -> c'', (ParFApp ((f', TRef (TFun (a,rt))), argts) , TRef (TFun (tlist, rt)))
+
+          let c'',f',a,rt =
+            if isgeneric then
+              let argtys, retty = Ctxt.get_generic_function_tys c' m id in
+              let () = if List.length argtys <> List.length args then raise @@ TypeError (ofnode "argument list length mismatch" e) else () in
+              let tmatches = TemplateResolver.resolve_templates (List.combine (List.map (function | None -> None | Some(_,t) -> Some t) es) (List.map (fun (_,t) -> t.t) argtys)) in
+              begin match tmatches with
+                | []  -> raise @@ TypeError (ofnode "unsuccessful template match" e)
+                | tms ->
+                    let resolved_etys, resolved_retty = TemplateResolver.resolve_args tms (List.map snd argtys) retty in
+                    let c'',(m',id') = Ctxt.resolve_generic_function_in_module c' m id tms in
+                    c'', ModAccess (m', id'), List.map (fun x -> x.t) resolved_etys, resolved_retty.t
+              end
+            else
+              begin match check_exp c' None false f with
+                | c'', (f', TRef (TFun (a,rt))) ->
+                    let _ = if List.length a <> List.length args then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                    c'', f', a, rt
+                | _, t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
+              end
+            in
+
+            let tlist =
+              List.fold_left2
+                (fun tlist (e,enode) t ->
+                  match e with
+                    | None    -> tlist @ [t]
+                    | Some (e',t') ->
+                        if subtype t' t || crosstype t' t then tlist
+                        else raise @@ TypeError (ofnode (Printf.sprintf "argument type mismatch in function application") enode)
+                )
+                [] (List.combine es args) a in
+            
+            begin match tlist with
+              | [] ->
+                  begin match rt, perm_void with
+                    | Void, true  -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity es), void_placeholder)
+                    | Void, false -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
+                    | Ret t, _    -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity es), t)
                   end
-              | _, t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
+              | l -> c'', (ParFApp ((f', TRef (TFun (a,rt))), es) , TRef (TFun (tlist, rt)))
             end
+            
       | Subscript (l,r) ->
           let c',l1 = check_exp c None false l in
           let c'',l2 = check_exp c' (Some TInt) false r in
@@ -639,6 +675,31 @@ module TypeChecker = struct
       | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> t.t) args, rt.t)), Const))
       | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
     end
+
+  let rec create_template_calls (c : Ctxt.t) (prog : annt_gstmt list) (maxdepth : int) : annt_gstmt list =
+    let step (c : Ctxt.t) (res : annt_gstmt list) : Ctxt.t * annt_gstmt list =
+      let c',todos = Ctxt.get_resolved_generics_todo_list c in
+      List.fold_left
+        (fun (c,res) ((res_m,res_id),ts,(gen_m,gen_id)) ->
+          let args,retty,b = Ctxt.get_generic_function c gen_m gen_id in
+          let args',retty',b' = TemplateResolver.resolve_f ts (List.map snd args) retty b in
+          let fprogpart = Ast.[
+              ofnode (Module res_m) retty
+            ; ofnode (GFDecl (res_id, List.combine (List.map fst args) args', retty', b')) retty
+            ] in
+          let gs_l, c' = check_gstmt_program c fprogpart in
+          c', res @ gs_l
+        )
+        (c',res) todos
+    in
+    if maxdepth = 0 then
+      if Ctxt.has_resolved_generics_todo c then
+        raise @@ TypeError { t = "too deep level of template resolution" ; start = 0 ; length = 0 }
+      else
+        prog
+    else
+      let c',prog' = step c prog in
+      create_template_calls c' prog' (maxdepth - 1)
   
   let create_fctxt_program : Ctxt.t -> gstmt node list -> Ctxt.t = List.fold_left create_fctxt
 
@@ -666,6 +727,7 @@ module TypeChecker = struct
       else
         raise @@ TypeError { t = "program must contain a main function" ; start = 0 ; length = 1 }
     in
-    fst @@ check_gstmt_program c prog
+    let prog', c' = check_gstmt_program c prog in
+    create_template_calls c' prog' 10
 
 end

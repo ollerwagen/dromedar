@@ -97,14 +97,59 @@ module Parser = struct
     let start = (peek s).start in
     let t,s' =
       begin match (peek s).t with
-        | Token.KInt  -> TInt,  snd @@ advance s
-        | Token.KFlt  -> TFlt,  snd @@ advance s
-        | Token.KChar -> TChar, snd @@ advance s
-        | Token.KBool -> TBool, snd @@ advance s
+        | Token.KInt   -> TInt,  snd @@ advance s
+        | Token.KFlt   -> TFlt,  snd @@ advance s
+        | Token.KChar  -> TChar, snd @@ advance s
+        | Token.KBool  -> TBool, snd @@ advance s
         | Token.Op Token.Less -> let t,s' = parse_templty s in t.t, s'
+        | Token.LParen -> let t,s' = parse_paren_ty s in t.t, s'
         | _           -> let rt,s' = parse_rty s in rt.t, s'
       end in
     { t = t ; start = start ; length = (peek s').start - start }, s'
+
+  and parse_paren_ty (s : state) : ty node * state =
+    let start = (peek s).start in
+    let s' = expect s Token.LParen in
+    let t,s'' = parse_ty s' in
+    let tlist,s''' =
+      begin match (peek s'').t with
+        | Token.RParen -> [t], snd @@ advance s''
+        | Token.Comma  ->
+            let ts,s''' = parse_ty_list s'' in
+            let s'''' = expect s''' Token.RParen in
+            ts, s''''
+        | _ -> raise @@ ParseError (ofnode ("expected ')' or ',' after type list in parentheses") (peek s''))
+      end in
+    begin match (peek s''').t with
+      | Token.Arrow -> 
+          let s'''' = snd @@ advance s''' in
+          let rt,s''''' = parse_retty s'''' in
+          { t = TRef (TFun (List.map (fun n -> n.t) tlist, rt.t)) ; start = start ; length = (peek s''''').start - start }, s'''''
+      | Token.QuestionMark ->
+          begin match tlist with
+            | [t] ->
+                begin match t.t with
+                  | TRef rt -> ofnode (TNullRef rt) t, snd @@ advance s'''
+                  | _       -> raise @@ ParseError (ofnode "? can only succeed a non-null reference type" t)
+                end
+            | _ -> raise @@ ParseError (ofnode "cannot have maybe-null type of (...) type with multiple or no types in parentheses" (peek s'''))
+          end
+      | _ ->
+          begin match tlist with
+            | [t] -> t, s'''
+            | _   -> raise @@ ParseError (ofnode "expected a function arrow after argument type list" (peek s'''))
+          end
+    end
+
+  and parse_ty_list (s : state) : ty node list * state =
+    begin match (peek s).t with
+      | Token.Comma ->
+          let s' = snd @@ advance s in
+          let t,s'' = parse_ty s' in
+          let ts,s''' = parse_ty_list s'' in
+          t :: ts, s'''
+      | _ -> [], s
+    end
 
   and parse_templty (s : state) : ty node * state =
     let start = (peek s).start in
@@ -115,12 +160,12 @@ module Parser = struct
         | _           -> raise @@ ParseError (ofnode ("expected an identifier in generic type") (peek s'))
       end in
     let s''' = expect s'' (Token.Op Token.Greater) in
-    let maybenull,s'''' =
+    let notnull,s'''' =
       begin match (peek s''').t with
-        | Token.QuestionMark -> true, snd @@ advance s'''
-        | _                  -> false, s'''
+        | Token.QuestionMark -> false, snd @@ advance s'''
+        | _                  -> true, s'''
       end in
-    { t = TTempl(maybenull,id) ; start = start ; length = (peek s'''').start - start }, s''''
+    { t = TTempl(notnull,id) ; start = start ; length = (peek s'''').start - start }, s''''
 
   and parse_rty (s : state) : ty node * state =
     let parse_arr_ty (s : state) : rty * state =

@@ -1,0 +1,5 @@
+fn main -> void
+    printf("{0}\n", List.map(double, [1...10]))
+
+fn double (x:int) -> int
+    return 2 * x

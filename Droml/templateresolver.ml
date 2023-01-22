@@ -19,8 +19,8 @@ module TemplateResolver = struct
     end
 
   (* in ty*ty list: first provided, then expected (templated?) types *)
-  let resolve_templates (ts : (ty * ty) list) : (string * ty) list =
-    let rec match_template (resolveds : (string * ty) list) (contract : bool) (pt : ty) (et : ty) : (string * ty) list option =
+  let resolve_templates (ts : (ty option * ty) list) : (string * ty) list =
+    let rec match_template (resolveds : (string * ty) list) (contract : bool) (pt : ty option) (et : ty) : (string * ty) list option =
       let find_extreme f t1 t2 cmp =
         (* Debug Output *)
           let nn = {t=0;start=0;length=0} in
@@ -38,16 +38,20 @@ module TemplateResolver = struct
       in
       let suptype t1 t2 = not @@ subtype t1 t2 in
       
-      if not (is_templated et) then
+      if not (is_templated et) || pt = None then
         Some (resolveds)
       else
         begin match pt,et,contract with
             (* t?, <a> *)
-          | TNullRef rty, TTempl (true, id), true ->
-              match_template resolveds contract (TRef rty) (TTempl (true,id))
+          | Some (TNullRef rty), TTempl (true, id), true ->
+              match_template resolveds contract (Some (TRef rty)) (TTempl (true,id))
             (* t, <a> *)
-          | TInt, TTempl (false,_), _ | TFlt, TTempl (false,_), _ | TChar, TTempl (false,_), _ | TBool, TTempl (false,_), _ -> None
-          | ty, TTempl (true,id), _ ->
+          | Some TInt, TTempl (false,_), _
+          | Some TFlt, TTempl (false,_), _ 
+          | Some TChar, TTempl (false,_), _
+          | Some TBool, TTempl (false,_), _ ->
+              None
+          | Some ty, TTempl (true,id), _ ->
               begin match List.assoc_opt id resolveds with
                 | None     -> Some ((id,ty) :: resolveds)
                 | Some tty ->
@@ -69,31 +73,33 @@ module TemplateResolver = struct
                       end
               end
             (* t?, <a>? *)
-          | TNullRef rty, TTempl (false,id), _ ->
-              match_template resolveds contract (TRef rty) (TTempl (true,id))
+          | Some (TNullRef rty), TTempl (false,id), _ ->
+              match_template resolveds contract (Some (TRef rty)) (TTempl (true,id))
             (* t, <a>? *)
-          | TRef rty, TTempl (false, id), false ->
-              match_template resolveds contract (TRef rty) (TTempl (true,id))
-          | TNullRef pt, TNullRef et, _ ->
-              match_template resolveds contract (TRef pt) (TRef et)
-          | TRef (TArr pt), TRef (TArr et), _ | TRef (TArr pt), TNullRef (TArr et), false | TNullRef (TArr pt), TRef (TArr et), true ->
-              match_template resolveds contract pt et
-          | TRef (TFun (pa,prt)), TRef (TFun (ea,ert)), _ ->
+          | Some (TRef rty), TTempl (false, id), false ->
+              match_template resolveds contract (Some (TRef rty)) (TTempl (true,id))
+          | Some (TNullRef pt), TNullRef et, _ ->
+              match_template resolveds contract (Some (TRef pt)) (TRef et)
+          | Some (TRef (TArr pt)), TRef (TArr et), _ 
+          | Some (TRef (TArr pt)), TNullRef (TArr et), false
+          | Some (TNullRef (TArr pt)), TRef (TArr et), true ->
+              match_template resolveds contract (Some pt) et
+          | Some (TRef (TFun (pa,prt))), TRef (TFun (ea,ert)), _ ->
               if List.length pa <> List.length ea then
                 None
               else
-                let rs' = List.fold_left2 (fun rs pt et -> match rs with | None -> None | Some rs -> match_template rs (not contract) pt et) (Some resolveds) pa ea in
+                let rs' = List.fold_left2 (fun rs pt et -> match rs with | None -> None | Some rs -> match_template rs (not contract) (Some pt) et) (Some resolveds) pa ea in
                 begin match prt, ert, rs' with
                   | Void, Void, _ -> rs'
                   | Ret prt, Ret ert, Some rs ->
-                      match_template rs contract prt ert
+                      match_template rs contract (Some prt) ert
                   | _ -> None 
                 end
           | _ -> Stdlib.failwith "bad types in template resolution"
         end
     in
 
-    let rec aux (res : (string * ty) list) (args : (ty * ty) list) : (string * ty) list =
+    let rec aux (res : (string * ty) list) (args : (ty option * ty) list) : (string * ty) list =
       begin match args with
         | []               -> res
         | (pt,et) :: args' ->
@@ -138,7 +144,7 @@ module TemplateResolver = struct
     let matches = aux [] ts in
     try
       let resolution = resolve_solution matches (List.map snd ts) in
-      if List.for_all2 subtype (List.map fst ts) resolution then
+      if List.for_all2 (fun tl tr -> match tl with | None -> true | Some t -> subtype t tr) (List.map fst ts) resolution then
         matches
       else
         []
@@ -172,13 +178,18 @@ module TemplateResolver = struct
       | TRef (TArr et) -> ofnode (TRef (TArr (resolve_ty ts (ofnode et t)).t)) t
       | TRef (TFun (at,retty)) ->
           let at' = List.map (fun at -> (resolve_ty ts (ofnode at t)).t) at in
-          let retty' =
-            begin match retty with
-              | Void   -> Void
-              | Ret rt -> Ret (resolve_ty ts (ofnode rt t)).t
-            end in
-          ofnode (TRef (TFun (at',retty'))) t
+          let retty' = resolve_retty ts (ofnode retty t) in
+          ofnode (TRef (TFun (at',retty'.t))) t
     end
+
+  and resolve_retty (ts:t) (t : retty node) : retty node =
+    begin match t.t with
+      | Void   -> t
+      | Ret rt -> ofnode (Ret (resolve_ty ts (ofnode rt t)).t) t
+    end
+
+  and resolve_args (ts:t) (args : ty node list) (rt : retty node) : ty node list * retty node =
+    List.map (resolve_ty ts) args, resolve_retty ts rt
 
   let rec resolve_exp (ts:t) (e : exp node) : exp node =
     let r_t, r_e = resolve_ty ts, resolve_exp ts in

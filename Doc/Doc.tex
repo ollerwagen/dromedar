@@ -1709,11 +1709,14 @@ f(null of [string], [null of string])
 				ReturnStmt       ::= %Return [ Expression ]
 				                 
 				LHS              ::= BaseExpression { Application }
-				                 
-				Type             ::= %Int | %Flt | %Char | %Bool | RefType [ %QuestionMark ]
-				                     | %Less %Identifier %Greater [ %QuestionMark ]
-				                 
+				
+				Type             ::= BaseType | FType
+				FType            ::= %LParen [ Type { %Comma Type } ] %Arrow Type
 				RefType          ::= %String | %LBrack Type %RBrack | %Identifier [ %Dot %Identifier ]
+				BaseType         ::= %LParen (FType | RefType) %RParen %QuestionMark
+				                     | %LParen Type %RParen
+				                     | %Int | %Flt | %Char | %Bool
+				                     | %Less %Identifier %Greater [ %QuestionMark ]          
 				                 
 				GlobalExpression ::= Expression
 			
