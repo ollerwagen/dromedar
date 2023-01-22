@@ -19,13 +19,16 @@ module TypeChecker = struct
     (* per module: string list is list of recognized type names *)
     type t =
       { current    : string
-      ; bindings   : (string * ((string * (ty * mutability)) list list * string list)) list
+      ; namedts    : (string * string) list
+      ; bindings   : (string * ((string * (ty * mutability * string)) list list)) list
       ; templfs    : ((string * string) * ((string * ty node) list * retty node * stmt node list)) list
-      ; res_templs : (((string * string) * (string * ty) list) * (string * string * bool)) list
+      ; res_templs : (((string * string) * (string * ty) list) * (string * bool)) list
       }
 
     (* invariant: every file starts with a module declaration (ensured by the main.ml file) *)
-    let empty : t = { current = "" ; bindings = [] ; templfs = [] ; res_templs = [] }
+    let empty : t = { current = "" ; namedts = [] ; bindings = [] ; templfs = [] ; res_templs = [] }
+
+    let module_mangle (m:string) (id:string) : string = Printf.sprintf "%s$%s" m id
 
     let get_current_module (c:t) : string = c.current
 
@@ -33,13 +36,13 @@ module TypeChecker = struct
       if List.mem_assoc id c.bindings then
         { c with current = id }
       else
-        { c with current = id ; bindings = (id, ([[]], [])) :: c.bindings }
+        { c with current = id ; bindings = (id, [[]]) :: c.bindings }
 
     let exists_module (c:t) (m:string) : bool = List.mem_assoc m c.bindings
     
     let has_in_module (c:t) (m:string) (id:string) : bool =
       if List.mem_assoc m c.bindings then
-        List.exists (List.mem_assoc id) (fst (List.assoc m c.bindings))
+        List.exists (List.mem_assoc id) (List.assoc m c.bindings)
       else
         false
 
@@ -47,46 +50,37 @@ module TypeChecker = struct
       has_in_module c c.current id
 
     let has_toplevel (c:t) (id:string) : bool =
-      List.mem_assoc id (List.hd (fst (List.assoc c.current c.bindings)))
+      List.mem_assoc id (List.hd (List.assoc c.current c.bindings))
 
     let has_in_any_binding (c:t) (id:string) : bool =
-      List.exists (fun (_,(l,_)) -> List.exists (List.mem_assoc id) l) c.bindings
+      List.exists (fun (_,l) -> List.exists (List.mem_assoc id) l) c.bindings
 
-    let has_modnamedt (c:t) (m:string) (id:string) : bool =
-      if List.mem_assoc m c.bindings then
-        List.mem id (snd (List.assoc m c.bindings))
-      else
-        false
+    let has_modnamedt (c:t) (m:string) (id:string) : bool = List.mem (m,id) c.namedts
 
     let has_namedt (c:t) (id:string) : bool =
       has_modnamedt c c.current id
 
     let add_modnamedt (c:t) (m:string) (id:string) : t =
-      let l,c' =
-        if List.mem_assoc m c.bindings then
-          List.assoc m c.bindings, List.remove_assoc m c.bindings
-        else
-          ([[]], []), c.bindings
-        in
-      { c with bindings = (m, (fst l, id :: snd l)) :: c' }
+      if has_modnamedt c m id then c else { c with namedts = (m,id) :: c.namedts }
 
     let add_namedt (c:t) (id:string) : t =
       add_modnamedt c c.current id
 
-    let get_from_module (c:t) (m:string) (id:string) : ty * mutability =
-      let l = fst (List.assoc m c.bindings) in
+    let get_from_module (c:t) (m:string) (id:string) : ty * mutability * string =
+      let l = List.assoc m c.bindings in
       let found,res =
-        List.fold_left (fun (f,r) l -> if f then true,r else if List.mem_assoc id l then true, List.assoc id l else false,r) (false,(TInt,Const)) l in
+        List.fold_left (fun (f,r) l -> if f then true,r else if List.mem_assoc id l then true, List.assoc id l else false,r) (false,(TInt,Const,"")) l in
       if found then res else raise Not_found
 
-    let get (c:t) (id:string) : ty * mutability =
-      get_from_module c c.current id
+    let get (c:t) (id:string) : ty * mutability * string = get_from_module c c.current id
 
-    let get_from_any_binding (c:t) (id:string) : ty * mutability =
-      let rec aux (m : (string * ((string * (ty * mutability)) list list * string list)) list) : ty * mutability =
+    let get_id (c:t) (id:string) : string = (fun (_,_,id) -> id) (get c id)
+
+    let get_from_any_binding (c:t) (id:string) : ty * mutability * string =
+      let rec aux (m : (string * ((string * (ty * mutability * string)) list list)) list) : ty * mutability * string =
         begin match m with
           | []    -> raise Not_found
-          | x::xs -> if List.exists (List.mem_assoc id) (fst (snd x)) then get_from_module c (fst x) id else aux xs
+          | x::xs -> if List.exists (List.mem_assoc id) (snd x) then get_from_module c (fst x) id else aux xs
         end
       in
       aux c.bindings
@@ -94,18 +88,19 @@ module TypeChecker = struct
     let add_level (c:t) : t =
       let l = List.assoc c.current c.bindings in
       let c' = List.remove_assoc c.current c.bindings in
-      { c with bindings = (c.current, ([] :: fst l, snd l)) :: c' }
+      { c with bindings = (c.current, ([]::l)) :: c' }
 
-    let add_binding_to_module (c:t) (m:string) (bnd : string*(ty*mutability)) : t =
+    let add_binding_to_module (c:t) (m:string) ((id,(t,mut)) : string * (ty * mutability)) : t * string =
       let l,c' =
         if List.mem_assoc m c.bindings then
           List.assoc m c.bindings, List.remove_assoc m c.bindings
         else
-          ([[]], []), c.bindings
+          [[]], c.bindings
         in
-      { c with bindings = (m, ((bnd :: List.hd (fst l)) :: List.tl (fst l), snd l)) :: c' }
+      let name = module_mangle m id in
+      { c with bindings = (m, (((id,(t,mut,name)) :: List.hd l) :: List.tl l)) :: c' }, name
 
-    let add_binding (c:t) (bnd : string * (ty * mutability)) : t =
+    let add_binding (c:t) (bnd : string * (ty * mutability)) : t * string =
       add_binding_to_module c c.current bnd
     
     let add_generic_function_to_module (c:t) (m:string) (id:string) (bnd : (string * ty node) list * retty node * stmt node list) : t =
@@ -126,32 +121,32 @@ module TypeChecker = struct
     let get_generic_function (c:t) (m:string) (id:string) : (string * ty node) list * retty node * stmt node list =
       List.assoc (m,id) c.templfs
     
-    let resolve_generic_function_in_module (c:t) (m:string) (id:string) (ts : (string * ty) list) : t * (string * string) =
+    let resolve_generic_function_in_module (c:t) (m:string) (id:string) (ts : (string * ty) list) : t * string =
       begin match List.assoc_opt ((m,id),ts) c.res_templs with
         | None ->
-            let id' = gensym id in
-            { c with res_templs = (((m, id), ts), (m, id', true)) :: c.res_templs }, (m, id')
-        | Some (m,id,_) -> c, (m, id)
+            let id' = gensym (module_mangle m id) in
+            { c with res_templs = (((m, id), ts), (id', true)) :: c.res_templs }, id'
+        | Some (id,_) -> c, id
       end
     
-    let resolve_generic_function (c:t) (id:string) (ts : (string * ty) list) : t * (string * string) =
+    let resolve_generic_function (c:t) (id:string) (ts : (string * ty) list) : t * string =
       resolve_generic_function_in_module c (get_current_module c) id ts
 
     let copy_resolved_generics_from (c_from:t) (c_to:t) : t = { c_to with res_templs = c_from.res_templs }
 
     (* first is the resolved functions' name, then its type mappings, then the unresolved function's name *)
-    let get_resolved_generics_todo_list (c:t) : t * ((string * string) * (string * ty) list * (string * string)) list =
+    let get_resolved_generics_todo_list (c:t) : t * (string * (string * ty) list * (string * string)) list =
       let templfs',res = List.fold_left
-        (fun (templfs,res) ((genname,resolution),(res_m,res_id,todo)) ->
+        (fun (templfs,res) ((genname,resolution),(res_id,todo)) ->
           if todo then
-            ((genname,resolution),(res_m,res_id,false)) :: templfs, ((res_m,res_id), resolution, genname) :: res
+            ((genname,resolution),(res_id,false)) :: templfs, (res_id, resolution, genname) :: res
           else
-            ((genname,resolution),(res_m,res_id,todo)) :: templfs, res
+            ((genname,resolution),(res_id,todo)) :: templfs, res
         )
         ([],[]) c.res_templs in
       { c with res_templs = templfs' }, res
 
-    let has_resolved_generics_todo (c:t) : bool = List.exists (fun (_,(_,_,b)) -> b) c.res_templs
+    let has_resolved_generics_todo (c:t) : bool = List.exists (fun (_,(_,b)) -> b) c.res_templs
 
   end
   
@@ -203,8 +198,8 @@ module TypeChecker = struct
       | Id id       ->
           if Ctxt.has c id then
             begin match Ctxt.get c id with
-              | _,Mut -> true
-              | _     -> false
+              | _,Mut,_ -> true
+              | _       -> false
             end
           else
             false
@@ -232,13 +227,33 @@ module TypeChecker = struct
       | _ -> ()
     end
 
+  let rec transform_ty (c:Ctxt.t) (t:ty) : ty =
+    begin match t with
+      | TRef (TNamed id) -> TRef (TModNamed (Ctxt.get_current_module c, id))
+      | TNullRef rty ->
+          let rty' = transform_ty c (TRef rty) in
+          begin match rty' with
+            | TRef rty'' -> TNullRef rty''
+            | _          -> Stdlib.failwith "bad type transformation"
+          end
+      | TRef (TArr t) -> TRef (TArr (transform_ty c t))
+      | t -> t
+    end
+
+  and transform_retty (c:Ctxt.t) (rt:retty) : retty =
+    begin match rt with
+      | Void  -> Void
+      | Ret t -> Ret (transform_ty c t)
+    end
+
   let void_placeholder : ty = TRef (TModNamed ("",""))
   let templ_placeholder : ty = TTempl (true,"")
   
   let rec check_exp (c:Ctxt.t) (exp_t : ty option) (perm_void : bool) (e : exp node) : Ctxt.t * annt_exp =
     begin match e.t with
       | Id id ->
-          if Ctxt.has c id then c, (Id id, fst (Ctxt.get c id))
+          if Ctxt.has c id then 
+            let t,_,id' = Ctxt.get c id in c, (Id id', t)
           else raise @@ TypeError (ofnode (Printf.sprintf "Variable '%s' not declared" id) e)
       | LitInt  i   -> c, (LitInt i, TInt)
       | LitFlt  f   -> c, (LitFlt f, TFlt)
@@ -269,7 +284,7 @@ module TypeChecker = struct
             | Some _               -> raise @@ TypeError (ofnode "List type doesn't match here" e)
             | _                    -> raise @@ TypeError (ofnode "Cannot infer empty list element type" e)
           end
-      | EmptyList (Some t) -> let () = check_ty c false t in c, (EmptyList t.t, TRef (TArr t.t))
+      | EmptyList (Some t) -> let () = check_ty c false t in let t' = transform_ty c t.t in c, (EmptyList t', TRef (TArr t'))
       | RangeList (e1,i1,i2,e2) ->
           let c', e1' = check_exp c  (Some TInt) false e1 in
           let c'',e2' = check_exp c' (Some TInt) false e2 in
@@ -289,7 +304,8 @@ module TypeChecker = struct
               (fun (c,res) (id,exp) ->
                 let c',(exp',t) = check_exp c None false exp in
                 begin match t with
-                  | TRef (TArr t') -> Ctxt.add_binding c' (id,(t',Const)), res @ [ id, (exp',t) ]
+                  | TRef (TArr t') -> 
+                      let c',id' = Ctxt.add_binding c' (id,(t',Const)) in c', res @ [ id', (exp',t) ]
                   | _              -> raise @@ TypeError (ofnode "list comprehension variable should be in an array type" e)
                 end
               )
@@ -317,7 +333,14 @@ module TypeChecker = struct
       | Null (Some t) -> 
           begin match t.t with
             | TRef rt -> 
-                let () = check_ty c false (ofnode (TNullRef rt) t) in c, (Null rt, TNullRef rt)
+                let () = check_ty c false (ofnode (TNullRef rt) t) in
+                let t' = transform_ty c (TNullRef rt) in
+                let rt' =
+                  begin match t' with
+                    | TNullRef rt -> rt
+                    | _           -> Stdlib.failwith "bad type transformation in <null>"
+                  end in
+                c, (Null rt', t')
             | _ ->
                 raise @@ TypeError (ofnode "in null of t: type must be non-null reference type" t)
           end
@@ -411,8 +434,8 @@ module TypeChecker = struct
                 | []  -> raise @@ TypeError (ofnode "unsuccessful template match" e)
                 | tms ->
                     let resolved_etys, resolved_retty = TemplateResolver.resolve_args tms (List.map snd argtys) retty in
-                    let c'',(m',id') = Ctxt.resolve_generic_function_in_module c' m id tms in
-                    c'', ModAccess (m', id'), List.map (fun x -> x.t) resolved_etys, resolved_retty.t
+                    let c'',id' = Ctxt.resolve_generic_function_in_module c' m id tms in
+                    c'', Id id', List.map (fun x -> x.t) resolved_etys, resolved_retty.t
               end
             else
               begin match check_exp c' None false f with
@@ -458,8 +481,8 @@ module TypeChecker = struct
               | Id m ->
                   if Ctxt.exists_module c m then
                     if Ctxt.has_in_module c m id.t then
-                      let t,_ = Ctxt.get_from_module c m id.t in
-                      Some (ModAccess (m, id.t), t)
+                      let t,_,id' = Ctxt.get_from_module c m id.t in
+                      Some (Id id', t)
                     else None
                   else None
               | _ -> None
@@ -483,12 +506,15 @@ module TypeChecker = struct
             begin match t with
               | None   ->
                   let c',et = check_exp c None false e in
-                  VDecl (id,m,None,et), Ctxt.add_binding c' (id,(snd et,m)), false, false
+                  let c'',id' = Ctxt.add_binding c' (id,(snd et,m)) in 
+                  VDecl (id',m,None,et), c'', false, false
               | Some t ->
                   let c',et = check_exp c (Some t.t) false e in
                   let () = check_ty c' false t in (* c and c' are equivalent here, only added for possible OCaml optimizations *)
-                  if subtype (snd et) t.t || crosstype (snd et) t.t then
-                    VDecl (id,m,Some t.t,et), Ctxt.add_binding c' (id,(t.t,m)), false, false
+                  let t' = transform_ty c' t.t in
+                  if subtype (snd et) t' || crosstype (snd et) t' then
+                    let c'',id' = Ctxt.add_binding c' (id,(t',m)) in
+                    VDecl (id',m,Some t',et), c'', false, false
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (Ast.print_ty t) (Ast.print_ty (ofnode (snd et) e))) s)
             end
@@ -509,7 +535,6 @@ module TypeChecker = struct
           else
             begin match fst lt with
               | Id id -> raise @@ TypeError (ofnode (Printf.sprintf "Variable %s is immutable" id) l)
-              | ModAccess (m,id) -> raise @@ TypeError (ofnode (Printf.sprintf "Variable %s.%s is immutable" m id) l)
               | _ -> raise @@ TypeError (ofnode "invalid assignment target" l)
             end
       | Expr e ->
@@ -532,10 +557,11 @@ module TypeChecker = struct
           let c',(e',et) = check_exp c None false e in
           begin match et with
             | TNullRef r ->
-                let c'' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c') (id, (TRef r, Const)) in
-                let t',c''',r1,b1 = check_stmt_block rt inloop c'' t in
-                let n',c'''',r2,b2 = check_stmt_block rt inloop (Ctxt.copy_resolved_generics_from c''' c'') n in
-                Denull (id,(e',et),t',n'), Ctxt.copy_resolved_generics_from c'''' c', r1 && r2, b1 && b2
+                let c'',id' = Ctxt.add_binding (Ctxt.add_level c') (id, (TRef r, Const)) in
+                let c''' = Ctxt.add_level c'' in
+                let t',c'''',r1,b1 = check_stmt_block rt inloop c''' t in
+                let n',c''''',r2,b2 = check_stmt_block rt inloop (Ctxt.copy_resolved_generics_from c'''' c''') n in
+                Denull (id',(e',et),t',n'), Ctxt.copy_resolved_generics_from c''''' c'', r1 && r2, b1 && b2
             | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
           end
       | While (cd,b) ->
@@ -558,18 +584,18 @@ module TypeChecker = struct
           let c',sty = check_exp c None false exps in
           let c'',ety = check_exp c None false expe in
           if snd sty = TInt && snd ety = TInt then
-            let c''' = Ctxt.add_binding (Ctxt.add_level c'') (id,(TInt,Const)) in
+            let c''',id' = Ctxt.add_binding (Ctxt.add_level c'') (id,(TInt,Const)) in
             let b',c'''',_,_ = check_stmt_block rt true c''' b in
-            For (id,sty,incl1,incl2,ety,b'), Ctxt.copy_resolved_generics_from c'''' c'', false, false
+            For (id',sty,incl1,incl2,ety,b'), Ctxt.copy_resolved_generics_from c'''' c'', false, false
           else
             raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
       | ForIn (id,lexp,b) ->
           let c',(l',lt) = check_exp c None false lexp in
           begin match lt with
             | TRef (TArr et) ->
-                let c'' = Ctxt.add_binding (Ctxt.add_level c') (id,(et,Const)) in
+                let c'',id' = Ctxt.add_binding (Ctxt.add_level c') (id,(et,Const)) in
                 let b',c''',_,_ = check_stmt_block rt true c'' b in
-                ForIn (id,(l',lt),b'), Ctxt.copy_resolved_generics_from c''' c', false, false
+                ForIn (id',(l',lt),b'), Ctxt.copy_resolved_generics_from c''' c', false, false
             | _ -> raise @@ TypeError (ofnode "for-in loop must have an array expression" lexp)
           end
       | Break ->
@@ -612,21 +638,24 @@ module TypeChecker = struct
       | _         -> raise @@ TypeError (ofnode "illegal global expression" ge)
     end
 
-  let check_gstmt (c : Ctxt.t) (gs : gstmt node) : annt_gstmt option * Ctxt.t =
+  let check_gstmt (in_templ_res : bool) (c : Ctxt.t) (gs : gstmt node) : annt_gstmt option * Ctxt.t =
     begin match gs.t with
-      | Module m ->
-          Some (Module m), Ctxt.set_current_module c m
+      | Module m -> None, Ctxt.set_current_module c m (* module do not exist at the translation-level AST *)
       | GVDecl (id,m,t,e) ->
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
           else
             let et = check_gexp c e in
             begin match t with
-              | None   -> Some (GVDecl(id,m,None,et)), Ctxt.add_binding c (id,(snd et,m))
+              | None   ->
+                  let c',id' = Ctxt.add_binding c (id,(snd et,m)) in
+                  Some (GVDecl(id', m, None, et)), c'
               | Some t ->
                   let () = check_ty c false t in
-                  if subtype (snd et) t.t then
-                    Some (GVDecl (id,m,Some t.t,et)), Ctxt.add_binding c (id,(t.t,m))
+                  let t' = transform_ty c t.t in
+                  if subtype (snd et) t' then
+                    let c',id' = Ctxt.add_binding c (id,(t',m)) in
+                    Some (GVDecl (id', m, Some t', et)), c'
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match") gs)
             end
@@ -634,38 +663,41 @@ module TypeChecker = struct
           let () =
             if not @@ alldistinct (List.map fst args) then raise @@ TypeError (ofnode "Function argument names must be distinct" gs) else () in
           let istemplf = List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) in
-          let () = List.iter (check_ty c istemplf) (List.map snd args) in
-          let () =
+          let id' = if istemplf || in_templ_res then id else Ctxt.get_id c id in
+          let args' = List.map (fun (id,t) -> check_ty c istemplf t; id, transform_ty c t.t) args in
+          let rt' =
             begin match rt.t with
-              | Void  -> ()
-              | Ret t -> check_ty c istemplf (ofnode t rt)
+              | Void  -> Void
+              | Ret t -> check_ty c istemplf (ofnode t rt); Ret (transform_ty c t)
             end in
 
           if istemplf then (* templated function *)
             None, c
           else (* non-templated function *)
             let c' = Ctxt.add_level c in
-            let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in
+            let c'',args'' = List.fold_left (fun (c,args) (id,t) -> let c',id' = Ctxt.add_binding c (id,(t,Const)) in c', args@[id',t]) (c',[]) args' in
             let b',c''',returns,_ = check_stmt_block rt.t false c'' b in (* know that this doesn't break as break/continue only legal in loops *)
             if returns then
-              Some (GFDecl (id, List.map (fun (s,t) -> s,t.t) args, rt.t, b')), Ctxt.copy_resolved_generics_from c''' c
+              Some (GFDecl (id', args'', rt', b')), Ctxt.copy_resolved_generics_from c''' c
             else if rt.t = Void then
-              Some (GFDecl (id, List.map (fun (s,t) -> s,t.t) args, rt.t, b' @ [ Return None ])), Ctxt.copy_resolved_generics_from c''' c
+              Some (GFDecl (id', args'', rt', b' @ [ Return None ])), Ctxt.copy_resolved_generics_from c''' c
             else
               raise @@ TypeError (ofnode "Function must return" gs)
       | GNVDecl (id,t) ->
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
           else
-            Some (GNVDecl (id,t.t)), Ctxt.add_binding c (id,(t.t,Const))
+            let c',id' = Ctxt.add_binding c (id,(t.t,Const)) in
+            Some (GNVDecl (id',t.t)), c'
       | GNFDecl (id,args,rt) ->
-          let () = List.iter (check_ty c false) args in
-          let () =
+          let id' = Ctxt.get_id c id in
+          let args' = List.map (fun t -> check_ty c false t; transform_ty c t.t) args in
+          let rt' =
             begin match rt.t with
-              | Void  -> ()
-              | Ret t -> check_ty c false (ofnode t rt)
+              | Void  -> Void
+              | Ret t -> check_ty c false (ofnode t rt); Ret (transform_ty c t)
             end in
-          Some (GNFDecl (id, List.map (fun t -> t.t) args, rt.t)), c
+          Some (GNFDecl (id', args', rt')), c
       | GNTDecl id ->
           if Ctxt.has_namedt c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
@@ -674,17 +706,17 @@ module TypeChecker = struct
     end
   
   let check_gstmt_program (c:Ctxt.t) (gs : gstmt node list) : (annt_gstmt list * Ctxt.t) =
-    List.fold_left (fun (l,c) gs -> match check_gstmt c gs with | None,c' -> l,c' | Some ag, c' -> l@[ag],c') ([],c) gs
+    List.fold_left (fun (l,c) gs -> match check_gstmt false c gs with | None,c' -> l,c' | Some ag, c' -> l@[ag],c') ([],c) gs
 
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
       | Module m              -> Ctxt.set_current_module c m
       | GFDecl (id,args,rt,b) ->
           if List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) then
-            Ctxt.add_generic_function c id (args,rt,b)
+            Ctxt.add_generic_function c id (List.map (fun (id,t) -> id, ofnode (transform_ty c t.t) t) args, ofnode (transform_retty c rt.t) rt, b)
           else
-            Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
-      | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> t.t) args, rt.t)), Const))
+            fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> transform_ty c t.t) args, transform_retty c rt.t)), Const))
+      | GNFDecl (id,args,rt)  -> fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> transform_ty c t.t) args, transform_retty c rt.t)), Const))
       | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
     end
 
@@ -692,15 +724,15 @@ module TypeChecker = struct
     let step (c : Ctxt.t) (res : annt_gstmt list) : Ctxt.t * annt_gstmt list =
       let c',todos = Ctxt.get_resolved_generics_todo_list c in
       List.fold_left
-        (fun (c,res) ((res_m,res_id),ts,(gen_m,gen_id)) ->
+        (fun (c,res) ((res_id),ts,(gen_m,gen_id)) ->
           let args,retty,b = Ctxt.get_generic_function c gen_m gen_id in
           let args',retty',b' = TemplateResolver.resolve_f ts (List.map snd args) retty b in
-          let fprogpart = Ast.[
-              ofnode (Module res_m) retty
-            ; ofnode (GFDecl (res_id, List.combine (List.map fst args) args', retty', b')) retty
-            ] in
-          let gs_l, c' = check_gstmt_program c fprogpart in
-          c', res @ gs_l
+          let fprogpart = ofnode (Ast.GFDecl (res_id, List.combine (List.map fst args) args', retty', b')) retty in
+          let gs_l, c' = check_gstmt true c fprogpart in
+          begin match gs_l with
+            | None -> Stdlib.failwith "typechecking of resolved generic function should not return <no function>"
+            | Some gs_l' -> c', res @ [gs_l']
+          end
         )
         (c',res) todos
     in
@@ -715,15 +747,16 @@ module TypeChecker = struct
   
   let create_fctxt_program : Ctxt.t -> gstmt node list -> Ctxt.t = List.fold_left create_fctxt
 
-  let check_program (prog : gstmt node list) : annt_gstmt list =
+  (* string returned is translator-level AST ID of main *)
+  let check_program (prog : gstmt node list) : annt_gstmt list * string =
     let c = create_fctxt_program startcontext prog in
-    let _ =
+    let main_id =
       if Ctxt.has_in_any_binding c "main" then
         begin match Ctxt.get_from_any_binding c "main" with
-          | TRef (TFun ([], Void)),                            Const -> ()
-          | TRef (TFun ([], Ret TInt)),                        Const -> ()
-          | TRef (TFun ([TRef (TArr (TRef TStr))], Void)),     Const -> ()
-          | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), Const -> ()
+          | TRef (TFun ([], Void)),                            Const, id -> id
+          | TRef (TFun ([], Ret TInt)),                        Const, id -> id
+          | TRef (TFun ([TRef (TArr (TRef TStr))], Void)),     Const, id -> id
+          | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), Const, id -> id
           | _ ->
               let mainfunc = List.hd (List.filter
                 (fun gs ->
@@ -740,6 +773,6 @@ module TypeChecker = struct
         raise @@ TypeError { t = "program must contain a main function" ; start = 0 ; length = 1 }
     in
     let prog', c' = check_gstmt_program c prog in
-    create_template_calls c' prog' 10
+    create_template_calls c' prog' 10, main_id
 
 end

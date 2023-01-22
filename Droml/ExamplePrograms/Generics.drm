@@ -3,3 +3,6 @@ fn main -> void
 
 fn double (x:int) -> int
     return 2 * x
+
+fn app (f : (<a> -> <b>), x : <b>) -> <b>
+	return f(x)

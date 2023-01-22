@@ -2,7 +2,6 @@ open Ast
 
 type exp' =
   | Id        of string
-  | ModAccess of string * string
   | LitInt    of Token.tint
   | LitFlt    of Token.tflt
   | LitChar   of Token.tchar
@@ -43,7 +42,6 @@ type annt_stmt =
 type annt_gstmt =
   | GVDecl  of string * mutability * ty option * annt_exp
   | GFDecl  of string * (string * ty) list * retty * annt_stmt list
-  | Module  of string
   | GNFDecl of string * ty list * retty
   | GNVDecl of string * ty
   | GNTDecl of string

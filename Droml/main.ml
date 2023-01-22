@@ -113,14 +113,14 @@ let () =
           Printf.printf "\n%s\n" (Ast.print_program program)
         else () in
 
-      let annt_prog =
+      let annt_prog, main_id =
         try TypeChecker.check_program program
         with TypeChecker.TypeError ({t=m;start=s;length=l}) ->
           (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
           Stdlib.failwith "Type Error. Aborting.")
       in
       
-      let llstring = Translator.cmp_to_llvm annt_prog in
+      let llstring = Translator.cmp_to_llvm annt_prog main_id in
 
       let () =
         if seellvmoutput then
