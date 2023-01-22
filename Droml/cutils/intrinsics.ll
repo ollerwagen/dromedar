@@ -22,7 +22,8 @@ declare i64 @_strcmp({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
 declare {i64,[0 x i8]*}* @_arrconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*, i64, i1)
 
 ; range list
-declare {i64,[0 x i64]*}* @_makerangelist(i64,i64,i1,i1)
+declare {i64,[0 x i64]*}* @_makerangeintlist(i64,i64,i1,i1)
+declare {i64,[0 x i8]*}*  @_makerangecharlist(i8,i8,i1,i1)
 
 
 ; sprintf helper functions

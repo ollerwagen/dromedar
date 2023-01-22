@@ -1224,7 +1224,8 @@ fn main -> void
 			\subsubsection{Range List}
 			
 				\begin{align*}
-					\drmrule{S\ruleapp{E}\mc{e1}::\mc{int}\ \ S\ruleapp{E}\mc{e2}::\mc{int}}{S}{E}{\mc{[e1 \%RangeSpecifier e2]} :: \mc{[int]}}{ExpRangeArr}
+					\drmrule{S\ruleapp{E}\mc{e1}::\mc{int}\ \ S\ruleapp{E}\mc{e2}::\mc{int}}{S}{E}{\mc{[e1 \%RangeSpecifier e2]} :: \mc{[int]}}{ExpRangeArrInt},\\
+					\drmrule{S\ruleapp{E}\mc{c1}::\mc{char}\ \ S\ruleapp{E}\mc{c2}::\mc{char}}{S}{E}{\mc{[c1 \%RangeSpecifier c2]} :: \mc{[char]}}{ExpRangeArrChar}
 				\end{align*}
 				
 			\subsubsection{List Comprehension}

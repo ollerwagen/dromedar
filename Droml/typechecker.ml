@@ -274,8 +274,9 @@ module TypeChecker = struct
           let c', e1' = check_exp c  (Some TInt) false e1 in
           let c'',e2' = check_exp c' (Some TInt) false e2 in
           begin match snd e1', snd e2' with
-            | TInt,TInt -> c'', (RangeList (e1',i1,i2,e2'), TRef (TArr TInt))
-            | _         -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
+            | TInt,TInt   -> c'', (RangeList (e1',i1,i2,e2'), TRef (TArr TInt))
+            | TChar,TChar -> c'', (RangeList (e1',i1,i2,e2'), TRef (TArr TChar))
+            | _           -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
           end
       | ListComp (ex,vs,cnd) ->
           let exp_t' =
@@ -506,7 +507,11 @@ module TypeChecker = struct
             else
               raise @@ TypeError (ofnode (Printf.sprintf "expression type doesn't match assignment target") r)
           else
-            raise @@ TypeError (ofnode ("left-hand side expression cannot be written to") l)
+            begin match fst lt with
+              | Id id -> raise @@ TypeError (ofnode (Printf.sprintf "Variable %s is immutable" id) l)
+              | ModAccess (m,id) -> raise @@ TypeError (ofnode (Printf.sprintf "Variable %s.%s is immutable" m id) l)
+              | _ -> raise @@ TypeError (ofnode "invalid assignment target" l)
+            end
       | Expr e ->
           begin match e.t with
             | FApp _ | Sprintf (Printf,_,_) ->

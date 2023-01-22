@@ -20,7 +20,8 @@ i64 _strcmp(string *a, string *b);
 
 blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs);
 
-intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend);
+intarr* _makerangeintlist(i64 start, i64 end, bool inclstart, bool inclend);
+chararr* _makerangecharlist(i8 start, i8 end, bool inclstart, bool inclend);
 
 void _print_string(string *s);
 

@@ -372,9 +372,15 @@ module Translator = struct
 
       | RangeList (e1,i1,i2,e2), t ->
           let rsym = gensym "rangelist" in
-          let (eop1,_,es1,_,fs1), (eop2,_,es2,_,fs2) = cmp_exp c e1, cmp_exp c e2 in
+          let (eop1,ellt1,es1,_,fs1), (eop2,ellt2,es2,_,fs2) = cmp_exp c e1, cmp_exp c e2 in
+          let callop =
+            begin match t with
+              | TRef (TArr TInt)  -> Gid "_makerangeintlist"
+              | TRef (TArr TChar) -> Gid "_makerangecharlist"
+              | _                 -> Stdlib.failwith "bad range list type"
+            end in
           Id rsym, cmp_ty t,
-          es1 @ es2 @ [ I (Call (Some rsym, cmp_ty t, Gid "_makerangelist", [ I64, eop1 ; I64, eop2 ; I1, IConst (if i1=Incl then 1L else 0L) ; I1, IConst (if i2=Incl then 1L else 0L) ])) ],
+          es1 @ es2 @ [ I (Call (Some rsym, cmp_ty t, callop, [ ellt1, eop1 ; ellt2, eop2 ; I1, IConst (if i1=Incl then 1L else 0L) ; I1, IConst (if i2=Incl then 1L else 0L) ])) ],
           true,
           union fs1 fs2
 

@@ -127,24 +127,32 @@ static inline i64 max(i64 a, i64 b) {
     return a > b ? a : b;
 }
 
-intarr* _makerangelist(i64 start, i64 end, bool inclstart, bool inclend) {
+static inline blindarr* _makerangelist_basic(i64 start, i64 end, i64 elemsize, i64 elemflag, bool inclstart, bool inclend) {
     if (start < end) {
         if (!inclstart) ++start;
         if (!inclend) --end;
-        intarr* res = allocate_intarr(max(end - start + 1, 0));
+        blindarr* res = allocate_blindarr(max(end - start + 1, 0), elemsize);
         for (i64 i = 0; i < res->size; i++) {
-            res->base[i] = start + i;
+            * (i64*) (res->base + elemsize * i) |= ((start + i) & elemflag);
         }
         return res;
     } else {
         if (!inclstart) --start;
         if (!inclend) ++end;
-        intarr* res = allocate_intarr(max(start - end + 1, 0));
+        blindarr* res = allocate_blindarr(max(start - end + 1, 0), elemsize);
         for (i64 i = res->size - 1; i >= 0; i--) {
-            res->base[i] = start - i;
+            * (i64*) (res->base + elemsize * i) |= ((start - i) & elemflag);
         }
         return res;
     }
+}
+
+chararr* _makerangecharlist(i8 start, i8 end, bool inclstart, bool inclend) {
+    return (chararr*) _makerangelist_basic(start, end, 1, 0xff, inclstart, inclend);
+}
+
+intarr* _makerangeintlist(i64 start, i64 end, bool inclstart, bool inclend) {
+    return (intarr*) _makerangelist_basic(start, end, 8, -1, inclstart, inclend);
 }
 
 void _print_string(string *s) {
