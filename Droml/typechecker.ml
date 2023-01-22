@@ -3,22 +3,37 @@ open Token
 open Ast
 open Astannotated
 open Templateresolver
+open Typerelations
 
 module TypeChecker = struct
 
   exception TypeError of string node
+
+  let gensym (id:string) : string =
+    let n = ref 0 in
+    incr n ; Printf.sprintf "%s%d_" id !n
 
   module Ctxt = struct
 
     (* List.hd @@ List.assoc (fst l) (snd l)    <=>    top level block in current module *)
     (* per module: string list is list of recognized type names *)
     type t =
-      { current  : string
-      ; bindings : (string * ((string * (ty * mutability)) list list * string list)) list
+      { current    : string
+      ; bindings   : (string * ((string * (ty * mutability)) list list * string list)) list
+      ; templfs    : ((string * string) * ((string * ty node) list * retty node * stmt node list)) list
+      ; res_templs : (((string * string) * (string * ty) list) * (string * string * bool)) list
       }
 
     (* invariant: every file starts with a module declaration (ensured by the main.ml file) *)
-    let empty : t = { current = "" ; bindings = [] }
+    let empty : t = { current = "" ; bindings = [] ; templfs = [] ; res_templs = [] }
+
+    let get_current_module (c:t) : string = c.current
+
+    let set_current_module (c:t) (id:string) : t =
+      if List.mem_assoc id c.bindings then
+        { c with current = id }
+      else
+        { c with current = id ; bindings = (id, ([[]], [])) :: c.bindings }
 
     let exists_module (c:t) (m:string) : bool = List.mem_assoc m c.bindings
     
@@ -53,7 +68,7 @@ module TypeChecker = struct
         else
           ([[]], []), c.bindings
         in
-      { current = c.current ; bindings = (m, (fst l, id :: snd l)) :: c' }
+      { c with bindings = (m, (fst l, id :: snd l)) :: c' }
 
     let add_namedt (c:t) (id:string) : t =
       add_modnamedt c c.current id
@@ -79,7 +94,7 @@ module TypeChecker = struct
     let add_level (c:t) : t =
       let l = List.assoc c.current c.bindings in
       let c' = List.remove_assoc c.current c.bindings in
-      { current = c.current ; bindings = (c.current, ([] :: fst l, snd l)) :: c' }
+      { c with bindings = (c.current, ([] :: fst l, snd l)) :: c' }
 
     let add_binding_to_module (c:t) (m:string) (bnd : string*(ty*mutability)) : t =
       let l,c' =
@@ -88,50 +103,37 @@ module TypeChecker = struct
         else
           ([[]], []), c.bindings
         in
-      { current = c.current ; bindings = (m, ((bnd :: List.hd (fst l)) :: List.tl (fst l), snd l)) :: c' }
+      { c with bindings = (m, ((bnd :: List.hd (fst l)) :: List.tl (fst l), snd l)) :: c' }
 
     let add_binding (c:t) (bnd : string * (ty * mutability)) : t =
       add_binding_to_module c c.current bnd
+    
+    let add_generic_function_to_module (c:t) (m:string) (id:string) (bnd : (string * ty node) list * retty node * stmt node list) : t =
+      { c with templfs = ((m,id),bnd) :: c.templfs }
 
-    let get_current_module (c:t) : string = c.current
+    let add_generic_function (c:t) (id:string) (bnd : (string * ty node) list * retty node * stmt node list) : t =
+      add_generic_function_to_module c (get_current_module c) id bnd
 
-    let set_current_module (c:t) (id:string) : t =
-      if List.mem_assoc id c.bindings then
-        { current = id ; bindings = c.bindings }
-      else
-        { current = id ; bindings = (id, ([[]], [])) :: c.bindings }
+    let has_generic_function_in_module (c:t) (m:string) (id:string) : bool =
+      List.mem_assoc (m,id) c.templfs
+    
+    let has_generic_function (c:t) (id:string) : bool =
+      has_generic_function_in_module c (get_current_module c) id
+    
+    let resolve_generic_function_in_module (c:t) (m:string) (id:string) (ts : (string * ty) list) : t * (string * string) =
+      begin match List.assoc_opt ((m,id),ts) c.res_templs with
+        | None ->
+            let id' = gensym id in
+            { c with res_templs = (((m, id), ts), (m, id', true)) :: c.res_templs }, (m, id')
+        | Some (m,id,_) -> c, (m, id)
+      end
+    
+    let resolve_generic_function (c:t) (id:string) (ts : (string * ty) list) : t * (string * string) =
+      resolve_generic_function_in_module c (get_current_module c) id ts
+
+    let copy_resolved_generics_from (c_from:t) (c_to:t) : t = { c_to with res_templs = c_from.res_templs }
 
   end
-
-  let rec crossp (l : 'a list list) : 'a list list = 
-    let rec aux acc l1 l2 =
-      begin match l1, l2 with
-        | [], _ | _, [] -> acc
-        | h1::t1, h2::t2 -> 
-            let acc = (h1::h2)::acc in
-            let acc = (aux acc t1 l2) in
-            aux acc [h1] t2
-      end
-    in
-    begin match l with
-      | [] -> []
-      | [l1] -> List.map (fun x -> [x]) l1
-      | l1::tl ->
-          let tail_product = crossp tl in
-          aux [] l1 tail_product
-    end
-  
-  let rec crossp_single (l1 : 'a list) (l2 : 'b list) : ('a * 'b) list =
-    begin match l1 with
-      | []    -> []
-      | l::ls -> List.map (fun l2e -> l,l2e) l2 @ crossp_single ls l2
-    end
-  
-  let rec alldistinct (l : 'a list) : bool =
-    begin match l with
-      | []    -> true
-      | x::xs -> if List.mem x xs then false else alldistinct xs
-    end
   
   let startcontext : Ctxt.t = Ctxt.empty
 
@@ -169,75 +171,6 @@ module TypeChecker = struct
     ; TRef TStr, TRef TStr
     ]
   
-  let rec crosstype (t1:ty) (t2:ty) : bool =
-    begin match t1,t2 with
-      | TInt,TFlt | TFlt,TInt -> true
-      | _                     -> false
-    end
-
-  let rec subtype (t1:ty) (t2:ty) : bool =
-    begin match t1,t2 with
-      | TRef (TFun (a1,r1)), TRef (TFun (a2,r2)) ->
-          begin match r1,r2 with
-            | Void,   Void   -> true
-            | Ret r1, Ret r2 -> subtype r1 r2
-            | _              -> false
-          end &&
-            List.for_all2 subtype a2 a1
-      | TNullRef t1,    TNullRef t2    -> subtype (TRef t1) (TRef t2)
-      | TRef t1,        TNullRef t2    -> subtype (TRef t1) (TRef t2)
-      | TRef (TArr t1), TRef (TArr t2) -> subtype t1 t2
-      | TTempl _, _ | _, TTempl _      -> Stdlib.failwith "templates not allowed in subtype relation"
-      | t1,             t2             -> t1 = t2
-    end
-  
-  let rec subtys (t:ty) : ty list =
-    begin match t with
-      | TInt | TFlt | TChar | TBool -> [t]
-      | TRef TStr                   -> [TRef TStr]
-      | TNullRef t                  ->
-          let sbts = subtys (TRef t) in
-          sbts @ (List.concat @@ List.map (fun t -> begin match t with | TRef t -> [TNullRef t] | _ -> [] end) sbts)
-      | TRef (TArr t)               ->
-          List.map (fun t -> TRef (TArr t)) (subtys t)
-      | TRef (TFun (args,rt))       ->
-          let spts = List.map suptys args in
-          let rspts =
-            begin match rt with
-              | Void  -> [Void]
-              | Ret t -> List.map (fun t -> Ret t) (subtys t) 
-            end in
-          let arglists = crossp spts in
-          let fts = crossp_single arglists rspts in
-          List.map (fun (fta,ftr) -> TRef (TFun (fta,ftr))) fts
-      | TRef (TNamed _) | TRef (TModNamed _) -> [t]
-      | TTempl _ -> Stdlib.failwith "templates not allowed in subtys() call"
-    end
-  and suptys (t:ty) : ty list =
-    begin match t with
-      | TInt | TFlt | TChar | TBool -> [t]
-      | TRef TStr                   -> [TRef TStr ; TNullRef TStr]
-      | TNullRef t                  ->
-          let spts = suptys (TRef t) in
-          List.filter (function | TNullRef _ -> true | _ -> false) spts
-      | TRef (TArr t)               ->
-          let spts = suptys t in
-          List.map (fun t -> TRef (TArr t)) spts @ List.map (fun t -> TNullRef (TArr t)) spts
-      | TRef (TFun (args,rt))       ->
-          let sbts = List.map subtys args in
-          let rsbts =
-            begin match rt with
-              | Void  -> [Void]
-              | Ret t -> List.map (fun t -> Ret t) (suptys t)
-            end in
-          let arglists = crossp sbts in
-          let fts = crossp_single arglists rsbts in
-          List.map (fun (fta,ftr) -> TRef (TFun (fta,ftr))) fts
-      | TRef (TNamed id)        -> [TRef (TNamed id)        ; TNullRef (TNamed id)]
-      | TRef (TModNamed (m,id)) -> [TRef (TModNamed (m,id)) ; TNullRef (TModNamed (m,id))]
-      | TTempl _ -> Stdlib.failwith "templates not allowed in suptys() call"
-    end
-  
   let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
     let rec is_assignable_with_const (e:exp node) : bool =
       begin match e.t with
@@ -266,7 +199,7 @@ module TypeChecker = struct
       | _ -> false
     end
 
-  let rec check_ty (c:Ctxt.t) (t : ty node) : unit =
+  let rec check_ty (c:Ctxt.t) (allow_templ : bool) (t : ty node) : unit =
     begin match t.t with
       | TRef (TNamed id)        | TNullRef (TNamed id)        ->
           if Ctxt.has_namedt c id then ()
@@ -274,52 +207,54 @@ module TypeChecker = struct
       | TRef (TModNamed (m,id)) | TNullRef (TModNamed (m,id)) ->
           if Ctxt.has_modnamedt c m id then ()
           else raise @@ TypeError (ofnode (Printf.sprintf "Type %s.%s doesn't exist" m id) t)
-      | TRef (TArr st) | TNullRef (TArr st) -> check_ty c (ofnode st t)
-      | TTempl _ -> raise @@ TypeError (ofnode (Printf.sprintf "Template types not allowed here") t)
+      | TRef (TArr st) | TNullRef (TArr st) -> check_ty c allow_templ (ofnode st t)
+      | TTempl _ -> if allow_templ then () else raise @@ TypeError (ofnode (Printf.sprintf "Template types not allowed here") t)
       | _ -> ()
     end
 
   let void_placeholder : ty = TRef (TModNamed ("",""))
+  let templ_placeholder : ty = TTempl (true,"")
   
-  let rec check_exp (c:Ctxt.t) (exp_t : ty option) (perm_void : bool) (e : exp node) : annt_exp =
+  let rec check_exp (c:Ctxt.t) (exp_t : ty option) (perm_void : bool) (e : exp node) : Ctxt.t * annt_exp =
     begin match e.t with
       | Id id ->
-          if Ctxt.has c id then Id id, fst (Ctxt.get c id)
+          if Ctxt.has c id then c, (Id id, fst (Ctxt.get c id))
           else raise @@ TypeError (ofnode (Printf.sprintf "Variable '%s' not declared" id) e)
-      | LitInt  i   -> LitInt i, TInt
-      | LitFlt  f   -> LitFlt f, TFlt
-      | LitChar c   -> LitChar c, TChar
-      | LitBool b   -> LitBool b, TBool
-      | LitStr  s   -> LitStr s, TRef TStr
+      | LitInt  i   -> c, (LitInt i, TInt)
+      | LitFlt  f   -> c, (LitFlt f, TFlt)
+      | LitChar cc  -> c, (LitChar cc, TChar)
+      | LitBool b   -> c, (LitBool b, TBool)
+      | LitStr  s   -> c, (LitStr s, TRef TStr)
       | LitArr  ls  ->
           let exp_t' =
             begin match exp_t with
               | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> Some t
               | _                                               -> None
             end in
-          let annt_es = List.map (check_exp c exp_t' false) ls in
+          let c', annt_es = List.fold_left (fun (c,res) e -> let c',ae = check_exp c exp_t' false e in c', res @ [ae]) (c,[]) ls in
           let spts = List.map suptys @@ List.map snd annt_es in
           begin match intersect spts with
             | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
-            | t::ts -> LitArr annt_es, TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
+            | t::ts -> c', (LitArr annt_es, TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts)))
           end
       | Deref e ->
-          let e' = check_exp c None false e in
+          let c',e' = check_exp c None false e in
           begin match snd e' with
-            | TNullRef t -> Deref e', TRef t
+            | TNullRef t -> c', (Deref e', TRef t)
             | _          -> raise @@ TypeError (ofnode "Expression assertion must take maybe-null type argument" e)
           end
       | EmptyList None ->
           begin match exp_t with
-            | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> EmptyList t, TRef (TArr t)
+            | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> c, (EmptyList t, TRef (TArr t))
             | Some _               -> raise @@ TypeError (ofnode "List type doesn't match here" e)
             | _                    -> raise @@ TypeError (ofnode "Cannot infer empty list element type" e)
           end
-      | EmptyList (Some t) -> let () = check_ty c t in EmptyList t.t, TRef (TArr t.t)
+      | EmptyList (Some t) -> let () = check_ty c false t in c, (EmptyList t.t, TRef (TArr t.t))
       | RangeList (e1,i1,i2,e2) ->
-          let e1',e2' = check_exp c (Some TInt) false e1, check_exp c (Some TInt) false e2 in
+          let c', e1' = check_exp c  (Some TInt) false e1 in
+          let c'',e2' = check_exp c' (Some TInt) false e2 in
           begin match snd e1', snd e2' with
-            | TInt,TInt -> RangeList (e1',i1,i2,e2'), TRef (TArr TInt)
+            | TInt,TInt -> c'', (RangeList (e1',i1,i2,e2'), TRef (TArr TInt))
             | _         -> raise @@ TypeError (ofnode "Range list expressions should be of type int" e)
           end
       | ListComp (ex,vs,cnd) ->
@@ -331,34 +266,37 @@ module TypeChecker = struct
           let c',avs =
             List.fold_left
               (fun (c,res) (id,exp) ->
-                let exp',t = check_exp c None false exp in
+                let c',(exp',t) = check_exp c None false exp in
                 begin match t with
-                  | TRef (TArr t') -> Ctxt.add_binding c (id,(t',Const)), res @ [ id, (exp',t) ]
+                  | TRef (TArr t') -> Ctxt.add_binding c' (id,(t',Const)), res @ [ id, (exp',t) ]
                   | _              -> raise @@ TypeError (ofnode "list comprehension variable should be in an array type" e)
                 end
               )
               (c,[]) vs in
-          let ae, acnd = check_exp c' exp_t' false ex, check_exp c' (Some TBool) false cnd in
-          ListComp (ae,avs,acnd), TRef (TArr (snd ae))
+          let c'', ae = check_exp c' exp_t' false ex in
+          let c''', acnd = check_exp c'' (Some TBool) false cnd in
+          Ctxt.copy_resolved_generics_from c''' c, (ListComp (ae,avs,acnd), TRef (TArr (snd ae)))
       | Ternary (cnd,e1,e2) ->
-          let cnd',e1',e2' = check_exp c (Some TBool) false cnd, check_exp c None false e1, check_exp c None false e2 in
+          let c',cnd' = check_exp c (Some TBool) false cnd in
+          let c'',e1' = check_exp c' None false e1 in
+          let c''',e2' = check_exp c'' None false e2 in
           if snd cnd' = TBool then
             begin match intersect_single (suptys (snd e1')) (suptys (snd e2')) with
               | []    -> raise @@ TypeError (ofnode "types in ternary expression must have common supertype" e)
-              | t::ts -> Ternary (cnd',e1',e2'), List.fold_left (fun m t -> if subtype t m then t else m) t ts
+              | t::ts -> c''', (Ternary (cnd',e1',e2'), List.fold_left (fun m t -> if subtype t m then t else m) t ts)
             end
           else
             raise @@ TypeError (ofnode "ternary condition must be of type bool" cnd)
       | Null None -> 
           begin match exp_t with
-            | Some (TNullRef rt) -> Null rt, TNullRef rt
+            | Some (TNullRef rt) -> c, (Null rt, TNullRef rt)
             | Some _             -> raise @@ TypeError (ofnode "Maybe-null reference type doesn't match here" e)
             | _                  -> raise @@ TypeError (ofnode "cannot infer null type" e)
           end
       | Null (Some t) -> 
           begin match t.t with
             | TRef rt -> 
-                let () = check_ty c (ofnode (TNullRef rt) t) in Null rt, TNullRef rt
+                let () = check_ty c false (ofnode (TNullRef rt) t) in c, (Null rt, TNullRef rt)
             | _ ->
                 raise @@ TypeError (ofnode "in null of t: type must be non-null reference type" t)
           end
@@ -367,89 +305,113 @@ module TypeChecker = struct
             if pft = Printf && not perm_void then
               raise @@ TypeError (ofnode "cannot use printf in non-void expression" e)
             else () in
-          let annt_es = List.map (check_exp c None false) es in
+          let c',annt_es = List.fold_left (fun (c,res) e -> let c',e' = check_exp c None false e in c', res @ [e']) (c,[]) es in
           let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
           let strindices = List.filter_map (function | Str.Delim s -> Some (Stdlib.int_of_string (String.sub s 1 (String.length s - 2))) | _ -> None) indexstrs in
           if List.for_all (fun i -> 0 <= i && i < List.length annt_es) strindices && List.for_all (fun (_,t) -> is_printable t) annt_es then
-            Sprintf (pft, s.t, annt_es), if pft = Printf then void_placeholder else  TRef TStr
+            c', (Sprintf (pft, s.t, annt_es), if pft = Printf then void_placeholder else  TRef TStr)
           else
             raise @@ TypeError (ofnode "Something is wrong with this sprintf expression" e)
       | Uop (op,r) ->
           let opts = List.assoc op uop_types in
-          let expt = check_exp c None false r in
+          let c',expt = check_exp c None false r in
           begin match List.assoc_opt (snd expt) opts with
             | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand type %s" (List.assoc op uop_string) (Ast.print_ty (ofnode (snd expt) r))) r)
-            | Some t -> Uop (op, expt), t
+            | Some t -> c', (Uop (op, expt), t)
           end
       | Bop (op,l,r) ->
           let opts = List.assoc op bop_types in
-          let lt,rt = check_exp c None false l, check_exp c None false r in
+          let c',lt = check_exp c None false l in
+          let c'',rt = check_exp c None false r in
           begin match snd lt, snd rt, op with
             | TRef (TArr t1), TRef (TArr t2), Add ->
                 begin match intersect_single (suptys t1) (suptys t2) with
                   | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
-                  | t::ts -> Bop (op,lt,rt), TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
+                  | t::ts -> c'', (Bop (op,lt,rt), TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts)))
                 end
             | _ ->
                 begin match List.assoc_opt (snd lt, snd rt) opts with
                   | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (Ast.print_ty (ofnode (snd lt) l)) (Ast.print_ty (ofnode (snd rt) l))) e)
-                  | Some t -> Bop (op, lt, rt), t
+                  | Some t -> c'', (Bop (op, lt, rt), t)
                 end
           end
       | Cmps (x,xs) ->
-          let first_exp = check_exp c None false x in
-          let _,clist =
+          let c',first_exp = check_exp c None false x in
+          let _,clist,c'' =
             List.fold_left
-              (fun (lt,l) (op,r) -> 
-                let rt = check_exp c None false r in
+              (fun (lt,l,c) (op,r) -> 
+                let c',rt = check_exp c None false r in
                 begin match op with
                   | RefEq | RefNotEq ->
                       begin match lt, snd rt with
                         | TRef _, _ | _, TRef _ | TNullRef _, _ | _, TNullRef _ ->
                             if subtype lt (snd rt) || subtype (snd rt) lt then
-                              snd rt, l @ [op, rt]
+                              snd rt, l @ [op, rt], c'
                             else
                               raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s only takes related reference types" (List.assoc op cmp_string)) r)
                         | _ -> raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s only takes reference types" (List.assoc op cmp_string)) r)
                       end
                   | _ ->
                       if List.mem (lt, snd rt) cmpop_types then
-                        snd rt, l @ [op, rt]
+                        snd rt, l @ [op, rt], c'
                       else
                         raise @@ TypeError (ofnode (Printf.sprintf "Comparator %s undefined for operand types (%s,%s)" (List.assoc op cmp_string) (Ast.print_ty (ofnode lt e)) (Ast.print_ty (ofnode (snd rt) r))) r)
                 end
               )
-              (snd first_exp, []) xs in
-          Cmps (first_exp, clist), TBool
+              (snd first_exp, [], c') xs in
+          c'', (Cmps (first_exp, clist), TBool)
       | FApp (f,args) ->
-          begin match check_exp c None false f with
-            | f', TRef (TFun (a,rt)) ->
-                let _ = if List.length a <> List.length args then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
-                let argts,tlist = List.fold_left2
-                  (fun (ares,tres) arg fet ->
-                    begin match arg.t with
-                      | None   -> ares @ [None], tres @ [fet]
-                      | Some e ->
-                          let e',et = check_exp c (Some fet) false (ofnode e arg) in
-                          if subtype et fet || crosstype et fet then ares @ [ Some (e',et) ], tres
-                          else raise @@ TypeError (ofnode (Printf.sprintf "argument type mismatch in function application") arg)
-                    end
-                  )
-                  ([],[]) args a in
-                begin match tlist with
-                  | [] ->
-                      begin match rt, perm_void with
-                        | Void, true  -> FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), void_placeholder
-                        | Void, false -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
-                        | Ret t, _    -> FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), t
+          let isgeneric,m,id =
+            begin match f.t with
+              | Id id ->
+                  if Ctxt.has_generic_function c id then
+                    true, Ctxt.get_current_module c, id
+                  else
+                    false, "", ""
+              | Proj (l,r) ->
+                  begin match l.t with
+                    | Id m ->
+                        if Ctxt.has_generic_function_in_module c m r.t then
+                          true, m, r.t
+                        else
+                          false, "", ""
+                    | _ -> false, "", ""
+                  end
+              | _ -> false, "", ""
+            end in
+          if isgeneric then
+            raise @@ TypeError (ofnode ("functions may not be generic yet") e)
+          else
+            begin match check_exp c None false f with
+              | c', (f', TRef (TFun (a,rt))) ->
+                  let _ = if List.length a <> List.length args then raise @@ TypeError (ofnode (Printf.sprintf "Argument list must match the length of the function argument list (type %s)" (Ast.print_ty (ofnode (TRef (TFun (a,rt))) f))) e) else () in
+                  let argts,tlist,c'' = List.fold_left2
+                    (fun (ares,tres,c) arg fet ->
+                      begin match arg.t with
+                        | None   -> ares @ [None], tres @ [fet], c
+                        | Some e ->
+                            let c',(e',et) = check_exp c (Some fet) false (ofnode e arg) in
+                            if subtype et fet || crosstype et fet then ares @ [ Some (e',et) ], tres, c'
+                            else raise @@ TypeError (ofnode (Printf.sprintf "argument type mismatch in function application") arg)
                       end
-                  | _ -> ParFApp ((f', TRef (TFun (a,rt))), argts) , TRef (TFun (tlist, rt))
-                end
-            | t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
-          end
+                    )
+                    ([],[],c') args a in
+                  begin match tlist with
+                    | [] ->
+                        begin match rt, perm_void with
+                          | Void, true  -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), void_placeholder)
+                          | Void, false -> raise @@ TypeError (ofnode "Function in expression must not be of void type" f)
+                          | Ret t, _    -> c'', (FApp ((f', TRef (TFun (a,rt))), List.filter_map identity argts), t)
+                        end
+                    | _ -> c'', (ParFApp ((f', TRef (TFun (a,rt))), argts) , TRef (TFun (tlist, rt)))
+                  end
+              | _, t -> raise @@ TypeError (ofnode (Printf.sprintf "Type %s cannot act as a function" (Ast.print_ty (ofnode (snd t) f))) f)
+            end
       | Subscript (l,r) ->
-          begin match check_exp c None false l, check_exp c (Some TInt) false r with
-            | (l', TRef (TArr t)), (r', TInt) -> Subscript ((l', TRef (TArr t)), (r', TInt)), t
+          let c',l1 = check_exp c None false l in
+          let c'',l2 = check_exp c' (Some TInt) false r in
+          begin match l1, l2 with
+            | (l', TRef (TArr t)), (r', TInt) -> c'', (Subscript ((l', TRef (TArr t)), (r', TInt)), t)
             | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (Ast.print_ty (ofnode t l))) l)
             | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (Ast.print_ty (ofnode t r))) r)
           end
@@ -466,11 +428,11 @@ module TypeChecker = struct
               | _ -> None
             end in
           begin match mayberes with
-            | Some res -> res
+            | Some res -> c, res
             | _ ->
                 begin match check_exp c None false lhs, id.t with
-                  | (e', TRef (TArr t)), "length" -> Proj ((e', TRef (TArr t)), "length"), TInt
-                  | (_,t), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
+                  | (c', (e', TRef (TArr t))), "length" -> c', (Proj ((e', TRef (TArr t)), "length"), TInt)
+                  | (_, (_,t)), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
                 end
           end
     end
@@ -483,27 +445,28 @@ module TypeChecker = struct
           else
             begin match t with
               | None   ->
-                  let et = check_exp c None false e in
-                  VDecl (id,m,None,et), Ctxt.add_binding c (id,(snd et,m)), false, false
+                  let c',et = check_exp c None false e in
+                  VDecl (id,m,None,et), Ctxt.add_binding c' (id,(snd et,m)), false, false
               | Some t ->
-                  let et = check_exp c (Some t.t) false e in
-                  let () = check_ty c t in
+                  let c',et = check_exp c (Some t.t) false e in
+                  let () = check_ty c' false t in (* c and c' are equivalent here, only added for possible OCaml optimizations *)
                   if subtype (snd et) t.t || crosstype (snd et) t.t then
-                    VDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m)), false, false
+                    VDecl (id,m,Some t.t,et), Ctxt.add_binding c' (id,(t.t,m)), false, false
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match: %s vs %s" (Ast.print_ty t) (Ast.print_ty (ofnode (snd et) e))) s)
             end
       | Assert e ->
-          let e' = check_exp c None false e in
+          let c',e' = check_exp c None false e in
           begin match snd e' with
-            | TBool -> Assert (e', print_exp e), c, false, false
+            | TBool -> Assert (e', print_exp e), c', false, false
             | _     -> raise @@ TypeError (ofnode ("assertion expression needs to be of type bool") e)
           end
       | Assn (l,r) ->
-          let lt,rt = check_exp c None false l, check_exp c None false r in
-          if is_assignable c l then
+          let c',lt = check_exp c None false l in
+          let c'',rt = check_exp c' (Some (snd lt)) false r in
+          if is_assignable c'' l then
             if subtype (snd rt) (snd lt) || crosstype (snd lt) (snd rt) then
-              Assn (lt,rt), c, false, false
+              Assn (lt,rt), c'', false, false
             else
               raise @@ TypeError (ofnode (Printf.sprintf "expression type doesn't match assignment target") r)
           else
@@ -511,51 +474,61 @@ module TypeChecker = struct
       | Expr e ->
           begin match e.t with
             | FApp _ | Sprintf (Printf,_,_) ->
-                let e',t = check_exp c None true e in
-                Expr (e', if t = void_placeholder then None else Some t), c, false, false
+                let c',(e',t) = check_exp c None true e in
+                Expr (e', if t = void_placeholder then None else Some t), c', false, false
             | _ -> raise @@ TypeError (ofnode "expression statements must be function calls" e)
           end
       | If (cd,t,n) ->
-          let ct = check_exp c None false cd in
+          let c',ct = check_exp c None false cd in
+          let c'' = Ctxt.add_level c' in
           if snd ct = TBool then
-            let (t',_,r1,b1),(n',_,r2,b2) = check_stmt_block rt inloop c t, check_stmt_block rt inloop c n in If (ct,t',n'), c, r1 && r2, b1 && b2
+            let t',c''',r1,b1 = check_stmt_block rt inloop c'' t in
+            let n',c'''',r2,b2 = check_stmt_block rt inloop (Ctxt.copy_resolved_generics_from c''' c'') n in
+            If (ct,t',n'), Ctxt.copy_resolved_generics_from c'''' c', r1 && r2, b1 && b2
           else
             raise @@ TypeError (ofnode "if condition must be of type bool" cd)
       | Denull (id,e,t,n) ->
-          let e',et = check_exp c None false e in
+          let c',(e',et) = check_exp c None false e in
           begin match et with
             | TNullRef r ->
-                let c' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c) (id, (TRef r, Const)) in
-                let (t',_,r1,b1), (n',_,r2,b2) = check_stmt_block rt inloop c' t, check_stmt_block rt inloop c n in
-                Denull (id,(e',et),t',n'), c, r1 && r2, b1 && b2
+                let c'' = Ctxt.add_level @@ Ctxt.add_binding (Ctxt.add_level c') (id, (TRef r, Const)) in
+                let t',c''',r1,b1 = check_stmt_block rt inloop c'' t in
+                let n',c'''',r2,b2 = check_stmt_block rt inloop (Ctxt.copy_resolved_generics_from c''' c'') n in
+                Denull (id,(e',et),t',n'), Ctxt.copy_resolved_generics_from c'''' c', r1 && r2, b1 && b2
             | _ -> raise @@ TypeError (ofnode "expression in checked cast must be a maybe-null reference" e)
           end
       | While (cd,b) ->
-          let ct = check_exp c None false cd in
+          let c',ct = check_exp c None false cd in
+          let c'' = Ctxt.add_level c' in
           if snd ct = TBool then
-            let b',_,_,_ = check_stmt_block rt true c b in While (ct,b'), c, false, false
+            let b',c''',_,_ = check_stmt_block rt true c'' b in
+            While (ct,b'), Ctxt.copy_resolved_generics_from c''' c', false, false
           else
             raise @@ TypeError (ofnode "while condition must be of type bool" cd)
       | DoWhile (cd,b) ->
-          let ct = check_exp c None false cd in
+          let c',ct = check_exp c None false cd in
+          let c'' = Ctxt.add_level c' in
           if snd ct = TBool then
-            let b',_,r,b = check_stmt_block rt true c b in DoWhile (ct,b'), c, r, false
+            let b',c''',r,b = check_stmt_block rt true c'' b in
+            DoWhile (ct,b'), Ctxt.copy_resolved_generics_from c''' c', r, false
           else
             raise @@ TypeError (ofnode "do-while condition must be of type bool" cd)
       | For (id,exps,incl1,incl2,expe,b) ->
-          let sty, ety = check_exp c None false exps, check_exp c None false expe in
+          let c',sty = check_exp c None false exps in
+          let c'',ety = check_exp c None false expe in
           if snd sty = TInt && snd ety = TInt then
-            let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(TInt,Const)) in
-            let b',_,_,_ = check_stmt_block rt true c' b in For (id,sty,incl1,incl2,ety,b'), c, false, false
+            let c''' = Ctxt.add_binding (Ctxt.add_level c'') (id,(TInt,Const)) in
+            let b',c'''',_,_ = check_stmt_block rt true c''' b in
+            For (id,sty,incl1,incl2,ety,b'), Ctxt.copy_resolved_generics_from c'''' c'', false, false
           else
             raise @@ TypeError (ofnode "for loops bounds must be of type int" s)
       | ForIn (id,lexp,b) ->
-          let l',lt = check_exp c None false lexp in
+          let c',(l',lt) = check_exp c None false lexp in
           begin match lt with
             | TRef (TArr et) ->
-                let c' = Ctxt.add_binding (Ctxt.add_level c) (id,(et,Const)) in
-                let b',_,_,_ = check_stmt_block rt true c' b in
-                ForIn (id,(l',lt),b'), c, false, false
+                let c'' = Ctxt.add_binding (Ctxt.add_level c') (id,(et,Const)) in
+                let b',c''',_,_ = check_stmt_block rt true c'' b in
+                ForIn (id,(l',lt),b'), Ctxt.copy_resolved_generics_from c''' c', false, false
             | _ -> raise @@ TypeError (ofnode "for-in loop must have an array expression" lexp)
           end
       | Break ->
@@ -571,9 +544,9 @@ module TypeChecker = struct
           begin match rt with
             | Void  -> raise @@ TypeError (ofnode "cannot return with expression in void function" s)
             | Ret t ->
-                let et = check_exp c (Some t) false e in
+                let c',et = check_exp c (Some t) false e in
                 if subtype (snd et) t || crosstype (snd et) t then
-                  Return (Some et), c, true, false
+                  Return (Some et), c', true, false
                 else
                   raise @@ TypeError (ofnode "return type doesn't match with function return type" s)
           end
@@ -591,64 +564,78 @@ module TypeChecker = struct
       | _         -> raise @@ TypeError (ofnode "illegal global expression" ge)
     end
 
-  let check_gstmt (c : Ctxt.t) (gs : gstmt node) : annt_gstmt * Ctxt.t =
+  let check_gstmt (c : Ctxt.t) (gs : gstmt node) : annt_gstmt option * Ctxt.t =
     begin match gs.t with
       | Module m ->
-          Module m, Ctxt.set_current_module c m
+          Some (Module m), Ctxt.set_current_module c m
       | GVDecl (id,m,t,e) ->
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
           else
             let et = check_gexp c e in
             begin match t with
-              | None   -> GVDecl(id,m,None,et), Ctxt.add_binding c (id,(snd et,m))
+              | None   -> Some (GVDecl(id,m,None,et)), Ctxt.add_binding c (id,(snd et,m))
               | Some t ->
-                  let () = check_ty c t in
+                  let () = check_ty c false t in
                   if subtype (snd et) t.t then
-                    GVDecl (id,m,Some t.t,et), Ctxt.add_binding c (id,(t.t,m))
+                    Some (GVDecl (id,m,Some t.t,et)), Ctxt.add_binding c (id,(t.t,m))
                   else
                     raise @@ TypeError (ofnode (Printf.sprintf "Declared and assigned types do not match") gs)
             end
       | GFDecl (id,args,rt,b) ->
-          let () = List.iter (check_ty c) (List.map snd args) in
+          let () =
+            if not @@ alldistinct (List.map fst args) then raise @@ TypeError (ofnode "Function argument names must be distinct" gs) else () in
+          let istemplf = List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) in
+          let () = List.iter (check_ty c istemplf) (List.map snd args) in
           let () =
             begin match rt.t with
               | Void  -> ()
-              | Ret t -> check_ty c (ofnode t rt)
+              | Ret t -> check_ty c istemplf (ofnode t rt)
             end in
-          if alldistinct (List.map fst args) then
+
+          if istemplf then (* templated function *)
+            None, c
+          else (* non-templated function *)
             let c' = Ctxt.add_level c in
             let c'' = List.fold_left (fun c (id,t) -> Ctxt.add_binding c (id,(t.t,Const))) c' args in
-            let b',_,returns,_ = check_stmt_block rt.t false c'' b in (* know that this doesn't break as break/continue only legal in loops *)
+            let b',c''',returns,_ = check_stmt_block rt.t false c'' b in (* know that this doesn't break as break/continue only legal in loops *)
             if returns then
-              GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b'), c
+              Some (GFDecl (id, List.map (fun (s,t) -> s,t.t) args, rt.t, b')), Ctxt.copy_resolved_generics_from c''' c
             else if rt.t = Void then
-              GFDecl(id, List.map (fun (s,t) -> s,t.t) args, rt.t, b' @ [ Return None ]), c
+              Some (GFDecl (id, List.map (fun (s,t) -> s,t.t) args, rt.t, b' @ [ Return None ])), Ctxt.copy_resolved_generics_from c''' c
             else
               raise @@ TypeError (ofnode "Function must return" gs)
-          else
-            raise @@ TypeError (ofnode "Function argument names must be distinct" gs)
       | GNVDecl (id,t) ->
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
           else
-            GNVDecl (id,t.t), Ctxt.add_binding c (id,(t.t,Const))
+            Some (GNVDecl (id,t.t)), Ctxt.add_binding c (id,(t.t,Const))
       | GNFDecl (id,args,rt) ->
-          GNFDecl (id, List.map (fun t -> t.t) args, rt.t), c
+          let () = List.iter (check_ty c false) args in
+          let () =
+            begin match rt.t with
+              | Void  -> ()
+              | Ret t -> check_ty c false (ofnode t rt)
+            end in
+          Some (GNFDecl (id, List.map (fun t -> t.t) args, rt.t)), c
       | GNTDecl id ->
           if Ctxt.has_namedt c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
           else
-            GNTDecl id, Ctxt.add_namedt c id
+            Some (GNTDecl id), Ctxt.add_namedt c id
     end
   
   let check_gstmt_program (c:Ctxt.t) (gs : gstmt node list) : (annt_gstmt list * Ctxt.t) =
-    List.fold_left (fun (l,c) gs -> let ag,c' = check_gstmt c gs in l@[ag],c') ([],c) gs
+    List.fold_left (fun (l,c) gs -> match check_gstmt c gs with | None,c' -> l,c' | Some ag, c' -> l@[ag],c') ([],c) gs
 
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
       | Module m              -> Ctxt.set_current_module c m
-      | GFDecl (id,args,rt,_) -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
+      | GFDecl (id,args,rt,b) ->
+          if List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) then
+            Ctxt.add_generic_function c id (args,rt,b)
+          else
+            Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> t.t) args, rt.t)), Const))
       | GNFDecl (id,args,rt)  -> Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> t.t) args, rt.t)), Const))
       | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
     end

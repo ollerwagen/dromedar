@@ -97,13 +97,30 @@ module Parser = struct
     let start = (peek s).start in
     let t,s' =
       begin match (peek s).t with
-        | Token.KInt    -> TInt,  snd @@ advance s
-        | Token.KFlt    -> TFlt,  snd @@ advance s
-        | Token.KChar   -> TChar, snd @@ advance s
-        | Token.KBool   -> TBool, snd @@ advance s
-        | _             -> let rt,s' = parse_rty s in rt.t, s'
+        | Token.KInt  -> TInt,  snd @@ advance s
+        | Token.KFlt  -> TFlt,  snd @@ advance s
+        | Token.KChar -> TChar, snd @@ advance s
+        | Token.KBool -> TBool, snd @@ advance s
+        | Token.Op Token.Less -> let t,s' = parse_templty s in t.t, s'
+        | _           -> let rt,s' = parse_rty s in rt.t, s'
       end in
     { t = t ; start = start ; length = (peek s').start - start }, s'
+
+  and parse_templty (s : state) : ty node * state =
+    let start = (peek s).start in
+    let s' = expect s (Token.Op Token.Less) in
+    let id,s'' =
+      begin match (peek s').t with
+        | Token.Id id -> id, snd @@ advance s'
+        | _           -> raise @@ ParseError (ofnode ("expected an identifier in generic type") (peek s'))
+      end in
+    let s''' = expect s'' (Token.Op Token.Greater) in
+    let maybenull,s'''' =
+      begin match (peek s''').t with
+        | Token.QuestionMark -> true, snd @@ advance s'''
+        | _                  -> false, s'''
+      end in
+    { t = TTempl(maybenull,id) ; start = start ; length = (peek s'''').start - start }, s''''
 
   and parse_rty (s : state) : ty node * state =
     let parse_arr_ty (s : state) : rty * state =

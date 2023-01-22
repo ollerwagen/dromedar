@@ -42,3 +42,33 @@ let intersect (l : 'a list list) : 'a list =
     | []    -> []
     | l::ls -> List.fold_left intersect_single l ls
   end
+
+let rec crossp (l : 'a list list) : 'a list list = 
+  let rec aux acc l1 l2 =
+    begin match l1, l2 with
+      | [], _ | _, [] -> acc
+      | h1::t1, h2::t2 -> 
+          let acc = (h1::h2)::acc in
+          let acc = (aux acc t1 l2) in
+          aux acc [h1] t2
+    end
+  in
+  begin match l with
+    | [] -> []
+    | [l1] -> List.map (fun x -> [x]) l1
+    | l1::tl ->
+        let tail_product = crossp tl in
+        aux [] l1 tail_product
+  end
+
+let rec crossp_single (l1 : 'a list) (l2 : 'b list) : ('a * 'b) list =
+  begin match l1 with
+    | []    -> []
+    | l::ls -> List.map (fun l2e -> l,l2e) l2 @ crossp_single ls l2
+  end
+
+let rec alldistinct (l : 'a list) : bool =
+  begin match l with
+    | []    -> true
+    | x::xs -> if List.mem x xs then false else alldistinct xs
+  end

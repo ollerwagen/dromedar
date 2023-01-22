@@ -1,10 +1,8 @@
 open Ast
 open Common
-open Typechecker
+open Typerelations
 
 module TemplateResolver = struct
-
-  open TypeChecker
 
   let rec is_templated : ty -> bool =
     begin function
