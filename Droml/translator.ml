@@ -1140,12 +1140,13 @@ module Translator = struct
     end
     
   (* instr list is list of instructions the main function will have to do before calling main() *)
-  let cmp_gexp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * ginstr list * Ll.instr list =
+  let rec cmp_gexp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * ginstr list * Ll.instr list =
     begin match e with
       | LitInt  i, t -> IConst i, cmp_ty t, [], []
       | LitFlt  f, t -> FConst f, cmp_ty t, [], []
       | LitBool b, t -> IConst (if b then 1L else 0L), cmp_ty t, [], []
       | LitChar c, t -> IConst (Int64.of_int (Char.code c)), cmp_ty t, [], []
+
       | LitStr  s, t ->
           let rsym, strsym, strsym' = gensym "globalstring", gensym "globalstring", gensym "globalstring" in
           let strp, data_p, strp_datap = gensym "globalstring", gensym "globalstring_chararr", gensym "globalstring_chararr_casted" in
@@ -1164,13 +1165,49 @@ module Translator = struct
           ] @
           destream (addchild (cmp_ty (TRef TStr), Gid rsym) (Ptr I8, Id strp)) @
           destream (removeref (Ptr I8, Id strp))
+
+      | LitArr es, TRef (TArr et) ->
+          let rsym, data_p, data, data' = gensym "array", gensym "array", gensym "array", gensym "array" in
+
+          let c_es = List.map (cmp_gexp c) es in
+          let ops, ginsns, linsns =
+            List.fold_left (fun (ops,ginsns,instrs) (op,llt,gi,i) -> ops @ [llt,op], ginsns@gi, instrs@i) ([],[],[]) c_es in
+          
+          let arrlen = Int64.of_int @@ List.length es in
+
+          let res_llt, elem_llt = cmp_ty (TRef (TArr et)), cmp_ty et in
+
+          let alloc_arr = allocate (IConst (Int64.mul arrlen (Int64.of_int @@ size_ty elem_llt))) (Ptr elem_llt) data in
+
+          Gid rsym, res_llt,
+          GDecl (rsym, deptr res_llt, SConst [ I64, IConst arrlen ; cmp_lllty et, Null ]) :: ginsns,
+          destream (addref (res_llt, Gid rsym)) @
+          linsns @ destream alloc_arr @
+            [ Gep (data_p, res_llt, Gid rsym, [ IConst 0L ; IConst 1L ])
+            ; Bitcast (data', Ptr elem_llt, Id data, cmp_lllty et)
+            ; Store (cmp_lllty et, Id data', Id data_p)
+            ] @
+            List.concat (
+              List.mapi
+                (fun i (llt,op) ->
+                  let addr_ptr = gensym "addr_ptr" in
+                  [ Gep (addr_ptr, Ptr llt, Id data, [ IConst (Int64.of_int i) ])
+                  ; Store (llt, op, Id addr_ptr)
+                  ]
+                )
+                ops
+            ) @
+            destream (addchild (res_llt, Gid rsym) (Ptr elem_llt, Id data)) @
+            destream (removeref (Ptr elem_llt, Id data))
+            (* no need to add children, they are globally added to the GC anyway *)
+
       | _ -> Stdlib.failwith "bad AST: cannot have these expressions in global scope"
     end
   
   let cmp_gstmt (c : Ctxt.t) (gs : annt_gstmt) : Ctxt.t * ginstr list * Ll.instr list * (string * string) list =
     begin match gs with
       | Module m -> Ctxt.set_current_module c m, [], [], []
-      | GVDecl (id,_,t,e) ->
+      | GVDecl (id,m,t,e) ->
           let op,ellt,s,main_s = cmp_gexp c e in
           let vt =
             begin match t with
@@ -1180,7 +1217,7 @@ module Translator = struct
           let vllt = cmp_ty vt in
           let llid = gensym id in
           Ctxt.add_binding c (id, (vt, vllt, Gid llid)),
-          s @ [ GDecl (llid, vllt, op) ], main_s, []
+          s @ [ GDecl (llid, vllt, op) ], main_s @ (if m = Mut && (match snd e with | TRef _ | TNullRef _ -> true | _ -> false) then destream (addref (ellt, op)) else []), []
       | GFDecl (id,args,rt,b) ->
           let ft,fllt,fid =
             begin match Ctxt.get c id with

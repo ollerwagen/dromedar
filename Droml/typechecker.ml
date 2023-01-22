@@ -597,11 +597,18 @@ module TypeChecker = struct
 
   let rec check_gexp (c : Ctxt.t) (ge : exp node) : annt_exp =
     begin match ge.t with
-      | LitInt  i -> LitInt i,  TInt
-      | LitFlt  f -> LitFlt f,  TFlt
-      | LitChar c -> LitChar c, TChar
-      | LitBool b -> LitBool b, TBool
-      | LitStr  s -> LitStr s,  TRef TStr
+      | LitInt  i  -> LitInt i,  TInt
+      | LitFlt  f  -> LitFlt f,  TFlt
+      | LitChar c  -> LitChar c, TChar
+      | LitBool b  -> LitBool b, TBool
+      | LitStr  s  -> LitStr s,  TRef TStr
+      | LitArr  es ->
+          let es' = List.map (check_gexp c) es in
+          let spts = List.map suptys @@ List.map snd es' in
+          begin match intersect spts with
+            | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" ge)
+            | t::ts -> LitArr es', TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts))
+          end
       | _         -> raise @@ TypeError (ofnode "illegal global expression" ge)
     end
 
