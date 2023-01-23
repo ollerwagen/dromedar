@@ -1232,7 +1232,27 @@ module Translator = struct
   let cmp_program (prog : annt_program) (main_id : string) : ginstr list =
     
     let c = create_fctxt prog in
-    let _,s,main_s,usedfs = List.fold_left (fun (c,res,main_s,usedfs) gs -> let c',g,m_s,gfs = cmp_gstmt c gs in c', res@g, main_s@m_s, union usedfs gfs) (c, [], [], []) prog in
+    let _,global_s,main_s,usedfs =
+      List.fold_left
+        (fun (c,s,ms,usedfs) gs ->
+          let c',s',ms',gfs = cmp_gstmt c gs in
+          c', s @ [s'], ms @ [ms'], union usedfs gfs
+        )
+        (c,[],[],[]) prog
+      in
+    let s,main_s =
+      List.split (List.filter_map
+        (fun (gs,(s1,s2)) ->
+          let keep =
+            begin match gs with
+              | GNFDecl (id,_,_) | GFDecl (id,_,_,_) -> List.mem id usedfs || id = main_id
+              | _                                  -> true
+            end in
+          if keep then Some (s1,s2) else None
+        )
+        (List.combine prog (List.combine global_s main_s)))
+      in
+    let s, main_s = List.concat s, List.concat main_s in
     s @
     [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
         let rval, strvec = gensym "mainret", gensym "strvec" in
