@@ -96,7 +96,7 @@ Everything described in this section is described in more detail in the [documen
 ### Hello, World!
 
     fn main -> void
-        print_str("Hello, World!\n")
+        IO.print_str("Hello, World!\n")
 
 ### Program Buildup
 
@@ -159,7 +159,7 @@ Both these programs print the numbers from 0 to 9.
 The `denull` statement checks whether an expression passed to it is `null`. If not, its result may be used as if it were of non-`null` type, as follows:
 
     denull x := getstring()
-        print_str(x)
+        IO.print_str(x)
 
 A `denull` statement may be followed by an `else` block which gets executed if the expression is `null`.
 

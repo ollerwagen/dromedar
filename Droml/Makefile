@@ -28,6 +28,7 @@ intrinsics:
 	$(COMPILE) -c cutils/intrinsics.c -o $(OUT)/intrinsics.o
 	$(COMPILE) -c cutils/sprintflib.c -o $(OUT)/sprintflib.o
 	$(COMPILE_LIB) cutils/listops.cpp -o $(OUT)/listops.so
+	$(COMPILE_LIB) cutils/templ_intrinsics.cpp -o $(OUT)/templ_intrinsics.so
 
 compiler:
 	ocamlbuild -pkg num main.native

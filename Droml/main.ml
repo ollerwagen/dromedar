@@ -156,7 +156,7 @@ let () =
   let _ =
     if not compiletollvm && not seeasoutput then
       let cppliblinks = String.concat " " (List.map (fun l -> Printf.sprintf "-L. ./%s" l) (read_lines "LibLists/cpplibs.txt")) in
-      Sys.command (Printf.sprintf "clang -o %s %s %s obj/*.o %s -lstdc++ -lm -O3 %s"
+      Sys.command (Printf.sprintf "clang -o %s %s %s obj/*.o %s -lstdc++ -lm -O0 %s"
         outputfilename
         (String.concat " " (inputcfiles @ inputllfiles @ inputobjfiles))
         (if doanycompilation then outputfilename ^ ".ll" else "")

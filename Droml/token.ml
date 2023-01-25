@@ -54,7 +54,7 @@ type token =
   | PipeDots
   | PipeDotPipe
   | EOF
-  | Whitespace of int
+  | Whitespace of (int, string) Either.t
   | KModule
   | KNative
   | KGlobal
@@ -137,7 +137,6 @@ let print_token (t:token) : string =
     | PipeDots     -> "[PipeDots]"
     | PipeDotPipe  -> "[PipeDotPipe]"
     | EOF          -> "[EOF]"
-    | Whitespace i -> Printf.sprintf "[Whitespace %d]" i
     | KModule      -> "[module]"
     | KNative      -> "[native]"
     | KGlobal      -> "[global]"
@@ -167,4 +166,6 @@ let print_token (t:token) : string =
     | KBreak       -> "[break]"
     | KContinue    -> "[continue]"
     | KReturn      -> "[return]"
+    | Whitespace (Left i) -> Printf.sprintf "[Whitespace %d]" i
+    | Whitespace (Right _) -> Stdlib.failwith "cannot print pure-string indent, should resolve first"
   end

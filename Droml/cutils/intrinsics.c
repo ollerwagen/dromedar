@@ -5,6 +5,7 @@
 
 #include "gc.h"
 #include "intrinsics.h"
+#include "templ_intrinsics.h"
 
 void _abort(i64 code) {
     exit(code);
@@ -123,9 +124,11 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
     return res;
 }
 
+/*
 static inline i64 max(i64 a, i64 b) {
     return a > b ? a : b;
 }
+    
 
 static inline blindarr* _makerangelist_basic(i64 start, i64 end, i64 elemsize, i64 elemflag, bool inclstart, bool inclend) {
     if (start < end) {
@@ -133,6 +136,7 @@ static inline blindarr* _makerangelist_basic(i64 start, i64 end, i64 elemsize, i
         if (!inclend) --end;
         blindarr* res = allocate_blindarr(max(end - start + 1, 0), elemsize);
         for (i64 i = 0; i < res->size; i++) {
+            * (i64*) (res->base + elemsize * i) &= ~elemflag;
             * (i64*) (res->base + elemsize * i) |= ((start + i) & elemflag);
         }
         return res;
@@ -145,14 +149,14 @@ static inline blindarr* _makerangelist_basic(i64 start, i64 end, i64 elemsize, i
         }
         return res;
     }
-}
+}*/
 
 chararr* _makerangecharlist(i8 start, i8 end, bool inclstart, bool inclend) {
-    return (chararr*) _makerangelist_basic(start, end, 1, 0xff, inclstart, inclend);
+    return _cpp_rangechar(start, end, inclstart, inclend);
 }
 
 intarr* _makerangeintlist(i64 start, i64 end, bool inclstart, bool inclend) {
-    return (intarr*) _makerangelist_basic(start, end, 8, -1, inclstart, inclend);
+    return _cpp_rangeint(start, end, inclstart, inclend);
 }
 
 void _print_string(string *s) {

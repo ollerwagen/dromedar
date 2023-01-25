@@ -3,6 +3,18 @@ type 'a node = { t:'a ; start:int ; length:int }
 let ofnode (v : 'a) (n : 'b node) : 'a node =
   { t = v ; start = n.start ; length = n.length }
 
+let rec drop (n : int) (l : 'a list) : 'a list =
+  begin match n with
+    | 0 -> l
+    | n -> drop (n-1) (List.tl l)
+  end
+
+let rec take (n : int) (l : 'a list) : 'a list =
+  begin match n with
+    | 0 -> []
+    | n -> List.hd l :: take (n-1) (List.tl l)
+  end
+
 let rec readall (filename : string) : string =
   let rec aux (ic : Stdlib.in_channel) : string list =
     try

@@ -3,6 +3,18 @@ open Token
 
 module Lexer = struct
 
+  let tabsize : int =
+    let lines = String.split_on_char '\n' @@ readall "droml.config" in
+    begin match List.find_opt (String.starts_with ~prefix:"tabsize=") lines with
+      | None   -> Stdlib.failwith "tabsize=<num> line not found in droml.config file"
+      | Some s ->
+          let numstring = String.sub s (String.length "tabsize=") (String.length s - String.length "tabsize=") in
+          begin match Stdlib.int_of_string_opt numstring with
+            | None   -> Stdlib.failwith "tabsize=<num> should be a number"
+            | Some x -> x
+          end
+    end
+
   exception LexError of string node
 
   let simple_regex_strings : (string * token) list =
@@ -168,24 +180,6 @@ module Lexer = struct
       in
       aux all_regexes
     in
-    let rec drop (n : int) (l : 'a list) : 'a list =
-      begin match n with
-        | 0 -> l
-        | n -> drop (n-1) (List.tl l)
-      end
-    in
-
-    (* returns indent depth, negative number for matching fail *)
-    let rec find_indent_layers (curindent : string list) (depth : int) (remainder : string) : int = 
-      if remainder = "" then depth
-      else
-        begin match curindent with
-          | []    -> -1
-          | i::is -> if String.starts_with ~prefix:i remainder then
-                       find_indent_layers is (depth+1) (String.sub remainder (String.length i) (String.length remainder - String.length i))
-                     else -1
-        end
-    in
 
     (* comments leave multiple whitespaces behind one another *)
     let rec remove_multiple_whitespaces (prog : token node list) =
@@ -237,33 +231,33 @@ module Lexer = struct
         lex_string prog (carry ^ String.make 1 nextchar) nextindex
     in
 
-    let rec aux (indents : string list) (startindex : int) (prog : string) : token node list =
+    let rec resolve_whitespaces (prog : token node list) : token node list =
+      List.map
+        Token.(fun t ->
+          match t.t with
+            | Whitespace (Right s) ->
+                let sizes = String.fold_right (fun c l -> if c = '\t' then tabsize::l else 1::l) s [] in
+                ofnode (Whitespace (Left (List.fold_left (+) 0 sizes))) t
+            | _ -> t
+        )
+        prog
+    in
+
+    let rec aux (startindex : int) (prog : string) : token node list =
       if startindex >= String.length prog then
         []
       else if String.starts_with ~prefix:"\"" (String.sub prog startindex (String.length prog - startindex)) then
         let smatch, nextindex = lex_string prog "" (startindex+1) in
-        { t = LStr smatch ; start = startindex ; length = nextindex - startindex } :: aux indents nextindex prog
+        { t = LStr smatch ; start = startindex ; length = nextindex - startindex } :: aux nextindex prog
       else
         let m = findmatch prog startindex in
         if Str.string_match (List.assoc Whitespace full_other_regexes) m 0 then
-          begin match List.rev (String.split_on_char '\n' m) with
-            | [] | [_] -> aux indents (startindex + String.length m) prog
-            | s::_ -> 
-                let allindent = String.concat "" (List.rev indents) in
-                let start, length = startindex + String.length m - String.length s, String.length s in
-                if String.equal allindent s then
-                  { t = Whitespace (List.length indents) ; start = start ; length = length } :: aux indents (startindex + String.length m) prog 
-                else if String.starts_with ~prefix:allindent s then
-                  let indents' = String.sub s (String.length allindent) (String.length s - String.length allindent) :: indents in
-                  { t = Whitespace (List.length indents') ; start = start ; length = length } :: aux indents' (startindex + String.length m) prog
-                else
-                  let depth = find_indent_layers (List.rev indents) 0 s in
-                  if depth < 0 then
-                    raise @@ LexError { t = "indent characters must match surroundings"; start = startindex; length = String.length s }
-                  else
-                    let indents' = drop (List.length indents - depth) indents in
-                    { t = Whitespace depth ; start = start ; length = length } :: aux indents' (startindex + String.length m) prog
-          end
+          (if String.contains m '\n' then
+            let s = List.hd @@ List.rev @@ String.split_on_char '\n' m in
+            [ { t = Token.Whitespace (Right s) ; start = startindex + String.length m - String.length s ; length = String.length s } ]
+          else
+            []) @
+          aux (startindex + String.length m) prog
         else (
             if Str.string_match (List.assoc Id full_other_regexes) m 0 then
               [ as_token_node m startindex string_id_to_token ]
@@ -281,16 +275,16 @@ module Lexer = struct
                 | None   -> raise @@ LexError { t = "unknown operator"; start = startindex; length = String.length m }
                 | Some t -> [ { t = t ; start = startindex ; length = String.length m } ]
               end
-          ) @ aux indents (startindex + String.length m) prog
+          ) @ aux (startindex + String.length m) prog
     in
-    let matches = aux [] 0 file in
+
+    let matches = aux 0 ("\n" ^ file) in
     let matches' = remove_multiple_whitespaces matches in
     let matches'' = remove_trailing_whitespace matches' in
-    if List.length matches'' > 0 then
-      begin match (List.hd matches'').t with
-        | Whitespace _ -> matches''
-        | _            -> { t = Whitespace 0 ; start = 0; length = 0 } :: matches''
-      end @ [ { t = EOF ; start = (let last = (List.hd (List.rev matches'')) in last.start + last.length); length = 0 } ]
+    let matches''' = resolve_whitespaces matches'' in
+    if List.length matches''' > 0 then
+      matches''' @ [ { t = EOF ; start = (let last = (List.hd (List.rev matches''')) in last.start + last.length); length = 0 } ]
     else
       [ { t = EOF ; start = 0 ; length = 0 } ]
+
 end

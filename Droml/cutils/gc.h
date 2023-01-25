@@ -19,4 +19,4 @@ extern "C" {
 }
 #endif
 
-#endif // __GC_C_CONNECTOR
+#endif // __GC_C_CONNECTOR__
