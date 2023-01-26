@@ -12,8 +12,6 @@ OUT = obj
 STDLIB = cutils/drmstdlib
 EDULIB = cutils/edulib
 
-SFML = cutils/edulib/SFML-2.5.1
-
 INCL = -I cutils/
 
 setup:
@@ -50,11 +48,14 @@ stdlib:
 	$(COMPILE_LIB) $(INCL) cutils/drmstdlib/cpputils/Regex.cpp -o $(OUT)/cpputils_Regex.so
 	$(COMPILE_LIB) $(INCL) cutils/drmstdlib/cpputils/Time.cpp  -o $(OUT)/cpputils_Time.so
 
+setup-edulib:
+	apt-get install libsfml-dev
+
 edulib:
 	$(COMPILE) $(INCL) -o $(OUT)/Turtle.o -c $(EDULIB)/Turtle.c
 	$(COMPILE_LIB) $(INCL) -I $(SFML)/include cutils/edulib/cpputils/Turtle.cpp -o $(OUT)/edulib_cpputils_Turtle.so -L $(SFML)/lib -lsfml-graphics -lsfml-window -lsfml-system
 
-all: setup gc intrinsics stdlib edulib compiler
+all: setup gc intrinsics stdlib compiler
 
 clean:
 	rm -f $(OUT)/* || true

@@ -1,0 +1,6 @@
+fn main -> void
+    Turtle.make()
+    for i := 0 ..| 360
+        Turtle.fd(1)
+        Turtle.rt(1)
+    Turtle.close()

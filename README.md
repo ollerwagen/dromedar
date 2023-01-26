@@ -17,6 +17,23 @@ Then, you can compile Dromedar source files using `./droml <FILENAME>`. You can 
 
 Thus, e.g. `./droml ExamplePrograms/Primes.drm -l -o Primes.s -s` writes the `clang`-generated Assembly code to `Primes.s`, while printing the output of the lexer to the console.
 
+### Graphics Module
+
+The language also features a module called `Turtle` for creating turtle graphics. It uses the [Simple and Fast Multimedia Library (SFML)](https://www.sfml-dev.org/index.php), which, in turn, is built on OpenGL.
+
+The way SFML is installed depends very much on the operating system - I have only tested it on my machine which runs Ubuntu Linux 20.04. Building the library works as follows:
+
+    sudo make setup-edulib
+    make edulib
+
+The first command need only be run once - it installs SFML to the device. The second builds the C/C++ files linked to the executable Dromedar programs.
+
+The [Config File](Droml/droml.config) contains two `drmlibs` and two `cpplibs` items, depending on whether you want to build a turtle graphics application or not. The first line for each identifier counts, so you need to swap them around to match your wishes for the application.
+
+After you've done that, you can use the `Turtle` module without having to specify any additional compiler information when you compile source programs using `droml`.
+
+This [file](Droml/ExamplePrograms/Turtle.drm) is an example program which uses turtle graphics.
+
 ## Expanding The Standard Library
 
 It is possible to write extensions to the Dromedar standard library - both in Dromedar and in C (the language in which most of the standard library is implemented) - or even in C++ (which is a slightly more involved process).
@@ -104,9 +121,11 @@ Each Dromedar program consists of a series of global function and variable decla
 
 The language uses significant whitespace. Two neighboring instructions in the same block require the same indentation string, whereas a deeper instruction requires a longer indentation string. Two blocks with the same indentation level do not necessarily need the same indentation string, but they do need to match their respective environments.
 
+You can separate instructions on the same line with a semicolon, and it is possible to write a single instruction on multiple lines, provided you use a deeper level of indentation than the depth for the first line.
+
 #### Function Declarations
 
-Function declarations are created using the `fn` keyword, followed by a name, an argument list and a return type. For example, the function header `fn f : x:int, y:int -> int` declares an `int`-function, taking two `int` arguments.
+Function declarations are created using the `fn` keyword, followed by a name, an argument list and a return type. For example, the function header `fn f (x:int, y:int) -> int` declares an `int`-function, taking two `int` arguments.
 
 Functions are accessible in the entire program, meaning that mutual recursion is possible without forward declarations.
 
@@ -123,6 +142,12 @@ There are three ways to write down list literals:
 * As an actual list: `[1,2,3,4,5]` is the list containing the numbers from 1 to 5.
 * As a bounded list: `[1...5]` is the same list. The delimiter `..|` doesn't include the last element, `|..` doesn't include the first, and `|.|` doesn't include either. Thus, `[1...5]` and `[0|.|6]` are equivalent. Bounded lists can only return `int` lists as of now, but I plan on extending them to `char` lists as well.
 * As a comprehension list: `[exp : decls : condition]`, e.g. as follows: `[2*x : x in [0...10] : x > 5]`, which is equivalent to `[12,14,16,18,20]`.
+
+### Partial Function Application
+
+Dromedar also knows partial function application, whereby a new function is created by leaving some of the function's arguments unspecified using the `_` wildcard operator.
+
+Consider the function `add : (int,int) -> int`. Then, `add(_,3)` creates a function of type `int -> int` which adds `3` to its argument.
 
 ### Statements
 
