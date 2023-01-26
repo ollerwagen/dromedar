@@ -10,7 +10,7 @@ open Ll
 open Templateresolver
 
 let read_lines (filename : string) : string list =
-  String.split_on_char '\n' (readall filename)
+  List.filter (fun s -> String.length s > 0) @@ String.split_on_char '\n' (readall filename)
 
 (*
 let () =
