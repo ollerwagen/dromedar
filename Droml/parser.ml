@@ -86,10 +86,28 @@ module Parser = struct
     begin match (List.hd s).t with
       | Whitespace (Left ind') ->
           if ind' > indent then advance (List.tl s) indent else List.hd s, List.tl s
+      | Semicolon -> ofnode (Whitespace (Left indent)) (List.hd s), List.tl s
       | _ -> List.hd s, List.tl s
     end
   
   let rec peek (s:state) (indent:int) : Token.token node = fst @@ advance s indent
+
+  let resolve_semicolon (s:state) (indent:int) : state =
+    let aux (s:state) (indent:int) : state =
+      begin match (List.hd s).t with
+        | Semicolon -> raise @@ ParseError (ofnode "can only have one semicolon separating instructions" (List.hd s))
+        | Whitespace (Left x) ->
+            if x <= indent then s
+            else
+              raise @@ ParseError (ofnode "cannot indent further after a semicolon" (List.hd s))
+        | EOF -> s
+        | _ -> ofnode (Whitespace (Left indent)) (List.hd s) :: s
+      end
+    in
+    begin match (List.hd s).t with
+      | Semicolon -> aux (List.tl s) indent
+      | _ -> s
+    end
 
   let expect (s:state) (indent : int) (t:Token.token) : state =
     if (peek s indent).t = t then snd @@ advance s indent
@@ -659,6 +677,11 @@ module Parser = struct
               st :: b, s''
             else
               [], s
+        | Semicolon ->
+            if fixed then
+              aux (resolve_semicolon s indent) indent true
+            else
+              raise @@ ParseError (ofnode ("block must begin with an instruction") (peek_raw s))
         | _ -> [], s
       end
     in
@@ -812,6 +835,8 @@ module Parser = struct
               let gs,s' = parse_gstmt baseindent s in gs :: aux baseindent s'
             else
               raise @@ ParseError (ofnode "Indent level in global scope must match among all global instructions" (peek s baseindent))
+        | {t=Semicolon;start=_;length=_}::_ ->
+            let gs,s' = parse_gstmt baseindent s in gs :: aux baseindent s'
         | _ -> raise @@ ParseError (ofnode "expected whitespace resp. newline" (peek s baseindent))
       end
     in

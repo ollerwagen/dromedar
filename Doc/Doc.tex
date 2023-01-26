@@ -778,6 +778,20 @@ fn main -> void
 			\end{lstlisting}
 			
 			This program computes the prime numbers from \code{0} to \code{100} using list comprehensions, where the list expression is divided into three separate lines.
+			
+		\subsection{Multiple Statements on a Single Line}
+		
+			While some instructions are long enough to require multiple lines to remain readable, some instructions are so short (such as simple assignments), that it enhances the readability of a chunk of code to put multiple statements on a single line. This is enabled by separating instructions with an optional Semicolon \code{;}, e.g. as follows:
+			
+			\begin{lstlisting}
+fn main -> void
+	printf("a\n"); printf("b\n") # the semicolon separates the two commands
+	
+	if true
+		printf("c\n")  # if a line break follows, a semicolon is optional
+	else
+		printf("d\n"); # this semicolon can be omitted
+			\end{lstlisting}
 		
 	\section{Buildup of a Program}
 	

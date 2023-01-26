@@ -55,6 +55,7 @@ type token =
   | PipeDotPipe
   | EOF
   | Whitespace of (int, string) Either.t
+  | Semicolon
   | KModule
   | KNative
   | KGlobal
@@ -168,4 +169,5 @@ let print_token (t:token) : string =
     | KReturn      -> "[return]"
     | Whitespace (Left i) -> Printf.sprintf "[Whitespace %d]" i
     | Whitespace (Right _) -> Stdlib.failwith "cannot print pure-string indent, should resolve first"
+    | Semicolon    -> "[Semicolon]"
   end
