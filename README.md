@@ -23,7 +23,7 @@ It is possible to write extensions to the Dromedar standard library - both in Dr
 
 ### Expanding it in Dromedar
 
-In order to expand the standard library with functions written in pure Dromedar, you will either need to create a new `.drm` file in which to create your functions, or append them to the [existing standard libary file](Droml/Drmstdlib.drm). If you create a new file, you need to add it to the [library list](Droml/LibLists/drmlibs.txt).
+In order to expand the standard library with functions written in pure Dromedar, you will either need to create a new `.drm` file in which to create your functions, or append them to the [existing standard libary file](Droml/Drmstdlib.drm). If you create a new file, you need to add its path to the `drmlibs` item in the [Config File](Droml/droml.config).
 
 You can then use all the functions you created in your own Dromedar programs.
 
@@ -85,7 +85,7 @@ A good example of how your C++ and C files must look is the Regex module of the 
 
 You can then either compile your C++ file to a statically linkable library `.so` file by following the execution steps of the `stdlib` rule in the [Makefile](Droml/Makefile), or add it to the taks list in the rule, following the outline given by the rule in the makefile.
 
-Following that, make sure your `.so` file is located in the [obj](Droml/obj/) folder. Then, you must the path to your library in the [C++ Library List](Droml/LibLists/cpplibs.txt), following the example of the libraries which are already there.
+Following that, make sure your `.so` file is located in the [obj](Droml/obj/) folder. Then, you must the path to your library in the [Config File](Droml/droml.config), following the example of the C++ libraries that are already there.
 
 After that, you can freely use your new functions in Dromedar programs.
 

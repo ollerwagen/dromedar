@@ -1700,6 +1700,7 @@ f(null of [string], [null of string])
 				GlobalStatement  ::= GVDeclaration | GFDeclaration | %Module %Identifier | %Native NatDecl
 				                 
 				GVDeclaration    ::=  %Global [ %Mut ] %Identifier [ %Colon Type ] %Assign GlobalExpression
+				                      { %Comma %Identifier [ %Colon Type ] %Assign GlobalExpression }
 				GFDeclaration    ::= %Fn %Identifier [ %LParen FArguments %Rparen ] %Arrow ReturnType Block
 				NatDecl          ::=
 				    %Type %Identifier | Type %Identifier
@@ -1720,6 +1721,7 @@ f(null of [string], [null of string])
 				    | ReturnStmt
 				                 
 				VDeclaration     ::= [ %Let | %Mut ] %Identifier [ %Colon Type ] %Assign Expression
+				                     { %Comma %Identifier [ %Colon Type ] %Assign Expression }
 				                 
 				AssignStmt       ::= LHS %Assign Expression
 				                 

@@ -12,6 +12,17 @@ open Templateresolver
 let read_lines (filename : string) : string list =
   List.filter (fun s -> String.length s > 0) @@ String.split_on_char '\n' (readall filename)
 
+let read_stringlist (name : string) : string list =
+  let name_eq = Printf.sprintf "%s=" name in
+  let lines = read_lines "droml.config" in
+  begin match List.find_opt (String.starts_with ~prefix:name_eq) lines with
+    | None -> Stdlib.failwith @@ Printf.sprintf "droml.config identifier %s not found" name
+    | Some s ->
+        let argstring = String.sub s (String.length name_eq) (String.length s - String.length name_eq) in
+        let filestrings = String.split_on_char ',' argstring in
+        List.map (fun s -> String.sub s 1 (String.length s - 2)) filestrings
+  end
+
 (*
 let () =
   let ets = [ TRef (TFun ([ TTempl (true, "a") ], Ret (TTempl (true, "a")))) ] in
@@ -83,7 +94,7 @@ let () =
 
     if doanycompilation then
 
-      let filenames = (read_lines "LibLists/drmlibs.txt") @ inputfiles in
+      let filenames = (read_stringlist "drmlibs") @ inputfiles in
       let programs = List.map (String.cat "\n") (List.map readall filenames) in
 
       let lexes =
@@ -155,7 +166,7 @@ let () =
   
   let _ =
     if not compiletollvm && not seeasoutput then
-      let cppliblinks = String.concat " " (List.map (fun l -> Printf.sprintf "-L. ./%s" l) (read_lines "LibLists/cpplibs.txt")) in
+      let cppliblinks = String.concat " " (List.map (fun l -> Printf.sprintf "-L. ./%s" l) (read_stringlist "cpplibs")) in
       Sys.command (Printf.sprintf "clang -o %s %s %s obj/*.o %s -lstdc++ -lm -O0 %s"
         outputfilename
         (String.concat " " (inputcfiles @ inputllfiles @ inputobjfiles))

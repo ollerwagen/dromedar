@@ -509,46 +509,59 @@ module Parser = struct
     end
 
 
-  let rec parse_stmt (s : state) (indent : int) : stmt node * state =
+  let rec parse_stmt (s : state) (indent : int) : stmt node list * state =
 
-    let rec parse_vdecl_stmt (s : state) (indent : int) : stmt node * state =
-      let start = (peek s indent).start in
+    let rec parse_vdecl_stmt (s : state) (indent : int) : stmt node list * state =
+      let parse_single (m:mutability) (s:state) (indent:int) : stmt node * state =
+        let start = (peek s indent).start in
+        let id,s' =
+          begin match (peek s indent).t with
+            | Id i -> i, snd @@ advance s indent
+            | _    -> raise @@ ParseError (ofnode "Declaration requires identifier" (fst @@ advance s indent))
+          end in
+        let t,s'' =
+          if (peek s' indent).t = Colon then
+            let t,s'' = parse_ty (snd (advance s' indent)) indent in Some t, s''
+          else None, s' in
+        let s''' = expect s'' indent Token.Assign in
+        let e,s'''' = parse_exp s''' indent in
+        { t = VDecl (id, m, t, e) ; start = start ; length = (peek s'''' indent).start - start }, s''''
+      in
+      let rec parse_all (m:mutability) (s:state) (indent:int) : stmt node list * state =
+        let stmts,s' = parse_single m s indent in
+        begin match (peek s' indent).t with
+          | Comma ->
+              let s'' = snd @@ advance s' indent in
+              let stmts',s''' = parse_all m s'' indent in
+              stmts :: stmts', s'''
+          | _ -> [stmts], s'
+        end
+      in
       let s',m =
         begin match (peek s indent).t with
           | KLet -> snd (advance s indent), Const
           | KMut -> snd (advance s indent), Mut
           | _    -> raise @@ ParseError (ofnode "Expected a declaration" (fst (advance s indent)))
         end in
-      let id,s'' =
-        begin match (peek s' indent).t with
-          | Id i -> i, snd @@ advance s' indent
-          | _    -> raise @@ ParseError (ofnode "Declaration requires identifier" (fst @@ advance s' indent))
-        end in
-      let t,s''' =
-        if (peek s'' indent).t = Colon then
-          let t,s''' = parse_ty (snd (advance s'' indent)) indent in Some t, s'''
-        else None, s'' in
-      let s'''' = expect s''' indent Token.Assign in
-      let e,s''''' = parse_exp s'''' indent in
-      { t = VDecl (id, m, t, e) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+      parse_all m s' indent
 
-    and parse_assert_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_assert_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent KAssert in
       let e,s'' = parse_exp s' indent in
-      { t = Assert e ; start = start ; length = (peek s'' indent).start - start }, s''
+      [{ t = Assert e ; start = start ; length = (peek s'' indent).start - start }], s''
 
-    and parse_expr_or_assn_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_expr_or_assn_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let l,s' = parse_exp s indent in
       if (peek s' indent).t = Token.Assign then
         let _,s'' = advance s' indent in
         let r,s''' = parse_exp s'' indent in
-        { t = Assn (l,r) ; start = start ; length = (peek s''' indent).start - start }, s'''
+        [{ t = Assn (l,r) ; start = start ; length = (peek s''' indent).start - start }], s'''
       else
-        { t = Expr l ; start = start ; length = (peek s' indent).start - start }, s'
+        [{ t = Expr l ; start = start ; length = (peek s' indent).start - start }], s'
 
-    and parse_if_stmt (s : state) (indent : int) (ifkey : Token.token) : stmt node * state =
+    and parse_if_stmt (s : state) (indent : int) (ifkey : Token.token) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent ifkey in
       let e,s'' = parse_exp s' indent in
@@ -556,15 +569,15 @@ module Parser = struct
       if matches_indent_and s''' indent Token.KElif then
         let _,s'''' = advance s''' indent in
         let es,s''''' = parse_if_stmt s'''' indent (Token.KElif) in
-        { t = If (e, b, [es]) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+        [{ t = If (e, b, es) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
       else if matches_indent_and s''' indent Token.KElse then
         let _,s'''' = advance (snd (advance s''' indent)) indent in
         let n,s''''' = parse_block s'''' (indent+1) in
-        { t = If (e, b, n) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+        [{ t = If (e, b, n) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
       else
-        { t = If (e, b, []) ; start = start ; length = (peek s''' indent).start - start }, s'''
+        [{ t = If (e, b, []) ; start = start ; length = (peek s''' indent).start - start }], s'''
 
-    and parse_denull_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_denull_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KDenull in
       let id,s'' =
@@ -578,27 +591,27 @@ module Parser = struct
       if matches_indent_and s''''' indent Token.KElse then
         let s'''''' = snd @@ advance (snd @@ advance s''''' indent) indent in
         let b',s''''''' = parse_block s'''''' (indent+1) in
-        { t = Denull (id, e, b, b') ; start = start ; length = (peek s''''''' indent).start - start }, s'''''''
+        [{ t = Denull (id, e, b, b') ; start = start ; length = (peek s''''''' indent).start - start }], s'''''''
       else
-        { t = Denull (id, e, b, []) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+        [{ t = Denull (id, e, b, []) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
 
-    and parse_while_stmt (s : state) (indent : int) : stmt node * state = 
+    and parse_while_stmt (s : state) (indent : int) : stmt node list * state = 
       let start = (peek s indent).start in
       let s' = expect s indent Token.KWhile in
       let c,s'' = parse_exp s' indent in
       let b,s''' = parse_block s'' (indent+1) in
-      { t = While (c,b) ; start = start ; length = (peek s''' indent).start - start }, s'''
+      [{ t = While (c,b) ; start = start ; length = (peek s''' indent).start - start }], s'''
 
-    and parse_dowhile_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_dowhile_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KDo in
       let b,s'' = parse_block s' (indent + 1) in
       let s''' = expect s'' indent (Token.Whitespace (Left indent)) in
       let s'''' = expect s''' indent Token.KWhile in
       let c,s''''' = parse_exp s'''' indent in
-      { t = DoWhile (c,b) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+      [{ t = DoWhile (c,b) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
 
-    and parse_for_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_for_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KFor in
       let id,s'' =
@@ -620,35 +633,35 @@ module Parser = struct
               end in
             let endexp,s'''''' = parse_exp s''''' indent in
             let b,s''''''' = parse_block s'''''' (indent+1) in
-            { t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''' indent).start - start }, s'''''''
+            [{ t = For (id,startexp,incl1,incl2,endexp,b) ; start = start ; length = (peek s''''''' indent).start - start }], s'''''''
         | Token.KIn ->
             let s''' = snd @@ advance s'' indent in
             let lexp,s'''' = parse_exp s''' indent in
             let b,s''''' = parse_block s'''' (indent+1) in
-            { t = ForIn (id,lexp,b) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+            [{ t = ForIn (id,lexp,b) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
         | _ -> raise @@ ParseError (ofnode "expected either an assignment or a range list with 'in'" (peek s'' indent))
       end
 
-    and parse_break_stmt (s : state) : stmt node * state =
+    and parse_break_stmt (s : state) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KBreak in
-      { t = Break ; start = start ; length = (peek s' indent).start - start }, s'
+      [{ t = Break ; start = start ; length = (peek s' indent).start - start }], s'
 
-    and parse_continue_stmt (s : state) : stmt node * state =
+    and parse_continue_stmt (s : state) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KContinue in
-      { t = Continue ; start = start ; length = (peek s' indent).start - start }, s'
+      [{ t = Continue ; start = start ; length = (peek s' indent).start - start }], s'
 
-    and parse_return_stmt (s : state) (indent : int) : stmt node * state =
+    and parse_return_stmt (s : state) (indent : int) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KReturn in
       let t,_ = advance s' indent in
       begin match t.t with
         | Token.EOF | Token.Whitespace _ ->
-            { t = Return None ; start = start ; length = (peek s' indent).start - start }, s'
+            [{ t = Return None ; start = start ; length = (peek s' indent).start - start }], s'
         | _ ->
             let e,s'' = parse_exp s' indent in
-            { t = Return (Some e) ; start = start ; length = (peek s'' indent).start - start }, s''
+            [{ t = Return (Some e) ; start = start ; length = (peek s'' indent).start - start }], s''
       end
     in
 
@@ -674,7 +687,7 @@ module Parser = struct
             if fixed && ind' = indent || not fixed && ind' >= indent then
               let st,s' = parse_stmt s ind' in
               let b,s'' = aux s' ind' true in
-              st :: b, s''
+              st @ b, s''
             else
               [], s
         | Semicolon ->
@@ -688,29 +701,44 @@ module Parser = struct
     aux s indent false
 
 
-  let parse_gstmt (indent:int) (s:state) : gstmt node * state =
+  let parse_gstmt (indent:int) (s:state) : gstmt node list * state =
 
-    let rec parse_gvdecl (s:state) : gstmt node * state =
-      let start = (peek s indent).start in
+    let rec parse_gvdecl (s:state) : gstmt node list * state =
+      let parse_single (m:mutability) (s:state) (indent:int) : gstmt node * state =
+        let start = (peek s indent).start in
+        let id,s' =
+          begin match (peek s indent).t with
+            | Id id -> id, snd (advance s indent)
+            | _     -> raise @@ ParseError (ofnode "Declaration requires identifier" (fst (advance s indent)))
+          end in
+        let t,s'' =
+          if (peek s' indent).t = Colon then
+            let t,s'' = parse_ty (snd (advance s' indent)) indent in Some t, s''
+          else
+            None, s' in
+        let s''' = expect s'' indent Token.Assign in
+        let e,s'''' = parse_exp s''' indent in
+        { t = GVDecl (id, m, t, e) ; start = start ; length = (peek s'''' indent).start - start }, s''''
+      in
+      let rec parse_all (m:mutability) (s:state) (indent:int) : gstmt node list * state =
+        let gs,s' = parse_single m s indent in
+        begin match (peek s' indent).t with
+          | Comma ->
+              let s'' = snd @@ advance s' indent in
+              let gs',s''' = parse_all m s'' indent in
+              gs::gs', s'''
+          | _ -> [gs], s'
+        end
+      in
       let s' = expect s indent Token.KGlobal in
       let s'',m =
         if (peek s' indent).t = KMut then snd (advance s' indent), Mut
         else s', Const in
-      let id,s''' =
-        begin match (peek s'' indent).t with
-          | Id id -> id, snd (advance s'' indent)
-          | _     -> raise @@ ParseError (ofnode "Declaration requires identifier" (fst (advance s'' indent)))
-        end in
-      let t,s'''' =
-        if (peek s''' indent).t = Colon then
-          let t,s'''' = parse_ty (snd (advance s''' indent)) indent in Some t, s''''
-        else
-          None, s''' in
-      let s''''' = expect s'''' indent Token.Assign in
-      let e,s'''''' = parse_exp s''''' indent in
-      { t = GVDecl (id, m, t, e) ; start = start ; length = (peek s'''''' indent).start - start }, s''''''
+      let gs,s''' = parse_all m s'' indent in
+      gs, s'''
+     
 
-    and parse_gfdecl (s:state) : gstmt node * state =
+    and parse_gfdecl (s:state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KFn in
       let id,s'' =
@@ -745,19 +773,19 @@ module Parser = struct
       let s'''' = expect s''' indent Token.Arrow in
       let rt,s''''' = parse_retty s'''' indent in
       let b,s'''''' = parse_block s''''' 1 in
-      { t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''' indent).start - start }, s''''''
+      [{ t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''' indent).start - start }], s''''''
     
-    and parse_gmodule (s : state) : gstmt node * state =
+    and parse_gmodule (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KModule in
       begin match (peek s' indent).t with
         | Token.Id m ->
             let s'' = snd @@ advance s' indent in
-            { t = Module m ; start = start ; length = (peek s'' indent).start - start }, s''
+            [{ t = Module m ; start = start ; length = (peek s'' indent).start - start }], s''
         | _ -> raise @@ ParseError (ofnode "Expected an identifier in module declaration" (peek s' indent))
       end
 
-    and parse_gnative (s : state) : gstmt node * state =
+    and parse_gnative (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KNative in
       begin match (peek s' indent).t with
@@ -767,7 +795,7 @@ module Parser = struct
         | _           -> raise @@ ParseError (ofnode "Expected a native declaration" (peek s' indent))
       end
 
-    and parse_gnfdecl (start : int) (s : state) : gstmt node * state =
+    and parse_gnfdecl (start : int) (s : state) : gstmt node list * state =
       let s' = expect s indent Token.KFn in
       let id,s'' =
         begin match (peek s' indent).t with
@@ -794,9 +822,9 @@ module Parser = struct
         end in
       let s'''' = expect s''' indent Token.Arrow in
       let rt,s''''' = parse_retty s'''' indent in
-      { t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''' indent).start - start }, s'''''
+      [{ t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
 
-    and parse_gnvdecl (start : int) (s : state) : gstmt node * state =
+    and parse_gnvdecl (start : int) (s : state) : gstmt node list * state =
       let id,s' =
         begin match (peek s indent).t with
           | Id id -> id, snd @@ advance s indent
@@ -804,16 +832,16 @@ module Parser = struct
         end in
       let s'' = expect s' indent Token.Colon in
       let t,s''' = parse_ty s'' indent in
-      { t = GNVDecl (id,t) ; start = start ; length = (peek s''' indent).start - start }, s'''
+      [{ t = GNVDecl (id,t) ; start = start ; length = (peek s''' indent).start - start }], s'''
     
-    and parse_gntdecl (start : int) (s : state) : gstmt node * state =
+    and parse_gntdecl (start : int) (s : state) : gstmt node list * state =
       let s' = expect s indent Token.KType in
       let id,s'' =
         begin match (peek s' indent).t with
           | Id id -> id, snd @@ advance s' indent
           | _     -> raise @@ ParseError (ofnode "Expected a native type identifier" (peek s' indent))
         end in
-      { t = GNTDecl id ; start = start ; length = (peek s'' indent).start - start }, s''
+      [{ t = GNTDecl id ; start = start ; length = (peek s'' indent).start - start }], s''
 
     in
 
@@ -832,11 +860,11 @@ module Parser = struct
         | [] | [{t=Token.EOF;start=_;length=_}]             -> []
         | {t=Token.Whitespace (Left x);start=_;length=_}::_ ->
             if x = baseindent then
-              let gs,s' = parse_gstmt baseindent s in gs :: aux baseindent s'
+              let gs,s' = parse_gstmt baseindent s in gs @ aux baseindent s'
             else
               raise @@ ParseError (ofnode "Indent level in global scope must match among all global instructions" (peek s baseindent))
         | {t=Semicolon;start=_;length=_}::_ ->
-            let gs,s' = parse_gstmt baseindent s in gs :: aux baseindent s'
+            let gs,s' = parse_gstmt baseindent s in gs @ aux baseindent s'
         | _ -> raise @@ ParseError (ofnode "expected whitespace resp. newline" (peek s baseindent))
       end
     in
