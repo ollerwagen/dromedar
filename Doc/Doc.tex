@@ -760,6 +760,25 @@ native pi : flt
 		
 		The two blocks have a different indentation level, but from context it is still clear that \code{BLOCK A} is a sub-block of the \code{if}-statement, whereas \code{BLOCK B} belongs to the \code{else}-statement.
 		
+		\subsection{Multiline Expressions}
+		
+			Some instructions are too long to write on a single line -- e.g. complicated \code{if} conditions. In that case, it is possible to write such instructions or expressions on multiple lines, provided that the indentation levels of the subsequent lines are deeper than that of the first line of the instruction.
+			
+			The file \texttt{Droml/droml.config} specifies the size of a tab character in terms of spaces in order to allow mixing tabs and spaces.
+			
+			The following is an example of such multiline instructions:
+			
+			\begin{lstlisting}
+fn main -> void
+	let p :=
+		[ x
+		: x in [1...100]
+		: [ y : y in [1...x] : x%y = 0 ].length = 2 ]
+	printf("{0}\n", p)
+			\end{lstlisting}
+			
+			This program computes the prime numbers from \code{0} to \code{100} using list comprehensions, where the list expression is divided into three separate lines.
+		
 	\section{Buildup of a Program}
 	
 		A program consists of a series of global statements -- global variable declarations and function definitions.
