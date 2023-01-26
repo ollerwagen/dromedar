@@ -1,0 +1,79 @@
+module Str
+
+native fn of_int (int) -> string
+native fn of_flt (flt) -> string
+
+
+module IO
+
+native fn print_int  (int)    -> void
+native fn print_flt  (flt)    -> void
+native fn print_str  (string) -> void
+native fn print_char (char)   -> void
+native fn print_bool (bool)   -> void
+
+
+module Util
+
+native fn randint -> int
+native fn randflt -> flt
+
+
+module File
+
+native fn readall (string) -> [string]
+
+
+module Math
+ 
+native fn sin (flt) -> flt
+native fn cos (flt) -> flt
+native fn tan (flt) -> flt
+native e  : flt
+native pi : flt
+
+
+module Regex
+
+native type R
+native fn compile     (string)   -> R?
+native fn matches     (R,string) -> bool
+native fn first_match (R,string) -> string?
+native fn all_matches (R,string) -> [string]
+
+
+module Sys
+
+native fn cmd  (string) -> int
+native fn fork          -> int
+
+
+module Time
+
+native type P
+native type D
+
+native fn clock -> int
+native fn time  -> int
+
+native fn sleep_for (D) -> void
+
+native fn now      -> P
+native fn dt (P,P) -> D
+
+native fn s  (D) -> int
+native fn ms (D) -> int
+native fn us (D) -> int
+
+native fn of_s  (int) -> D
+native fn of_ms (int) -> D
+native fn of_us (int) -> D
+
+
+module List
+
+fn map (f : (<a>) -> <b>, l : [<a>]) -> [<b>]
+    mut res := [] of <b>
+    for x in l
+        res := res + [f(x)]
+    return res
