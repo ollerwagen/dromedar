@@ -130,6 +130,8 @@ let () =
           (Printf.printf "Error at [%d-%d]: '%s'.\n" s (s+l) m;
           Stdlib.failwith "Type Error. Aborting.")
       in
+
+      (*let () = Printf.printf "Typechecking is done\n" in*)
       
       let llstring = Translator.cmp_to_llvm annt_prog main_id in
 

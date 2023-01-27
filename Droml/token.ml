@@ -58,6 +58,7 @@ type token =
   | Semicolon
   | KModule
   | KNative
+  | KUsing
   | KGlobal
   | KFn
   | KLet
@@ -140,6 +141,7 @@ let print_token (t:token) : string =
     | EOF          -> "[EOF]"
     | KModule      -> "[module]"
     | KNative      -> "[native]"
+    | KUsing       -> "[using]"
     | KGlobal      -> "[global]"
     | KFn          -> "[fn]"
     | KLet         -> "[let]"

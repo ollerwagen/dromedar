@@ -1,5 +1,8 @@
 #include <cmath>
 #include <algorithm>
+#include <cctype>
+#include <unordered_map>
+#include <string>
 
 #include "SFML/System/Time.hpp"
 #include "SFML/Graphics.hpp"
@@ -8,24 +11,26 @@
 
 #include "Turtle.h"
 
-constexpr int WINDOWSIZE = 600;
+static constexpr int WINDOWSIZE = 600;
 
-sf::RenderWindow *window = nullptr;
-sf::VertexArray  *pixels = nullptr;
+static sf::RenderWindow *window = nullptr;
+static sf::VertexArray  *pixels = nullptr;
 
-sf::Texture      *turt_t = nullptr;
-sf::Sprite       *turtle = nullptr;
+static sf::Texture      *turt_t = nullptr;
+static sf::Sprite       *turtle = nullptr;
 
+static sf::Color pen_color;
+static float     pen_width;
 
-constexpr float TURT_SPEED = 100.0f;
-constexpr float ANGL_SPEED = 90.0f;
+static constexpr float TURT_SPEED = 100.0f;
+static constexpr float ANGL_SPEED = 90.0f;
 
-bool is_pen_dn;
+static bool is_pen_dn, show_turtle;
 
-constexpr int   FPS        = 60;
-constexpr float SPF        = 1.0f / static_cast<float>(FPS);
+static constexpr int   FPS        = 60;
+static constexpr float SPF        = 1.0f / static_cast<float>(FPS);
 
-const sf::Time SLEEP_TIME = sf::seconds(SPF);
+static const sf::Time SLEEP_TIME = sf::seconds(SPF);
 
 
 static void error() {
@@ -39,7 +44,8 @@ static void error() {
 static void draw() {
     window->clear();
     window->draw(*pixels);
-    window->draw(*turtle);
+    if (show_turtle)
+        window->draw(*turtle);
     window->display();
 }
 
@@ -81,7 +87,11 @@ extern "C" {
             turtle->getLocalBounds().left + turtle->getLocalBounds().width / 2.0f,
             turtle->getLocalBounds().top + turtle->getLocalBounds().height / 2.0f);
 
-        is_pen_dn = true;
+        is_pen_dn   = true;
+        show_turtle = true;
+
+        pen_color = sf::Color::Black;
+        pen_width = 0.5f;
 
         draw();
     }
@@ -128,15 +138,21 @@ extern "C" {
         sf::Clock clock;
 
         while (steps > 0) {
-            sf::sleep(SLEEP_TIME - clock.restart());
+            if (show_turtle)
+                sf::sleep(SLEEP_TIME - clock.restart());
 
             float next_steps = std::min(TURT_SPEED / FPS, steps);
 
             if (is_pen_dn) {
                 for (int i = 0; i < next_steps; i++) {
                     int x_index = turtle->getPosition().x + i * x_step, y_index = turtle->getPosition().y + i * y_step;
-                    if (0 <= x_index && x_index < WINDOWSIZE && 0 <= y_index && y_index < WINDOWSIZE) {
-                        (*pixels)[x_index * WINDOWSIZE + y_index].color = sf::Color::Black;
+                    for (int x = x_index - pen_width; x <= x_index + pen_width; x++) {
+                        for (int y = y_index - pen_width; y <= y_index + pen_width; y++) {
+                            if (0 <= x && x < WINDOWSIZE && 0 <= y && y < WINDOWSIZE &&
+                                    (x - x_index) * (x - x_index) + (y - y_index) * (y - y_index) <= pen_width * pen_width) {
+                                (*pixels)[x * WINDOWSIZE + y].color = pen_color;
+                            }
+                        }
                     }
                 }
             }
@@ -159,7 +175,8 @@ extern "C" {
 
         sf::Clock clock;
         while (step_angle > 0) {
-            sf::sleep(SLEEP_TIME - clock.restart());
+            if (show_turtle)
+                sf::sleep(SLEEP_TIME - clock.restart());
 
             float next_rotation = std::min(ANGL_SPEED / FPS, step_angle);
             turtle->setRotation(turtle->getRotation() + (right ? next_rotation : -next_rotation));
@@ -171,7 +188,56 @@ extern "C" {
     }
 
     void _cpputils_Turtle$pen(bool pen) {
+        printf("Turtle.pen%s()\n", pen ? "Up" : "Dn");
+        NULLCHECK;
+
         is_pen_dn = pen;
     }
-    
+
+    void _cpputils_Turtle$setPenColor(const char *c) {
+        static const std::unordered_map<std::string, sf::Color> COLORS = {
+            { "yellow",  sf::Color::Yellow  },
+            { "red",     sf::Color::Red     },
+            { "magenta", sf::Color::Magenta },
+            { "blue",    sf::Color::Blue    },
+            { "cyan",    sf::Color::Cyan    },
+            { "green",   sf::Color::Green   },
+            { "black",   sf::Color::Black   },
+            { "white",   sf::Color::White   }
+        };
+
+        printf("Turtle.setPenColor(%s)\n", c);
+        NULLCHECK;
+
+        std::string cs(c);
+        for (char &c : cs)
+            c = std::tolower(c);
+
+        if (COLORS.find(cs) != COLORS.end())
+            pen_color = COLORS.at(cs);
+        else
+            fprintf(stderr, "Color '%s' unknown\n", c);
+    }
+
+    void _cpputils_Turtle$setPenWidth(double w) {
+        printf("Turtle.setPenWidth(%lf)\n", w);
+        NULLCHECK;
+        if (w < 0.0)
+            fprintf(stderr, "Pen Width should be positive\n");
+        pen_width = w;
+    }
+
+    void _cpputils_Turtle$showTurtle() {
+        printf("showTurtle()\n");
+        NULLCHECK;
+        show_turtle = true;
+        draw();
+    }
+
+    void _cpputils_Turtle$hideTurtle() {
+        printf("hideTurtle()\n");
+        NULLCHECK;
+        show_turtle = false;
+        draw();
+    }
 }

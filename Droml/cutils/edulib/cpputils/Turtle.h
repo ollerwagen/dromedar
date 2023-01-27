@@ -15,6 +15,12 @@ extern "C" {
 
     void _cpputils_Turtle$pen(bool);
 
+    void _cpputils_Turtle$setPenColor(const char*);
+    void _cpputils_Turtle$setPenWidth(double);
+
+    void _cpputils_Turtle$showTurtle();
+    void _cpputils_Turtle$hideTurtle();
+
 #ifdef __cplusplus
 }
 #endif

@@ -1610,6 +1610,7 @@ f(null of [string], [null of string])
 				
 				module       ::= /module/
 				native       ::= /native/
+				using        ::= /using/
 				
 				global       ::= /global/
 				fn           ::= /fn/
@@ -1697,7 +1698,7 @@ f(null of [string], [null of string])
 			\begin{small}\begin{verbatim}
 				Program          ::= { GlobalStatement }
 				                 
-				GlobalStatement  ::= GVDeclaration | GFDeclaration | %Module %Identifier | %Native NatDecl
+				GlobalStatement  ::= GVDeclaration | GFDeclaration | %Module %Identifier | %Native NatDecl | %Using %Identifier
 				                 
 				GVDeclaration    ::=  %Global [ %Mut ] %Identifier [ %Colon Type ] %Assign GlobalExpression
 				                      { %Comma %Identifier [ %Colon Type ] %Assign GlobalExpression }

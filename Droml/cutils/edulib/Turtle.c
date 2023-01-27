@@ -32,3 +32,19 @@ void _Turtle$penUp(IGNORE) {
 void _Turtle$penDn(IGNORE) {
     _cpputils_Turtle$pen(true);
 }
+
+void _Turtle$setPenColor(IGNORE, string* s) {
+    _cpputils_Turtle$setPenColor(s->base);
+}
+
+void _Turtle$setPenWidth(IGNORE, double w) {
+    _cpputils_Turtle$setPenWidth(w);
+}
+
+void _Turtle$showTurtle(IGNORE) {
+    _cpputils_Turtle$showTurtle();
+}
+
+void _Turtle$hideTurtle(IGNORE) {
+    _cpputils_Turtle$hideTurtle();
+}

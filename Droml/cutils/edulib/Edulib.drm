@@ -4,11 +4,16 @@ module Turtle
 native fn make       -> void
 native fn close      -> void
 
-native fn fd    (flt) -> void
-native fn bk    (flt) -> void
+native fn fd (flt) -> void
+native fn bk (flt) -> void
+native fn rt (flt) -> void
+native fn lt (flt) -> void
 
-native fn rt    (flt) -> void
-native fn lt    (flt) -> void
+native fn penUp -> void
+native fn penDn -> void
 
-native fn penUp       -> void
-native fn penDn       -> void
+native fn setPenColor (string) -> void
+native fn setPenWidth (flt)    -> void
+
+native fn showTurtle -> void
+native fn hideTurtle -> void

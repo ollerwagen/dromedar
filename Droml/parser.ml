@@ -784,6 +784,16 @@ module Parser = struct
             [{ t = Module m ; start = start ; length = (peek s'' indent).start - start }], s''
         | _ -> raise @@ ParseError (ofnode "Expected an identifier in module declaration" (peek s' indent))
       end
+    
+    and parse_gusing (s : state) : gstmt node list * state =
+      let start = (peek s indent).start in
+      let s' = expect s indent Token.KUsing in
+      let s'',id =
+        begin match (peek s' indent).t with
+          | Id m -> snd (advance s' indent), m
+          | _    -> raise @@ ParseError (ofnode "Expected an identifier" (peek s' indent))
+        end in
+      [{ t = Using id ; start = start ; length = (peek s'' indent).start - start }], s''
 
     and parse_gnative (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
@@ -848,6 +858,7 @@ module Parser = struct
     let s' = expect s indent (Token.Whitespace (Left indent)) in
     begin match (peek s' indent).t with
       | Token.KModule -> parse_gmodule s'
+      | Token.KUsing  -> parse_gusing s'
       | Token.KGlobal -> parse_gvdecl s'
       | Token.KFn     -> parse_gfdecl s'
       | Token.KNative -> parse_gnative s'
