@@ -959,7 +959,7 @@ fn main -> void
 			\subsubsection{Arrays}
 			
 				\begin{align*}
-					\drmrule{\ruleapp{T}\mc{t1}\preceq\mc{t2}}{}{T}{\mc{[t1]}\preceq\mc{[t2]}}{SubTyFuns}
+					\drmrule{}{}{T}{\mc{[t]}\preceq\mc{[t]}}{SubTyArr}
 				\end{align*}
 		
 			\subsubsection{Functions}
@@ -985,7 +985,7 @@ fn main -> void
 								\mc{string} & \mapsto & \{\mc{string}\}\\
 								\mc{M.Id} & \mapsto & \{\mc{M.Id}\}\\
 								\mc{t?} & \mapsto & \{\mc{u},\mc{u?} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
-								\mc{[t]} & \mapsto & \{\mc{[u]} \;\mid\; \mc{u}\in\mathsf{subtys}(\mc{t})\}\\
+								\mc{[t]} & \mapsto & \{\mc{[u]}\}\\
 								\mc{(t1...tn)->rt} & \mapsto &
 									\{\mc{(u1...un)->st} \;\mid\; \mc{u1...un}\in\mathsf{suptys}(\mc{t1...tn}),\mc{st}\in\mathsf{subtys}(\mc{rt})\}
 							\end{array}
@@ -1000,7 +1000,7 @@ fn main -> void
 								\mc{string} & \mapsto & \{\mc{string},\mc{string?}\}\\
 								\mc{M.Id} & \mapsto & \{\mc{M.Id},\mc{M.Id?}\}\\
 								\mc{t?} & \mapsto & \{\mc{u?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
-								\mc{[t]} & \mapsto & \{\mc{[u]}, \mc{[u]?} \;\mid\; \mc{u}\in\mathsf{suptys}(\mc{t})\}\\
+								\mc{[t]} & \mapsto & \{\mc{[t]}, \mc{[t]?}\}\\
 								\mc{(t1...tn)->rt} & \mapsto &
 									\left[
 									\begin{array}{l}

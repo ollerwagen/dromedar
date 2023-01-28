@@ -18,7 +18,7 @@ let rec subtype (t1:ty) (t2:ty) : bool =
           List.for_all2 subtype a2 a1
     | TNullRef t1,    TNullRef t2    -> subtype (TRef t1) (TRef t2)
     | TRef t1,        TNullRef t2    -> subtype (TRef t1) (TRef t2)
-    | TRef (TArr t1), TRef (TArr t2) -> subtype t1 t2
+    | TRef (TArr t1), TRef (TArr t2) -> t1 = t2
     | TTempl _, _ | _, TTempl _      -> Stdlib.failwith "templates not allowed in subtype relation"
     | t1,             t2             -> t1 = t2
   end
@@ -30,8 +30,7 @@ let rec subtys (t:ty) : ty list =
     | TNullRef t                  ->
         let sbts = subtys (TRef t) in
         sbts @ (List.concat @@ List.map (fun t -> begin match t with | TRef t -> [TNullRef t] | _ -> [] end) sbts)
-    | TRef (TArr t)               ->
-        List.map (fun t -> TRef (TArr t)) (subtys t)
+    | TRef (TArr t)               -> [ TRef (TArr t) ]
     | TRef (TFun (args,rt))       ->
         let spts = List.map suptys args in
         let rspts =
@@ -52,9 +51,7 @@ and suptys (t:ty) : ty list =
     | TNullRef t                  ->
         let spts = suptys (TRef t) in
         List.filter (function | TNullRef _ -> true | _ -> false) spts
-    | TRef (TArr t)               ->
-        let spts = suptys t in
-        List.map (fun t -> TRef (TArr t)) spts @ List.map (fun t -> TNullRef (TArr t)) spts
+    | TRef (TArr t)               -> [ TRef (TArr t) ; TNullRef (TArr t) ]
     | TRef (TFun (args,rt))       ->
         let sbts = List.map subtys args in
         let rsbts =
