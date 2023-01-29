@@ -17,8 +17,8 @@
 	morekeywords = [5]{of,in},
 	morekeywords = [6]{printf,sprintf,assert},
 	morekeywords = [7]{module,native},
-	morekeywords = [8]{Str,IO,Util,File,Math,Regex,Sys,Time},
-	morekeywords = [9]{main,of_int,of_flt,print_int,print_flt,print_char,print_bool,print_char,print_str,randint,randflt,readall,sin,cos,tan,e,pi,compile,matches,first_match,all_matches,cmd,fork,clock,time,sleep_for,now,dt,s,ms,us,of_s,of_ms,of_us},
+	morekeywords = [8]{Str,IO,Util,File,Math,Regex,Sys,Time,List,Turtle},
+	morekeywords = [9]{main,of_int,of_flt,print_int,print_flt,print_char,print_bool,print_char,print_str,randint,randflt,readall,sin,cos,tan,e,pi,compile,matches,first_match,all_matches,cmd,fork,clock,time,sleep_for,now,dt,s,ms,us,of_s,of_ms,of_us,map,make,close,fd,bk,lt,rt,penUp,penDn,setPenColor,setPenWidth,showTurtle,hideTurtle},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -58,6 +58,8 @@
 
 \newcommand{\parw}{9cm}
 
+\newenvironment{stdlib}{\begin{longtable}{p{0.2\linewidth}|p{0.4\linewidth}|p{0.3\linewidth}}}{\end{longtable}}
+
 \setcounter{secnumdepth}{4}
 
 \titleformat{\paragraph}
@@ -81,7 +83,7 @@
 	
 	\clearpage
 	
-	\setcounter{tocdepth}{1}
+	\setcounter{tocdepth}{4}
 	\tableofcontents
 	\clearpage
 	
@@ -809,18 +811,18 @@ fn main -> void
 			
 			\subsubsection{\code{Str}: String Operations}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{Str.of_int} & \code{int -> string} & transforms an integer into a string \\
 					\code{Str.of_flt} & \code{flt -> string} & transforms a decimal number into a string
-				\end{longtable}
+				\end{stdlib}
 			
 			\subsubsection{\code{IO}: Standard I/O Operations}
 			
 				Printing operations are always preceded by the \code{IO} library name.
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{IO.print_str} & \code{string -> void} & prints a string to the console\\
@@ -828,28 +830,28 @@ fn main -> void
 					\code{IO.print_flt} & \code{flt -> void} & prints a real number to the console\\
 					\code{IO.print_char} & \code{char -> void} & prints a character to the console\\
 					\code{IO.print_bool} & \code{bool -> void} & prints \code{"true"} or \code{"false"} to the console
-				\end{longtable}
+				\end{stdlib}
 			
 			\subsubsection{\code{Util}: Miscellaneous Utility Functions}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{Util.randint} & \code{() -> int} & random integer from $-2^63$ to $2^63-1$ \\
 					\code{Util.randflt} & \code{() -> flt} & random floating point number in $[0,1)$
-				\end{longtable}
+				\end{stdlib}
 			
 			\subsubsection{\code{File}: File I/O}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{File.readall} & \code{string -> [string]} & returns all lines from the file with the given input name
-				\end{longtable}
+				\end{stdlib}
 			
 			\subsubsection{\code{Math} : Mathematical Operations}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{Math.sin} & \code{flt -> flt} & sine function \\
@@ -857,44 +859,78 @@ fn main -> void
 					\code{Math.tan} & \code{flt -> flt} & tangent function \\
 					\code{Math.e} & \code{flt} & Euler's constant \\
 					\code{Math.pi} & \code{flt} & $\pi$ constant
-				\end{longtable}
+				\end{stdlib}
 			
 			\subsubsection{\code{Regex}: Regular Expressions}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{<type>} & \code{R} & blackbox type that represents a regex automaton \\
-					\code{compile} & \code{string -> R?} & returns \code{null} if the compilation to a regex automaton fails \\
-					\code{matches} & \code{(R,string) -> bool} & finds whether a partial match in the given string exists \\
-					\code{first_match} & \code{(R,string) -> string?} & returns the first regex match (if it exists, else \code{null}) \\
-					\code{all_matches} & \code{(R,string) -> [string]} & finds all matches
-				\end{longtable}
+					\code{Regex.compile} & \code{string -> R?} & returns \code{null} if the compilation to a regex automaton fails \\
+					\code{Regex.matches} & \code{(R,string) -> bool} & finds whether a partial match in the given string exists \\
+					\code{Regex.first_match} & \code{(R,string) -> string?} & returns the first regex match (if it exists, else \code{null}) \\
+					\code{Regex.all_matches} & \code{(R,string) -> [string]} & finds all matches
+				\end{stdlib}
 			
 			\subsubsection{\code{Sys} : System Calls, etc.}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
-					\code{cmd} & \code{string -> int} & executes a shell command \\
-					\code{fork} & \code{() -> int} & executes the \code{fork()} \textsc{Unix} system call
-				\end{longtable}
+					\code{Sys.cmd} & \code{string -> int} & executes a shell command \\
+					\code{Sys.fork} & \code{() -> int} & executes the \code{fork()} \textsc{Unix} system call
+				\end{stdlib}
 			
 			\subsubsection{\code{Time} : Date and Time Utilities}
 			
-				\begin{longtable}{l|l|l}
+				\begin{stdlib}
 					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
 					\midrule
 					\code{<type>} & \code{P} & blackbox type representing a point in time \\
 					\code{<type>} & \code{D} & blackbox type representing a duration \\
-					\code{clock} & \code{() -> int} & the number of clock ticks since the start of the program \\
-					\code{time} & \code{() -> int} & returns the \textsc{Unix} time \\
-					\code{now} & \code{() -> P} & the time point representing the point when \code{now()} was called \\
-					\code{dt} & \code{(P,P) -> D} & calculates the time difference between the first and the second time point \\
-					\code{s} & \code{D -> int} & duration in seconds \\
-					\code{ms} & \code{D -> int} & duration in milliseconds \\
-					\code{us} & \code{D -> int} & duration in microseconds
-				\end{longtable}
+					\code{Time.clock} & \code{() -> int} & the number of clock ticks since the start of the program \\
+					\code{Time.time} & \code{() -> int} & returns the \textsc{Unix} time \\
+					\code{Time.now} & \code{() -> P} & the time point representing the point when \code{now()} was called \\
+					\code{Time.dt} & \code{(P,P) -> D} & calculates the time difference between the first and the second time point \\
+					\code{Time.s} & \code{D -> int} & duration in seconds \\
+					\code{Time.ms} & \code{D -> int} & duration in milliseconds \\
+					\code{Time.us} & \code{D -> int} & duration in microseconds \\
+					\code{Time.of_s} & \code{int -> D} & duration from seconds \\
+					\code{Time.of_ms} & \code{int -> D} & duration from milliseconds \\
+					\code{Time.of_us} & \code{int -> D} & duration from microseconds
+				\end{stdlib}
+			
+			\subsubsection{\code{List} : List Manipulation Functions}
+			
+				\begin{stdlib}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{List.map} & \code{(<a>-><b>,[<a>]) -> [<b>]} & applies a function on all elements of a list
+				\end{stdlib}
+			
+		\subsection{Educational Library}
+		
+			Next to the Standard Library, Dromedar also has a library designed for educational purposes -- currently containing a turtle graphics module using \textbf{SFML}. It contains the following functions:
+			
+			\subsubsubsection{\code{Turtle} : Turtle Graphics Module}
+			
+				\begin{stdlib}
+					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\midrule
+					\code{make} & \code{() -> void} & creates a new turtle window \\
+					\code{close} & \code{() -> void} & waits until the user presses the button to close the window \\
+					\code{fd} & \code{flt -> void} & moves the turtle forward \\
+					\code{bk} & \code{flt -> void} & moves the turtle backward \\
+					\code{rt} & \code{flt -> void} & rotates the turtle clockwise \\
+					\code{lt} & \code{flt -> void} & rotates the turtle counterclockwise \\
+					\code{penUp} & \code{() -> void} & turtle stops drawing \\
+					\code{penDn} & \code{() -> void} & turtle starts drawing \\
+					\code{setPenColor} & \code{string -> void} & sets the pen color to the input. If the string is not a color, the program raises an error \\
+					\code{setPenWidth} & \code{flt -> void} & sets the width of the pen \\
+					\code{showTurtle} & \code{() -> void} & shows turtle sprite and animates its movements \\
+					\code{hideTurtle} & \code{() -> void} & hides the turtle and skips through its movements
+				\end{stdlib}
 		
 	\section{Garbage Collection}
 	
@@ -1491,6 +1527,12 @@ f(null of [string], [null of string])
 					\drmrule{S\ruleapp{E}\mc{exp}::\mc{[t]}\ \ S\cup\{(\mc{id},\mc{t},c)\},T,\mc{rt},\top\ruleapp{S}b\Rightarrow S',R,B}{S,T,\mc{rt},L}{S}{\mc{for id in exp b} \Rightarrow S,\bot,\bot}{StmtForIn}
 				\end{align*}
 				
+			\subsubsection{Repeat Statement}
+			
+				\begin{align*}
+					\drmrule{S\ruleapp{E}\mc{x}::\mc{int}\ \ S,T,\mc{rt},\top\ruleapp{S}\mc{b}\Rightarrow S',R,B}{S,T,\mc{rt},L}{S}{\mc{repeat x b} \Rightarrow S,\bot,\bot}{StmtRepeat}
+				\end{align*}
+				
 			\subsubsection{Break and Continue}
 			
 				\begin{align*}
@@ -1639,6 +1681,7 @@ f(null of [string], [null of string])
 				do           ::= /do/
 				while        ::= /while/
 				for          ::= /for/
+				repeat       ::= /repeat/
 				
 				break        ::= /break/
 				continue     ::= /continue/
@@ -1718,7 +1761,7 @@ f(null of [string], [null of string])
 				Statement        ::=
 				    VDeclaration | AssignStmt
 				    | IfStmt | NullCastStmt
-				    | WhileStmt | DoWhileStmt | ForStmt
+				    | WhileStmt | DoWhileStmt | ForStmt | RepeatStmt
 				    | ExprStmt
 				    | %Break | %Continue
 				    | ReturnStmt
@@ -1737,6 +1780,7 @@ f(null of [string], [null of string])
 				ForStmt          ::=
 				    %For %Id %Assign Expr RangeSpecifier Expr Block
 				    | %For %Id %In Expr Block
+				RepeatStmt       ::= %Repeat Expression Block
 				                 
 				RangeSpecifier   ::= %Dots | %DotsPipe | %PipeDots | %PipeDotPipe
 				                 

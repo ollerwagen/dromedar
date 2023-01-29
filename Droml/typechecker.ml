@@ -656,6 +656,14 @@ module TypeChecker = struct
                 ForIn (id',(l',lt),b'), Ctxt.copy_resolved_generics_from c''' c', false, false
             | _ -> raise @@ TypeError (ofnode "for-in loop must have an array expression" lexp)
           end
+      | Repeat (x,b) ->
+          let c',x' = check_exp c (Some TInt) false x in
+          begin match snd x' with
+            | TInt -> 
+                let b',c'',_,_ = check_stmt_block rt true c' b in
+                For (gensym "repeat", (LitInt 0L, TInt), Incl, Excl, x', b'), Ctxt.copy_resolved_generics_from c'' c', false, false
+            | _ -> raise @@ TypeError (ofnode "repeat expression must be of type int" x)
+          end
       | Break ->
           if inloop then Break, c, false, true
           else raise @@ TypeError (ofnode "cannot use break statement outside of loop" s)

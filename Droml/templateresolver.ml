@@ -230,6 +230,7 @@ module TemplateResolver = struct
       | DoWhile (e,b)          -> DoWhile (r_e e, r_b b)
       | For (id,e1,i1,i2,e2,b) -> For (id, r_e e1, i1, i2, r_e e2, r_b b)
       | ForIn (id,e,b)         -> ForIn (id, r_e e, r_b b)
+      | Repeat (x,b)           -> Repeat (r_e x, r_b b)
       | Break                  -> Break
       | Continue               -> Continue
       | Return None            -> Return None

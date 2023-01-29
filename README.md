@@ -7,6 +7,10 @@ Because I am currently working on the language, it is likely that programs that 
 
 The [Documentation](Doc/Doc.pdf) contains extensive documentation, including a formal grammar and typing specification. The [Examples](Droml/ExamplePrograms/) folder contains some example programs with functionality that is already implemented.
 
+## Copyright Notice
+
+I created the [Turtle Graphics Module](Droml/cutils/edulib/) with [SFML](https://www.sfml-dev.org/index.php), which is free to use under the [ZLib](https://opensource.org/licenses/Zlib) license.
+
 ## Using The Compiler
 
 In order to compile the compiler, you will need `clang`, `make` and `ocaml` installed.

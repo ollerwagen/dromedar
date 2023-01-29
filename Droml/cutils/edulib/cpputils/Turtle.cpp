@@ -3,6 +3,7 @@
 #include <cctype>
 #include <unordered_map>
 #include <string>
+#include <set>
 
 #include "SFML/System/Time.hpp"
 #include "SFML/Graphics.hpp"
@@ -135,11 +136,47 @@ extern "C" {
         float x_step = std::sin(angle);
         float y_step = -std::cos(angle);
 
+        if (steps < 0) {
+            steps = -steps;
+            x_step = -x_step;
+            y_step = -y_step;
+        }
+
+        if (!show_turtle) {
+            int steps_i = steps;
+            std::set<std::pair<int, int>> positions;
+            float xpos = turtle->getPosition().x, ypos = turtle->getPosition().y;
+
+            positions.insert(std::make_pair((int) xpos, (int) ypos));
+            for (int i = 0; i < steps_i; i++) {
+                xpos += x_step;
+                ypos += y_step;
+                
+                for (int jx = xpos - pen_width; jx <= xpos + pen_width; jx++)
+                    for (int jy = ypos - pen_width; jy <= ypos + pen_width; jy++)
+                        if ((jx - xpos) * (jx - xpos) + (jy - ypos) * (jy - ypos) <= pen_width * pen_width)
+                            positions.insert(std::make_pair(jx, jy));
+            }
+
+            xpos += (steps - steps_i) * x_step;
+            ypos += (steps - steps_i) * y_step;
+
+            for (auto it : positions) {
+                if (0 <= it.first && it.first < WINDOWSIZE && 0 <= it.second && it.second < WINDOWSIZE)
+                    (*pixels)[it.first * WINDOWSIZE + it.second].color = pen_color;
+            }
+
+            turtle->setPosition(xpos, ypos);
+
+            draw();
+
+            return;
+        }
+
         sf::Clock clock;
 
         while (steps > 0) {
-            if (show_turtle)
-                sf::sleep(SLEEP_TIME - clock.restart());
+            sf::sleep(SLEEP_TIME - clock.restart());
 
             float next_steps = std::min(TURT_SPEED / FPS, steps);
 
@@ -170,13 +207,17 @@ extern "C" {
 
         float angle = angle_;
 
+        if (!show_turtle) {
+            turtle->setRotation(turtle->getRotation() + angle);
+            return;
+        }
+
         float step_angle = std::abs(angle);
         bool right = angle > 0.0f;
 
         sf::Clock clock;
         while (step_angle > 0) {
-            if (show_turtle)
-                sf::sleep(SLEEP_TIME - clock.restart());
+            sf::sleep(SLEEP_TIME - clock.restart());
 
             float next_rotation = std::min(ANGL_SPEED / FPS, step_angle);
             turtle->setRotation(turtle->getRotation() + (right ? next_rotation : -next_rotation));

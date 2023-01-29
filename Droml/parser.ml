@@ -642,6 +642,13 @@ module Parser = struct
         | _ -> raise @@ ParseError (ofnode "expected either an assignment or a range list with 'in'" (peek s'' indent))
       end
 
+    and parse_repeat_stmt (s : state) (indent : int) : stmt node list * state =
+      let start = (peek s indent).start in
+      let s' = expect s indent Token.KRepeat in
+      let x,s'' = parse_exp s' indent in
+      let b,s''' = parse_block s'' (indent+1) in
+      [ { t = Repeat (x,b) ; start = start ; length = (peek s''' indent).start - start } ], s'''
+
     and parse_break_stmt (s : state) : stmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KBreak in
@@ -674,6 +681,7 @@ module Parser = struct
       | Token.KWhile            -> parse_while_stmt        s' indent
       | Token.KDo               -> parse_dowhile_stmt      s' indent
       | Token.KFor              -> parse_for_stmt          s' indent
+      | Token.KRepeat           -> parse_repeat_stmt       s' indent
       | Token.KBreak            -> parse_break_stmt        s'
       | Token.KContinue         -> parse_continue_stmt     s'
       | Token.KReturn           -> parse_return_stmt       s' indent

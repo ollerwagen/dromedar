@@ -94,6 +94,7 @@ module Lexer = struct
     ; "denull",   KDenull
     ; "while",    KWhile
     ; "for",      KFor
+    ; "repeat",   KRepeat
     ; "do",       KDo
     ; "break",    KBreak
     ; "continue", KContinue
