@@ -109,7 +109,7 @@ module Lexer = struct
     ; Flt,         "[0-9]+\\.[0-9]+"
     ; Int,         "[0-9]+"
     ; Char,        "'[^'\\\\]'"
-    ; CharEscape,  "'\\\\[nrt'\\\\]'"
+    ; CharEscape,  "'\\\\[nrt'0\\\\]'"
     ; Whitespace,  "[ \n\r\t]+"
     ; Comment,     "#.*"
     ]
@@ -140,7 +140,7 @@ module Lexer = struct
     if String.length s' = 1 then LChar (String.get s' 0)
     else if String.length s' = 2 then
       LChar (begin match String.get s' 1 with
-                     | 'n' -> '\n' | 't' -> '\t' | 'r' -> '\r' | '\\' -> '\\' | '\'' -> '\''
+                     | 'n' -> '\n' | 't' -> '\t' | 'r' -> '\r' | '\\' -> '\\' | '\'' -> '\'' | '0' -> Char.chr 0
                      | _ -> raise @@ LexError { t = "illegal escape character format"; start = start; length = String.length s }
                    end)
     else raise @@ LexError { t = "illegal character format"; start = start; length = String.length s }

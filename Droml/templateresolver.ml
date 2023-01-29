@@ -115,7 +115,7 @@ module TemplateResolver = struct
     let resolve_solution (ts : (string * ty) list) : ty list -> ty list =
       let rec aux (t:ty) : ty =
         begin match t with
-          | TInt | TFlt | TChar | TBool | TRef TStr -> t
+          | TInt | TFlt | TChar | TBool -> t
           | TNullRef t ->
               begin match aux (TRef t) with
                 | TRef t -> TNullRef t
@@ -157,7 +157,7 @@ module TemplateResolver = struct
 
   let rec resolve_ty (ts:t) (t : ty node) : ty node =
     begin match t.t with
-      | TInt | TFlt | TChar | TBool | TRef TStr | TRef (TNamed _) | TRef (TModNamed _) -> t
+      | TInt | TFlt | TChar | TBool | TRef (TNamed _) | TRef (TModNamed _) -> t
       | TNullRef rty ->
           let t' = resolve_ty ts (ofnode (TRef rty) t) in
           begin match t'.t with

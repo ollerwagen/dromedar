@@ -26,7 +26,6 @@ let rec subtype (t1:ty) (t2:ty) : bool =
 let rec subtys (t:ty) : ty list =
   begin match t with
     | TInt | TFlt | TChar | TBool -> [t]
-    | TRef TStr                   -> [TRef TStr]
     | TNullRef t                  ->
         let sbts = subtys (TRef t) in
         sbts @ (List.concat @@ List.map (fun t -> begin match t with | TRef t -> [TNullRef t] | _ -> [] end) sbts)
@@ -47,7 +46,6 @@ let rec subtys (t:ty) : ty list =
 and suptys (t:ty) : ty list =
   begin match t with
     | TInt | TFlt | TChar | TBool -> [t]
-    | TRef TStr                   -> [TRef TStr ; TNullRef TStr]
     | TNullRef t                  ->
         let spts = suptys (TRef t) in
         List.filter (function | TNullRef _ -> true | _ -> false) spts

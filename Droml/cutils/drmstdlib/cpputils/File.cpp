@@ -42,12 +42,12 @@ extern "C" {
             _addchild((i8*) res, (i8*) res->base[i]);
             _removeref((i8*) res->base[i]);
 
-            res->base[i]->size = strvec.at(i).length() + 1;
+            res->base[i]->size = strvec.at(i).length();
             res->base[i]->base = _allocate(res->base[i]->size);
             _addchild((i8*) res->base[i], res->base[i]->base);
             _removeref(res->base[i]->base);
             
-            strcpy(res->base[i]->base, strvec.at(i).c_str());
+            memcpy(res->base[i]->base, strvec.at(i).c_str(), res->base[i]->size);
         }
 
         return res;

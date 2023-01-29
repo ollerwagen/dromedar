@@ -64,7 +64,6 @@ module Translator = struct
 
   and cmp_rty (rt : Ast.rty) : Ll.llty =
     begin match rt with
-      | TStr         -> cmp_rty (TArr TChar) (* strings are essentially just char-arrays *)
       | TArr t       -> Struct [ I64 ; cmp_lllty t ]
       | TNamed _     -> I8
       | TModNamed _  -> I8
@@ -102,6 +101,14 @@ module Translator = struct
     let isym = gensym "removeref" in
     [ I (Bitcast (isym, fst r, snd r, Ptr I8))
     ; I (Call (None, Void, Gid "_removeref", [ Ptr I8, Id isym ]))
+    ]
+  
+  let swapchild (parent : llty * operand) (before : llty * operand) (after : llty * operand) : stream =
+    let psym, bsym, asym = gensym "swapchild", gensym "swapchild", gensym "swapchild" in
+    [ I (Bitcast (psym, fst parent, snd parent, Ptr I8))
+    ; I (Bitcast (bsym, fst before, snd before, Ptr I8))
+    ; I (Bitcast (asym, fst after,  snd after,  Ptr I8))
+    ; I (Call (None, Void, Gid "_swapchild", [ Ptr I8, Id psym ; Ptr I8, Id bsym ; Ptr I8, Id asym ]))
     ]
 
   let addref(r : llty * operand) : stream =
@@ -176,16 +183,8 @@ module Translator = struct
       ; (Logxor, TBool, TBool), (TBool, Xor )
       ] in
 
-    let str_bops : ((Ast.bop * Ast.ty * Ast.ty) * (string * Ast.ty)) list =
-      [ (Add, TRef TStr, TRef TStr), ("_strconcat", TRef TStr)
-      ; (Mul, TRef TStr, TInt),      ("_strmul_1",  TRef TStr)
-      ; (Mul, TInt,      TRef TStr), ("_strmul_2",  TRef TStr) 
-      ] in
-
     let bop_cast ((lt,lllt,lop) : ty * llty * operand) ((rt,rllt,rop) : ty * llty * operand) : (ty * llty * operand) * (ty * llty * operand) * stream =
       begin match lt,rt with
-        | TInt,TInt | TFlt,TFlt | TBool,TBool | TChar,TChar -> (lt,lllt,lop), (rt,rllt,rop), []
-        | TRef TStr, TRef TStr | TRef TStr, TInt | TInt, TRef TStr -> (lt,lllt,lop), (rt,rllt,rop), []
         | TInt,TChar ->
             let charcastop = gensym "charcast" in
             (rt, rllt, Id charcastop), (rt,rllt,rop), [ I (Bitcast (charcastop, lllt, lop, rllt)) ]
@@ -198,7 +197,7 @@ module Translator = struct
         | TFlt,TInt ->
             let fltcastop = gensym "fltcast" in
             (lt,lllt,lop), (lt, lllt, Id fltcastop), [ I (Bitcast (fltcastop, rllt, rop, lllt)) ]
-        | _ -> (lt,lllt,lop), (rt,rllt,rop), [] (* Stdlib.failwith "bop_cast: no cast found" *)
+        | _ -> (lt,lllt,lop), (rt,rllt,rop), []
       end
     in
 
@@ -235,40 +234,6 @@ module Translator = struct
       | LitChar c, t  -> Ll.IConst (Int64.of_int @@ Char.code c), cmp_ty t, [], false, []
       | LitBool b, t  -> Ll.IConst (if b then 1L else 0L), cmp_ty t, [], false, []
       
-      | LitStr  s, st ->
-          let strlen = Int64.of_int (String.length s + 1) in
-          let str_obj_ty, str_ty = cmp_ty st, Ptr (Array (0L, I8)) in
-          let rsym, strsym = gensym "str", gensym "str" in
-          let gsym, gsym_t = gensym "gstr", Array (strlen, I8) in
-          let size_ptr, str_ptr = gensym "arrsize", gensym "arrdata" in
-          let lsym_as_ptr, strsym_as_ptr = gensym "lsym_ptr", gensym "strsym_ptr" in
-          let alloc_obj = allocate (IConst 24L) str_obj_ty rsym in
-          let alloc_str = allocate (IConst strlen) str_ty strsym in
-
-          Id rsym, str_obj_ty,
-
-          (* allocate memory space for string structure and char array *)
-          alloc_obj @ alloc_str @        
-          (* add GC child from string structure to char array *)
-          addchild (str_obj_ty, Id rsym) (str_ty, Id strsym) @
-          removeref (str_ty, Id strsym) @
-            (* create global string symbol *)
-          [ G (GDecl (gsym, gsym_t, Str s))
-            (* cast global char array to char pointer *)
-          ; I (Gep (size_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 0L ]))
-          ; I (Gep (str_ptr, str_obj_ty, Id rsym, [ IConst 0L; IConst 1L ]))
-            (* copy char array into string symbol *)
-          ; I (Bitcast (lsym_as_ptr, Ptr gsym_t, Gid gsym, Ptr I8))
-          ; I (Bitcast (strsym_as_ptr, str_ty, Id strsym, Ptr I8))
-          ; I (Call (None, Void, Gid "_memcpy", [Ptr I8, Id lsym_as_ptr ; Ptr I8, Id strsym_as_ptr ; I64, IConst strlen]))
-            (* store that pointer in the string pointer in the char structure *)
-          ; I (Store (str_ty, Id strsym, Id str_ptr))
-            (* store the size in the size field in the string structure *)
-          ; I (Store (I64, IConst strlen, Id size_ptr))
-          ],
-          true,
-          []
-      
       | LitArr es, t ->
           let rsym, asym = gensym "array", gensym "array" in
           let size_ptr, arr_ptr = gensym "sizeptr", gensym "arrptr" in
@@ -282,7 +247,7 @@ module Translator = struct
           let c_t, c_et = cmp_ty t, cmp_ty elemt in
           let arr_elemt = Array (0L, c_et) in
 
-          let alloc_obj = allocate (IConst 16L) c_t rsym in
+          let alloc_obj = allocate (IConst (Int64.of_int @@ size_ty @@ deptr c_t)) c_t rsym in
           let alloc_arr = allocate (IConst (Int64.of_int (arrlen * size_ty c_et))) (Ptr arr_elemt) asym in
 
           let c_exps = List.map (cmp_exp c) es in
@@ -455,30 +420,28 @@ module Translator = struct
           let cmpd_es = List.map (cmp_exp c) es in
           let substrings = Str.full_split (Str.regexp "{[0-9]}") s in
           let arggcs = List.concat (List.map (fun (op,llt,_,gc,_) -> if gc then removeref (llt,op) else []) cmpd_es) in
-          let strty = cmp_ty (TRef TStr) in
+          let strty = cmp_ty (TRef (TArr TChar)) in
           let args_cmpd = List.concat @@ List.map (fun (_,_,s,_,_) -> s) cmpd_es in
           let makestr_instrs =
             List.map
             (function
               | Str.Text s ->
-                  let op,_,instrs,gc,fs = cmp_exp c (LitStr s, TRef TStr) in
+                  let op,_,instrs,gc,fs = cmp_exp c (LitArr (String.fold_left (fun l c -> l @ [ LitChar c, TChar ]) [] s), TRef (TArr TChar)) in
                   op, instrs, gc, fs
               | Str.Delim s ->
                   let index = Stdlib.int_of_string @@ String.sub s 1 @@ String.length s - 2 in
                   let (op,llt,_,gc,fs), (_,t) = List.nth cmpd_es index, List.nth es index in
                   let rsym, casted_op = gensym "op", gensym "casted_sprintf_op" in
                   begin match t with
-                    | TRef TStr -> op, [], false, fs
-                    | TNullRef TStr -> Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_str", [ I64, Id casted_op ])) ], true, fs
+                    | TRef (TArr TChar) -> op, [], false, fs
                     | TRef (TArr t) | TNullRef (TArr t) ->
                         let arrdepth, lowest_ty = walk_arr t in
-                        let lowest_function =
+                        let lowest_function, arrdepth, lowest_ty =
                           begin match lowest_ty with
-                            | TInt  -> "_sprintf_int"
-                            | TFlt  -> "_sprintf_flt"
-                            | TChar -> "_sprintf_char"
-                            | TBool -> "_sprintf_bool"
-                            | TRef TStr | TNullRef TStr -> "_sprintf_str"
+                            | TInt  -> "_sprintf_int",  arrdepth, lowest_ty
+                            | TFlt  -> "_sprintf_flt",  arrdepth, lowest_ty
+                            | TChar -> "_sprintf_str", arrdepth - 1, TRef (TArr TChar)
+                            | TBool -> "_sprintf_bool", arrdepth, lowest_ty
                             | _     -> Stdlib.failwith "cannot print this type"
                           end in
                         Id rsym, [ I (Bitcast (casted_op, llt, op, I64)) ; I (Call (Some rsym, strty, Gid "_sprintf_array", [ I64, Id casted_op ; I64, IConst (Int64.of_int (arrdepth + 1)) ; I64, IConst (Int64.of_int (size_ty (cmp_ty lowest_ty))) ; Ptr (Func ([I64], strty)), Gid lowest_function ])) ], true, fs
@@ -512,12 +475,20 @@ module Translator = struct
 
           let gcops = (if gc1 then removeref (llt1,op1) else []) @ (if gc2 then removeref (llt2,op2) else []) in
 
-          begin match snd l, snd r with
-            | TRef TStr, TRef TStr | TRef TStr, TInt | TInt, TRef TStr ->
-                let fname,rt = List.assoc (op,snd l,snd r) str_bops in
-                Id rsym, cmp_ty rt,
-                s1 @ s2 @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1 ; llt2, op2 ]))] @ gcops, true, fs
-            | TRef (TArr t1), TRef (TArr t2) ->
+          begin match snd l, snd r, op with
+            | TRef (TArr t), TInt, Mul ->
+                let reduced_t = cmp_ty (TRef (TArr TChar)) in
+                let uncasted_res, casted_arr = gensym "binop", gensym "blindarr_casted" in
+                let elemsize = size_ty (cmp_ty t) in
+                Id rsym, llt1, s1 @ s2 @
+                  [ I (Bitcast (casted_arr, llt1, op1, reduced_t))
+                  ; I (Call (Some uncasted_res, reduced_t, Gid "_arrmul", [ reduced_t, Id casted_arr ; I64, IConst (Int64.of_int elemsize) ; llt2, op2 ; I1, IConst (match t with | TRef _ | TNullRef _ -> 1L | _ -> 0L) ]))
+                  ; I (Bitcast (rsym, reduced_t, Id uncasted_res, cmp_ty (TRef (TArr t))))
+                  ] @ gcops,
+                true, fs
+            | TInt, TRef (TArr t), Mul ->
+                cmp_exp c (Bop (Mul, r, l), t)
+            | TRef (TArr t1), TRef (TArr t2), Add ->
                 let elemsize =
                   begin match llt1 with
                     | Ptr (Struct [_; Ptr (Array (_, llt))]) -> size_ty llt
@@ -600,7 +571,7 @@ module Translator = struct
                 let cmpop = List.assoc op cmpop_to_ll in
                 let cmpstream =
                   begin match lt, snd rexp, isnonrefop op with
-                    | TRef TStr, TRef TStr, true ->
+                    | TRef (TArr TChar), TRef (TArr TChar), true ->
                         let cmpres = gensym "cmpstr" in
                         [ I (Call (Some cmpres, I64, Gid "_strcmp", [ lllt, lop ; rllt, rop ]))
                         ; I (Cmp (nextres, ICmp, cmpop, I64, Id cmpres, IConst 0L)) ]
@@ -773,7 +744,7 @@ module Translator = struct
       | Proj (lhs,id), t ->
           let op,llt,s,gc,fs = cmp_exp c lhs in
           begin match (snd lhs), id with
-            | TRef (TArr t), "length" ->
+            | TRef (TArr _), "length" ->
                 let rptr, rsym = gensym "lenptr", gensym "lenval" in
                 Id rsym, I64,
                 s @ [ I (Gep (rptr, llt, op, [ IConst 0L ; IConst 0L ])) ; I (Load (rsym, I64, Id rptr)) ] @ (if gc then removeref (llt,op) else []),
@@ -794,20 +765,22 @@ module Translator = struct
             end
 
       | Subscript (b,o), t ->
-          let (bop,bllt,bs,bgc,bfs), (oop,ollt,os,_,ofs) = cmp_exp c b, cmp_exp c o in
-          let c_t, c_et = cmp_ty (snd b), cmp_ty t in
-          let rsym, arr_ptr, arr_op = gensym "subscript", gensym "sub_arr_ptr", gensym "sub_arr_op" in
-          Id rsym, Ptr (cmp_ty t),
-          bs @ os @
-          [ I (Gep (arr_ptr, c_t, bop, [ IConst 0L ; IConst 1L ]))
-          ; I (Load (arr_op, Ptr (Array (0L, c_et)), Id arr_ptr))
-          ; I (Gep (rsym, Ptr (Array (0L, c_et)), Id arr_op, [ IConst 0L ; oop ]))
-          ],
-          (if bgc then removeref (bllt,bop) else []),
-          union bfs ofs
+          let (bop,bllt,bs,bgc), (oop,ollt,os), (rsym,rllt,rs), fs = cmp_subscript c b o t in
+          rsym, rllt, bs @ os @ rs, (if bgc then removeref(bllt,bop) else []), fs
 
       | _     -> Stdlib.failwith "lhs unimplemented"
     end
+
+  and cmp_subscript (c:Ctxt.t) (b : annt_exp) (o : annt_exp) (t:ty) : (operand * llty * stream * bool) * (operand * llty * stream) * (operand * llty * stream) * string list =
+    let (bop,bllt,bs,bgc,bfs), (oop,ollt,os,_,ofs) = cmp_exp c b, cmp_exp c o in
+    let rsym, arr_p, arr_op = gensym "subscript", gensym "subscript", gensym "subscript" in
+    (bop,bllt,bs,bgc), (oop,ollt,os),
+    (Id rsym, Ptr (cmp_ty t),
+    [ I (Gep (arr_p, bllt, bop, [ IConst 0L ; IConst 1L ]))
+    ; I (Load (arr_op, cmp_lllty t, Id arr_p))
+    ; I (Gep (rsym, cmp_lllty t, Id arr_op, [ IConst 0L ; oop ]))
+    ]),
+    union bfs ofs
   
   (* string list is list of all variables that need to be gc'd at a return statement *)
   (* refvars: all GC-able variables in scope in the function at any given moment *)
@@ -857,7 +830,7 @@ module Translator = struct
           let lbltrue, lblfalse = gensym "assert_true", gensym "assert_false" in
           let op,llt,s,_,efs = cmp_exp c e in
           let failstring = Printf.sprintf "Assertion failure in {%s}\nAborting.\n" em in
-          let fop,fllt,fs,fgc,ffs = cmp_exp c (LitStr failstring, TRef TStr) in
+          let fop,fllt,fs,fgc,ffs = cmp_exp c (LitArr (String.fold_left (fun l c -> l @ [ LitChar c, TChar ]) [] failstring), TRef (TArr TChar)) in
           c,
           s @
           [ T (Cbr (op, lbltrue, lblfalse)) ; L lblfalse ] @
@@ -874,14 +847,18 @@ module Translator = struct
       | Assn (l,r) ->
           let (lop,lllt,ls,lgc,lfs), (rop,rllt,rs,rgc,rfs) = cmp_lhs c l, cmp_exp c r in
           let (rllt,rop),crosscaststream = cross_cast (snd l) (snd r, rllt, rop) in
-          let gc_prevval =
-            begin match snd l with
-              | TRef _ ->
-                  let gcobj, lllt' = gensym "gc_prevval", deptr lllt in
-                  [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt',Id gcobj) @ (if rgc then [] else addref (rllt, rop))
-              | _ -> [] (* do not attempt to gc primitives *)
-            end in
-          c, ls @ rs @ crosscaststream @ gc_prevval @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars, bcvars, union lfs rfs
+          begin match l with
+            | Subscript (b,o), TRef t | Subscript (b,o), TNullRef t ->
+                let gcobj = "gc_prevval" in
+                let (bop,bllt,bs,bgc), (oop,ollt,os), (cmbop,cmbllt,cmbs), fs = cmp_subscript c b o (TRef t) in
+                c, bs @ os @ cmbs @ rs @ crosscaststream @ [ I (Load (gcobj, deptr cmbllt, cmbop)) ] @
+                swapchild (bllt, bop) (deptr cmbllt, Id gcobj) (rllt, rop) @ [ I (Store (rllt, rop, cmbop)) ] @ (if bgc then removeref(bllt,bop) else []) @ (if rgc then removeref (rllt,rop) else []),
+                refvars, bcvars, union fs rfs
+            | _, TRef t | _, TNullRef t ->
+                let gcobj, lllt' = gensym "gc_prevval", deptr lllt in
+                c, ls @ rs @ crosscaststream @ [ I (Load (gcobj, lllt', lop)) ] @ removeref (lllt', Id gcobj) @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars, bcvars, union lfs rfs
+            | _ -> c, ls @ rs @ crosscaststream @ [ I (Store (rllt, rop, lop)) ] @ lgc, refvars, bcvars, union lfs rfs
+          end
 
       | Expr (e,t) ->
           let op,llt,s,gc,fs = cmp_exp c (e, match t with | None -> TypeChecker.void_placeholder | Some t -> t) in
@@ -1091,25 +1068,6 @@ module Translator = struct
       | LitBool b, t -> IConst (if b then 1L else 0L), cmp_ty t, [], []
       | LitChar c, t -> IConst (Int64.of_int (Char.code c)), cmp_ty t, [], []
 
-      | LitStr  s, t ->
-          let rsym, strsym, strsym' = gensym "globalstring", gensym "globalstring", gensym "globalstring" in
-          let strp, data_p, strp_datap = gensym "globalstring", gensym "globalstring_chararr", gensym "globalstring_chararr_casted" in
-          let strlen = Int64.of_int @@ String.length s + 1 in
-          Gid rsym, cmp_ty (TRef TStr),
-          [ GDecl (rsym, deptr (cmp_ty (TRef TStr)), SConst [ I64, IConst strlen ; cmp_lllty TChar, Null ])
-          ; GDecl (strsym, Array (strlen, I8), Str s)
-          ],
-          destream (addref (cmp_ty (TRef TStr), Gid rsym)) @
-          destream (allocate (IConst strlen) (Ptr I8) strp) @
-          [ Gep (data_p, cmp_ty (TRef TStr), Gid rsym, [ IConst 0L ; IConst 1L ])
-          ; Bitcast (strsym', Ptr (Array (strlen, I8)), Gid strsym, Ptr I8)
-          ; Call (None, Void, Gid "_memcpy", [ Ptr I8, Id strsym' ; Ptr I8, Id strp ; I64, IConst strlen ])
-          ; Bitcast (strp_datap, Ptr I8, Id strp, cmp_lllty TChar)
-          ; Store (cmp_lllty TChar, Id strp_datap, Id data_p)
-          ] @
-          destream (addchild (cmp_ty (TRef TStr), Gid rsym) (Ptr I8, Id strp)) @
-          destream (removeref (Ptr I8, Id strp))
-
       | LitArr es, TRef (TArr et) ->
           let rsym, data_p, data, data' = gensym "array", gensym "array", gensym "array", gensym "array" in
 
@@ -1257,7 +1215,7 @@ module Translator = struct
     [ FDecl ("main", I64, [ I64, "argc" ; Ptr (Ptr I8), "argv" ],
         let rval, strvec = gensym "mainret", gensym "strvec" in
         let main_fppp, main_fpp, main_fp, main_asip = gensym "main_ppp", gensym "main_pp", gensym "main_p", gensym "main_ip" in
-        let strvecty = TRef (TArr (TRef TStr)) in
+        let strvecty = TRef (TArr (TRef (TArr TChar))) in
         let mt, mllt, mainop = Ctxt.get c main_id in
         let mainargs, mainret =
           begin match mt with
@@ -1290,9 +1248,9 @@ module Translator = struct
                 [ Call (None, Void, Id main_fp, [ Ptr I64, Id main_asip ]) ], Ret (Some (I64, IConst 0L)), false
             | TRef (TFun ([], Ret TInt)) ->
                 [ Call (Some rval, cmp_ty TInt, Id main_fp, [ Ptr I64, Id main_asip ]) ], Ret (Some (I64, Id rval)), false
-            | TRef (TFun ([TRef (TArr (TRef TStr))], Void)) ->
+            | TRef (TFun ([TRef (TArr (TRef (TArr TChar)))], Void)) ->
                 [ Call (None, Void, Id main_fp, [ Ptr I64, Id main_asip ; cmp_ty strvecty, Id strvec ]) ], Ret (Some (I64, IConst 0L)), true
-            | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)) ->
+            | TRef (TFun ([TRef (TArr (TRef (TArr TChar)))], Ret TInt)) ->
               [ Call (Some rval, cmp_ty TInt, Id main_fp, [ Ptr I64, Id main_asip ; cmp_ty strvecty, Id strvec ]) ], Ret (Some (I64, Id rval)), true
             | _ -> Stdlib.failwith "bad main function"
           end in

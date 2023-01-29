@@ -29,12 +29,12 @@ extern "C" {
         std::string match = std::cregex_iterator(s->base, s->base + s->size, * (std::regex*) r)->str();
 
         string* res = (string*) _allocate(sizeof(string));
-        res->size = match.length() + 1;
+        res->size = match.length();
         res->base = _allocate(res->size);
         _addchild((i8*) res, res->base);
         _removeref(res->base);
 
-        strcpy(res->base, match.c_str());
+        memcpy(res->base, match.c_str(), res->size);
 
         return res;
     }
@@ -51,11 +51,11 @@ extern "C" {
 
         for (i64 i = 0; i < res->size; i++, ++it) {
             string* match = (string*) _allocate(sizeof(string));
-            match->size = it->str().length() + 1;
+            match->size = it->str().length();
             match->base = _allocate(match->size);
             _addchild((i8*) match, match->base);
             _removeref((i8*) match->base);
-            strcpy(match->base, it->str().c_str());
+            memcpy(match->base, it->str().c_str(), match->size);
             res->base[i] = match;
             _addchild((i8*) res, (i8*) res->base[i]);
             _removeref((i8*) match);

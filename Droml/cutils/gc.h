@@ -11,6 +11,7 @@ extern "C" {
     void  _removeref(ptr);
     ptr   _allocate(size);
     void  _addref(ptr);
+    void  _swapchild(ptr,ptr,ptr);
     void  _addchild(ptr,ptr);
 
     void _transferchildren(ptr,ptr);

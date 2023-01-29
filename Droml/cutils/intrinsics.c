@@ -32,13 +32,12 @@ stringarr* _makestrvec(i64 argc, i8** argv) {
         _removeref((i8*) res->base[i]);
 
         string* arrval = (string*) res->base[i];
-        arrval->size = strlen(str) + 1;
+        arrval->size = strlen(str);
         arrval->base = _allocate(arrval->size);
         _addchild((i8*) arrval, arrval->base);
         _removeref((i8*) arrval->base);
 
-        strcpy(arrval->base, str);
-        arrval->base[arrval->size - 1] = '\0';
+        memcpy(arrval->base, str, arrval->size);
     }
 
     return res;
@@ -72,10 +71,10 @@ void _memcpy(i8 *from, i8 *to, i64 size) {
 
 
 string* _strconcat(string *a, string *b) {
-    string* res = allocate_string(a->size + b->size - 1);
+    string* res = allocate_string(a->size + b->size);
 
-    strcpy(res->base, a->base);
-    strcat(res->base, b->base);
+    memcpy(res->base, a->base, a->size);
+    memcpy(res->base + a->size, b->base, b->size);
 
     return res;
 }
@@ -84,11 +83,13 @@ string* _strmul_1(string *s, i64 count) {
     if (count < 0)
         count = 0;
     
-    string* res = allocate_string(count * (s->size - 1) + 1);
+    string* res = allocate_string(count * s->size + 1);
 
-    strcpy(res->base, "");
-    for (i64 i = 0; i < count; i++)
-        strcat(res->base, s->base);
+    int index = 0;
+    for (i64 i = 0; i < count; i++) {
+        memcpy(res->base + index, s->base, s->size);
+        index += s->size;
+    }
     
     return res;
 }
@@ -124,32 +125,34 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
     return res;
 }
 
-/*
-static inline i64 max(i64 a, i64 b) {
-    return a > b ? a : b;
-}
-    
+blindarr* _arrmul(blindarr *a, i64 elemsize, i64 factor, i1 areptrs) {
+    // printf("arrmul(%p, %ld, %ld, %s)\n", a, elemsize, factor, areptrs ? "true" : "false");
 
-static inline blindarr* _makerangelist_basic(i64 start, i64 end, i64 elemsize, i64 elemflag, bool inclstart, bool inclend) {
-    if (start < end) {
-        if (!inclstart) ++start;
-        if (!inclend) --end;
-        blindarr* res = allocate_blindarr(max(end - start + 1, 0), elemsize);
-        for (i64 i = 0; i < res->size; i++) {
-            * (i64*) (res->base + elemsize * i) &= ~elemflag;
-            * (i64*) (res->base + elemsize * i) |= ((start + i) & elemflag);
-        }
-        return res;
-    } else {
-        if (!inclstart) --start;
-        if (!inclend) ++end;
-        blindarr* res = allocate_blindarr(max(start - end + 1, 0), elemsize);
-        for (i64 i = res->size - 1; i >= 0; i--) {
-            * (i64*) (res->base + elemsize * i) |= ((start - i) & elemflag);
-        }
-        return res;
+    i64 actualsize = a->size * elemsize;
+
+    if (factor < 0)
+        factor = 0;
+
+    blindarr *res = (blindarr*) _allocate(sizeof(blindarr));
+    res->base = _allocate(actualsize * factor);
+    res->size = a->size * factor;
+
+    _addchild((i8*) res, (i8*) res->base);
+    _removeref((i8*) res->base);
+
+    i64 index = 0;
+    for (i64 i = 0; i < factor; i++) {
+        memcpy(res->base + index, a->base, actualsize);
+        index += actualsize;
     }
-}*/
+
+    if (areptrs)
+        for (i64 i = 0; i < factor; i++)
+            for (i64 i = 0; i < a->size; i++)
+                _addchild((i8*) res, (i8*) * (i64*) (a->base + i * elemsize));
+    
+    return res;
+}
 
 chararr* _makerangecharlist(i8 start, i8 end, bool inclstart, bool inclend) {
     return _cpp_rangechar(start, end, inclstart, inclend);
@@ -160,5 +163,8 @@ intarr* _makerangeintlist(i64 start, i64 end, bool inclstart, bool inclend) {
 }
 
 void _print_string(string *s) {
-    printf("%s", s->base);
+    for (int i = 0; i < s->size; i++)
+        putchar(s->base[i]);
 }
+
+

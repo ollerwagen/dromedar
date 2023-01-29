@@ -20,6 +20,7 @@ declare {i64,[0 x i8]*}* @_strmul_2(i64, {i64,[0 x i8]*}*)
 declare i64 @_strcmp({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
 
 declare {i64,[0 x i8]*}* @_arrconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*, i64, i1)
+declare {i64,[0 x i8]*}* @_arrmul({i64,[0 x i8]*}*, i64, i64, i1)
 
 ; range list
 declare {i64,[0 x i64]*}* @_makerangeintlist(i64,i64,i1,i1)
@@ -52,6 +53,9 @@ declare void @_removeref(i8*)
 
 ; adds a program reference to an object in memory
 declare void @_addref(i8*)
+
+; swaps two children of a parent
+declare void @_swapchild(i8*,i8*,i8*)
 
 ; adds a child to an address
 declare void @_addchild(i8*, i8*)

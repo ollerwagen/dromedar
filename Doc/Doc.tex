@@ -910,7 +910,7 @@ fn main -> void
 		
 		Here, $S$ represents a list of stacks (resp. a stack) of symbol definitions: $S \in (\mathsf{id} \times \mathsf{type} \times \{c,m\})^n$ for some block depth $n$ at any given point. In global context, $S$ has only one layer. $\mathsf{id}$ corresponds to the set of names that variables can have (related to the Lexer symbol \texttt{\%Identifier}), $\mathsf{type}$ to the set of types in a given program (related to the Parser symbol \texttt{Type}), and $\{c,m\}$ to the mutability of the object: $c$ represents an immutable value (as declared by \code{let}), and $m$ a mutable one (declared by \code{mut}).
 		
-		Writing $S$ in a proof rule enables access to functions and variables within the same module \code{M}, whereas $S_{\mc{N}}$ corresponds to the context from module \code{N}.
+		Writing $S$ in a proof rule enables access to functions and variables within the same module \code{M} and all modules mentioned in \code{using} directives, whereas $S_{\mc{N}}$ corresponds to the context from module \code{N}.
 		
 		The symbol $\in$ is defined as follows: $s\in S \Leftrightarrow \textnormal{$s$ is contained in \textit{any} layer of $S$}$, whereas $\in_0$ is true only if the symbol is at the top level of the symbol stack (i.e. defined in the same block). The operator $\cup$ on $S$ adds another binding to the top layer of the stack, whereas $\sqcup$ adds another layer to the stack.
 		
@@ -1059,8 +1059,8 @@ fn main -> void
 						\drmrule{}{}{O}{\mc{*} :: \mc{(int,flt)->flt}}{TyBopMulIntFlt},\ \ &
 						\drmrule{}{}{O}{\mc{*} :: \mc{(flt,int)->flt}}{TyBopMulFltInt}
 					\end{align*}\begin{align*}
-						\drmrule{}{}{O}{\mc{*} :: \mc{(int,string)->string}}{TyBopMulIntStr},\ \ &
-						\drmrule{}{}{O}{\mc{*} :: \mc{(string,int)->string}}{TyBopMulStrInt}
+						\drmrule{}{}{O}{\mc{*} :: \mc{(int,[t])->[t]}}{TyBopMulIntStr},\ \ &
+						\drmrule{}{}{O}{\mc{*} :: \mc{([t],int)->[t]}}{TyBopMulStrInt}
 					\end{align*}
 					
 					\begin{align*}
@@ -1535,10 +1535,12 @@ f(null of [string], [null of string])
 					\drmrule{(\mc{id},\_,\_)\not\in S}{S,T}{G}{\mc{native t id} \Rightarrow S\cup\{(\mc{id},\mc{t},c)\},T}{GStmtNativeVDecl}
 				\end{align*}
 				
-			\subsubsection{Module Header}
+			\subsubsection{Module Header, Module Import}
 			
 				\begin{align*}
 					\drmrule{}{S,T}{G}{\mc{module M} \Rightarrow S \textnormal{ where $S_{\mc{M}} = S$ with \code{M} as the only active module},T}{GStmtModule}
+				\end{align*}\begin{align*}
+					\drmrule{}{S,T}{G}{\mc{using M} \Rightarrow S \textnormal{with $S_{\mc{Ms}} = S$ with \code{M} added to the previous modules}, T}{GStmtUsing}
 				\end{align*}
 			
 			\subsubsection{Program}

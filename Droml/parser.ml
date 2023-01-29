@@ -205,7 +205,7 @@ module Parser = struct
         | Token.LBrack  -> parse_arr_ty s
         | Token.KString ->
             let _,s' = advance s indent in
-            TStr, s'
+            TArr TChar, s'
         | Token.Id id ->
             let s' = snd @@ advance s indent in
             begin match (peek s' indent).t with

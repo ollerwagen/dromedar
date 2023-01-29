@@ -49,6 +49,15 @@ module TypeChecker = struct
 
     let has (c:t) (id:string) : bool =
       List.exists (fun m -> has_in_module c m id) (c.current :: c.using)
+    
+    let has_duplicate (c:t) (id:string) : bool =
+      if not @@ List.exists (List.mem_assoc id) (List.tl @@ List.assoc c.current c.bindings) then
+        List.length (List.filter (fun (m,_) -> if List.mem m (c.current :: c.using) then has_in_module c m id else false) c.bindings) > 1
+      else
+        false
+
+    let has_duplicate_namedt (c:t) (id:string) : bool =
+      List.length (List.filter (fun (m,id') -> id = id' && List.mem m (c.current :: c.using)) c.namedts) > 1
 
     let has_toplevel (c:t) (id:string) : bool =
       List.exists (fun m -> List.mem_assoc id (List.hd (List.assoc m c.bindings))) (c.current :: c.using)
@@ -66,6 +75,12 @@ module TypeChecker = struct
 
     let add_namedt (c:t) (id:string) : t =
       add_modnamedt c c.current id
+
+    let get_namedt (c:t) (id:string) : string =
+      begin match List.fold_left (function | Some m -> (fun _ -> Some m) | None -> (fun m -> if has_modnamedt c m id then Some m else None)) None (c.current :: c.using) with
+        | None   -> Printf.printf "get_namedt(%s) unsuccessful: [%s] [%s]\n" id (String.concat ", " (c.current :: c.using)) (String.concat ", " (List.map (fun (m,id) -> Printf.sprintf "%s.%s" m id) c.namedts)); raise Not_found
+        | Some m -> m
+      end
 
     let get_from_module (c:t) (m:string) (id:string) : ty * mutability * string =
       let l = List.assoc m c.bindings in
@@ -175,6 +190,9 @@ module TypeChecker = struct
 
     let add_using (c:t) (id:string) : t =
       { c with using = id :: c.using }
+    
+    let use_none (c:t) : t =
+      { c with using = [] }
 
   end
   
@@ -191,16 +209,16 @@ module TypeChecker = struct
     ]
   
   let bop_types : (bop * ((ty * ty) * ty) list) list =
-    let intop = [(TInt, TInt), TInt] in
-    let fltop = [(TFlt, TFlt), TFlt] in
-    let fltintop = [(TInt, TFlt), TFlt ; (TFlt, TInt), TFlt] in
+    let intop = Ast.[(TInt, TInt), TInt] in
+    let fltop = Ast.[(TFlt, TFlt), TFlt] in
+    let fltintop = Ast.[(TInt, TFlt), TFlt ; (TFlt, TInt), TFlt] in
     let numop = intop @ fltop @ fltintop in
-    let boolop = [(TBool, TBool), TBool] in
-    let numcharop = numop @ [(TInt, TChar), TChar ; (TChar, TInt), TChar] in
+    let boolop = Ast.[(TBool, TBool), TBool] in
+    let numcharop = numop @ Ast.[(TInt, TChar), TChar ; (TChar, TInt), TChar] in
     [ Pow, numop
-    ; Mul, numop @ [(TRef TStr, TInt), TRef TStr ; (TInt, TRef TStr), TRef TStr]
+    ; Mul, numop
     ; Div, numop ; Mod, intop
-    ; Add, numcharop @ [(TRef TStr,TRef TStr), TRef TStr] ; Sub, numcharop
+    ; Add, numcharop ; Sub, numcharop
     ; Shl, intop ; Shr, intop ; Sha, intop
     ; Bitand, intop ; Bitxor, intop ; Bitor, intop
     ; Logand, boolop ; Logxor, boolop ; Logor, boolop
@@ -211,7 +229,7 @@ module TypeChecker = struct
     [ TInt, TInt  ; TFlt,  TFlt
     ; TInt, TFlt  ; TFlt,  TInt
     ; TChar,TChar
-    ; TRef TStr, TRef TStr
+    ; TRef (TArr TChar), TRef (TArr TChar)
     ]
   
   let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
@@ -237,7 +255,7 @@ module TypeChecker = struct
     
   let rec is_printable (t:ty) : bool =
     begin match t with
-      | TInt | TFlt | TChar | TBool | TRef TStr | TNullRef TStr-> true
+      | TInt | TFlt | TChar | TBool -> true
       | TRef (TArr t) | TNullRef (TArr t) -> is_printable t
       | _ -> false
     end
@@ -255,23 +273,30 @@ module TypeChecker = struct
       | _ -> ()
     end
 
-  let rec transform_ty (c:Ctxt.t) (t:ty) : ty =
-    begin match t with
-      | TRef (TNamed id) -> TRef (TModNamed (Ctxt.get_current_module c, id))
-      | TNullRef rty ->
-          let rty' = transform_ty c (TRef rty) in
-          begin match rty' with
-            | TRef rty'' -> TNullRef rty''
-            | _          -> Stdlib.failwith "bad type transformation"
+  let rec transform_ty (c:Ctxt.t) (t : ty node) : ty =
+    begin match t.t with
+      | TRef (TNamed id)        ->
+          if Ctxt.has_duplicate_namedt c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "Named type %s is ambiguous" id) t)
+          else if Ctxt.has_namedt c id then
+            TRef (TModNamed (Ctxt.get_namedt c id, id))
+          else
+            raise @@ TypeError (ofnode (Printf.sprintf "Named type %s does not exist" id) t)
+      | TRef (TModNamed (m,id)) -> TRef (TModNamed (m, id))
+      | TRef (TArr et)          -> TRef (TArr (transform_ty c (ofnode et t)))
+      | TRef (TFun (a,rt))      -> TRef (TFun (List.map (fun at -> transform_ty c (ofnode at t)) a, transform_retty c (ofnode rt t)))
+      | TNullRef rty            ->
+          begin match transform_ty c (ofnode (TRef rty) t) with
+            | TRef t -> TNullRef t
+            | _      -> Stdlib.failwith "bad transform_ty with null types"
           end
-      | TRef (TArr t) -> TRef (TArr (transform_ty c t))
-      | t -> t
+      | t                       -> t
     end
 
-  and transform_retty (c:Ctxt.t) (rt:retty) : retty =
-    begin match rt with
+  and transform_retty (c:Ctxt.t) (rt : retty node) : retty =
+    begin match rt.t with
       | Void  -> Void
-      | Ret t -> Ret (transform_ty c t)
+      | Ret t -> Ret (transform_ty c (ofnode t rt))
     end
 
   let void_placeholder : ty = TRef (TModNamed ("",""))
@@ -281,13 +306,16 @@ module TypeChecker = struct
     begin match e.t with
       | Id id ->
           if Ctxt.has c id then 
-            let t,_,id' = Ctxt.get c id in c, (Id id', t)
+            if Ctxt.has_duplicate c id then
+              raise @@ TypeError (ofnode (Printf.sprintf "Variable '%s' is ambiguous" id) e)
+            else
+              let t,_,id' = Ctxt.get c id in c, (Id id', t)
           else raise @@ TypeError (ofnode (Printf.sprintf "Variable '%s' not declared" id) e)
       | LitInt  i   -> c, (LitInt i, TInt)
       | LitFlt  f   -> c, (LitFlt f, TFlt)
       | LitChar cc  -> c, (LitChar cc, TChar)
       | LitBool b   -> c, (LitBool b, TBool)
-      | LitStr  s   -> c, (LitStr s, TRef TStr)
+      | LitStr  s   -> c, (LitArr (String.fold_left (fun l c -> l @ [ LitChar c, TChar ]) [] s), TRef (TArr TChar))
       | LitArr  ls  ->
           let exp_t' =
             begin match exp_t with
@@ -308,11 +336,11 @@ module TypeChecker = struct
           end
       | EmptyList None ->
           begin match exp_t with
-            | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> c, (EmptyList t, TRef (TArr t))
+            | Some (TRef (TArr t)) | Some (TNullRef (TArr t)) -> c, (EmptyList (transform_ty c (ofnode t e)), TRef (TArr (transform_ty c (ofnode t e))))
             | Some _               -> raise @@ TypeError (ofnode "List type doesn't match here" e)
             | _                    -> raise @@ TypeError (ofnode "Cannot infer empty list element type" e)
           end
-      | EmptyList (Some t) -> let () = check_ty c false t in let t' = transform_ty c t.t in c, (EmptyList t', TRef (TArr t'))
+      | EmptyList (Some t) -> let () = check_ty c false t in let t' = transform_ty c t in c, (EmptyList t', TRef (TArr t'))
       | RangeList (e1,i1,i2,e2) ->
           let c', e1' = check_exp c  (Some TInt) false e1 in
           let c'',e2' = check_exp c' (Some TInt) false e2 in
@@ -362,7 +390,7 @@ module TypeChecker = struct
           begin match t.t with
             | TRef rt -> 
                 let () = check_ty c false (ofnode (TNullRef rt) t) in
-                let t' = transform_ty c (TNullRef rt) in
+                let t' = transform_ty c (ofnode (TNullRef rt) t) in
                 let rt' =
                   begin match t' with
                     | TNullRef rt -> rt
@@ -381,7 +409,7 @@ module TypeChecker = struct
           let indexstrs = Str.full_split (Str.regexp "{\\d+}") s.t in
           let strindices = List.filter_map (function | Str.Delim s -> Some (Stdlib.int_of_string (String.sub s 1 (String.length s - 2))) | _ -> None) indexstrs in
           if List.for_all (fun i -> 0 <= i && i < List.length annt_es) strindices && List.for_all (fun (_,t) -> is_printable t) annt_es then
-            c', (Sprintf (pft, s.t, annt_es), if pft = Printf then void_placeholder else  TRef TStr)
+            c', (Sprintf (pft, s.t, annt_es), if pft = Printf then void_placeholder else TRef (TArr TChar))
           else
             raise @@ TypeError (ofnode "Something is wrong with this sprintf expression" e)
       | Uop (op,r) ->
@@ -401,6 +429,7 @@ module TypeChecker = struct
                   | []    -> raise @@ TypeError (ofnode "Types in array must have a common supertype" e)
                   | t::ts -> c'', (Bop (op,lt,rt), TRef (TArr (List.fold_left (fun m t -> if subtype t m then t else m) t ts)))
                 end
+            | TInt, TRef (TArr t), Mul | TRef (TArr t), TInt, Mul -> c'', (Bop (op, lt, rt), TRef (TArr t))
             | _ ->
                 begin match List.assoc_opt (snd lt, snd rt) opts with
                   | None   -> raise @@ TypeError (ofnode (Printf.sprintf "Operation %s undefined for operand types (%s,%s)" (List.assoc op bop_string) (Ast.print_ty (ofnode (snd lt) l)) (Ast.print_ty (ofnode (snd rt) l))) e)
@@ -503,6 +532,7 @@ module TypeChecker = struct
             | (_, t),              (_, TInt)  -> raise @@ TypeError (ofnode (Printf.sprintf "Left-hand-side of [] expression is of type %s but should be of array type" (Ast.print_ty (ofnode t l))) l)
             | _,                   (_, t)     -> raise @@ TypeError (ofnode (Printf.sprintf "Right-hand-side of [] expression is of type %s but should be of int type" (Ast.print_ty (ofnode t r))) r)
           end
+
       | Proj (lhs,id) ->
           let mayberes =
             begin match lhs.t with
@@ -539,7 +569,7 @@ module TypeChecker = struct
               | Some t ->
                   let c',et = check_exp c (Some t.t) false e in
                   let () = check_ty c' false t in (* c and c' are equivalent here, only added for possible OCaml optimizations *)
-                  let t' = transform_ty c' t.t in
+                  let t' = transform_ty c' t in
                   if subtype (snd et) t' || crosstype (snd et) t' then
                     let c'',id' = Ctxt.add_binding c' (id,(t',m)) in
                     VDecl (id',m,Some t',et), c'', false, false
@@ -655,7 +685,7 @@ module TypeChecker = struct
       | LitFlt  f  -> LitFlt f,  TFlt
       | LitChar c  -> LitChar c, TChar
       | LitBool b  -> LitBool b, TBool
-      | LitStr  s  -> LitStr s,  TRef TStr
+      | LitStr  s  -> (LitArr (String.fold_left (fun l c -> l @ [ LitChar c, TChar ]) [] s), TRef (TArr TChar))
       | LitArr  es ->
           let es' = List.map (check_gexp c) es in
           let spts = List.map suptys @@ List.map snd es' in
@@ -668,7 +698,7 @@ module TypeChecker = struct
 
   let check_gstmt (in_templ_res : bool) (c : Ctxt.t) (gs : gstmt node) : annt_gstmt option * Ctxt.t =
     begin match gs.t with
-      | Module m -> None, Ctxt.set_current_module c m (* modules do not exist at the translation-level AST *)
+      | Module m -> None, Ctxt.use_none @@ Ctxt.set_current_module c m
       | Using  m -> None, Ctxt.add_using c m          (* modules do not exist at the translation-level AST *)
       | GVDecl (id,m,t,e) ->
           if Ctxt.has c id then
@@ -681,7 +711,7 @@ module TypeChecker = struct
                   Some (GVDecl(id', m, None, et)), c'
               | Some t ->
                   let () = check_ty c false t in
-                  let t' = transform_ty c t.t in
+                  let t' = transform_ty c t in
                   if subtype (snd et) t' then
                     let c',id' = Ctxt.add_binding c (id,(t',m)) in
                     Some (GVDecl (id', m, Some t', et)), c'
@@ -693,11 +723,11 @@ module TypeChecker = struct
             if not @@ alldistinct (List.map fst args) then raise @@ TypeError (ofnode "Function argument names must be distinct" gs) else () in
           let istemplf = List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) in
           let id' = if istemplf || in_templ_res then id else Ctxt.get_id c id in
-          let args' = List.map (fun (id,t) -> check_ty c istemplf t; id, transform_ty c t.t) args in
+          let args' = List.map (fun (id,t) -> check_ty c istemplf t; id, transform_ty c t) args in
           let rt' =
             begin match rt.t with
               | Void  -> Void
-              | Ret t -> check_ty c istemplf (ofnode t rt); Ret (transform_ty c t)
+              | Ret t -> check_ty c istemplf (ofnode t rt); Ret (transform_ty c (ofnode t rt))
             end in
 
           if istemplf then (* templated function *)
@@ -716,22 +746,14 @@ module TypeChecker = struct
           if Ctxt.has c id then
             raise @@ TypeError (ofnode (Printf.sprintf "Variable %s already declared in global scope" id) gs)
           else
-            let c',id' = Ctxt.add_binding c (id,(t.t,Const)) in
-            Some (GNVDecl (id',t.t)), c'
+            let c',id' = Ctxt.add_binding c (id, (transform_ty c t, Const)) in
+            Some (GNVDecl (id', transform_ty c t)), c'
       | GNFDecl (id,args,rt) ->
           let id' = Ctxt.get_id c id in
-          let args' = List.map (fun t -> check_ty c false t; transform_ty c t.t) args in
-          let rt' =
-            begin match rt.t with
-              | Void  -> Void
-              | Ret t -> check_ty c false (ofnode t rt); Ret (transform_ty c t)
-            end in
+          let args' = List.map (fun t -> check_ty c false t; transform_ty c t) args in
+          let rt' = transform_retty c rt in
           Some (GNFDecl (id', args', rt')), c
-      | GNTDecl id ->
-          if Ctxt.has_namedt c id then
-            raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
-          else
-            Some (GNTDecl id), Ctxt.add_namedt c id
+      | GNTDecl id -> None, c
     end
   
   let check_gstmt_program (c:Ctxt.t) (gs : gstmt node list) : (annt_gstmt list * Ctxt.t) =
@@ -739,15 +761,27 @@ module TypeChecker = struct
 
   let create_fctxt (c : Ctxt.t) (gs : gstmt node) : Ctxt.t =
     begin match gs.t with
-      | Module m              -> Ctxt.set_current_module c m
-      | Using  _              -> c
+      | Module m              -> Ctxt.use_none @@ Ctxt.set_current_module c m
+      | Using  m              -> Ctxt.add_using c m
       | GFDecl (id,args,rt,b) ->
-          if List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) then
-            Ctxt.add_generic_function c id (List.map (fun (id,t) -> id, ofnode (transform_ty c t.t) t) args, ofnode (transform_retty c rt.t) rt, b)
+          if Ctxt.has c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "function %s already declared" id) gs)
           else
-            fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> transform_ty c t.t) args, transform_retty c rt.t)), Const))
-      | GNFDecl (id,args,rt)  -> fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> transform_ty c t.t) args, transform_retty c rt.t)), Const))
-      | GVDecl _ | GNVDecl _ | GNTDecl _ -> c
+            if List.exists TemplateResolver.is_templated (List.map (fun (_,t) -> t.t) args) || (match rt.t with | Ret (TTempl _) -> true | _ -> false) then
+              Ctxt.add_generic_function c id (List.map (fun (id,t) -> id, ofnode (transform_ty c t) t) args, ofnode (transform_retty c rt) rt, b)
+            else
+              fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun (_,t) -> transform_ty c t) args, transform_retty c rt)), Const))
+      | GNFDecl (id,args,rt)  ->
+          if Ctxt.has c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "function %s already declared" id) gs)
+          else
+            fst @@ Ctxt.add_binding c (id,(TRef (TFun (List.map (fun t -> transform_ty c t) args, transform_retty c rt)), Const))
+      | GVDecl _ | GNVDecl _ -> c
+      | GNTDecl id -> 
+          if Ctxt.has_namedt c id then
+            raise @@ TypeError (ofnode (Printf.sprintf "Native type %s already declared" id) gs)
+          else
+            Ctxt.add_namedt c id
     end
 
   let rec create_template_calls (c : Ctxt.t) (prog : annt_gstmt list) (maxdepth : int) : annt_gstmt list =
@@ -785,8 +819,8 @@ module TypeChecker = struct
         begin match Ctxt.get_from_any_binding c "main" with
           | TRef (TFun ([], Void)),                            Const, id -> id
           | TRef (TFun ([], Ret TInt)),                        Const, id -> id
-          | TRef (TFun ([TRef (TArr (TRef TStr))], Void)),     Const, id -> id
-          | TRef (TFun ([TRef (TArr (TRef TStr))], Ret TInt)), Const, id -> id
+          | TRef (TFun ([TRef (TArr (TRef (TArr TChar)))], Void)),     Const, id -> id
+          | TRef (TFun ([TRef (TArr (TRef (TArr TChar)))], Ret TInt)), Const, id -> id
           | _ ->
               let mainfunc = List.hd (List.filter
                 (fun gs ->

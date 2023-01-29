@@ -59,7 +59,6 @@ type ty =
   | TNullRef of rty
   | TTempl of bool * string (* bool false for <a>? *)
 and rty =
-  | TStr
   | TArr of ty
   | TFun of ty list * retty
   | TNamed of string
@@ -136,8 +135,8 @@ and print_retty (t : retty node) : string =
   end
 and print_rty (r : rty node) : string =
   begin match r.t with
-    | TStr   -> "string"
-    | TArr t -> Printf.sprintf "[%s]" (print_ty @@ ofnode t r)
+    | TArr TChar -> "string"
+    | TArr t     -> Printf.sprintf "[%s]" (print_ty @@ ofnode t r)
     | TFun (args,rt) ->
         Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map (fun arg -> print_ty (ofnode arg r)) args)) (print_retty (ofnode rt r))
     | TNamed id        -> id

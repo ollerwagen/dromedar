@@ -36,6 +36,7 @@ native pi : flt
 module Regex
 
 native type R
+
 native fn compile     (string)   -> R?
 native fn matches     (R,string) -> bool
 native fn first_match (R,string) -> string?

@@ -23,14 +23,6 @@ let read_stringlist (name : string) : string list =
         List.map (fun s -> String.sub s 1 (String.length s - 2)) filestrings
   end
 
-(*
-let () =
-  let ets = [ TRef (TFun ([ TTempl (true, "a") ], Ret (TTempl (true, "a")))) ] in
-  let pts = [ TRef (TFun ([ TRef TStr ], Ret (TRef TStr))) ] in
-  let res = TemplateResolver.resolve_templates @@ List.combine pts ets in
-  Printf.printf "[%s]\n" @@ String.concat ", " @@ List.map (fun (id,t) -> Printf.sprintf "<%s> -> (%s)" id (Ast.print_ty {t=t;start=0;length=0})) res
-*)
-
 
 let () =
   let argv = List.tl @@ Array.to_list Sys.argv in

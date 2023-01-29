@@ -6,7 +6,6 @@ type exp' =
   | LitFlt    of Token.tflt
   | LitChar   of Token.tchar
   | LitBool   of Token.tbool
-  | LitStr    of string
   | LitArr    of annt_exp list
   | Deref     of annt_exp
   | EmptyList of ty

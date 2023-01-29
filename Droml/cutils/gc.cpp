@@ -3,7 +3,7 @@
 
 
 #include <vector>
-#include <unordered_set>
+#include <set>
 #include <unordered_map>
 
 // malloc and free
@@ -16,7 +16,7 @@
 
 
 struct GCEntry {
-    std::unordered_set<ptr, std::hash<ptr>, std::equal_to<ptr>, drm::allocator<ptr>> children;
+    std::multiset<ptr, std::less<ptr>, drm::allocator<ptr>> children;
     uint16_t prefs = 0;
     bool reachable;
 };
@@ -49,10 +49,10 @@ static void mark_reachable(GCEntry &ge) {
         std::stringstream stream;
         stream << "BASE                   PREFS    CHILDREN\n";
         for (const auto &it : table) {
-            stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(it.first)
+            stream << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(it.first)
                 << std::dec << std::setfill(' ') << " -> " << std::setw(6) << it.second.prefs << " -> ";
             for (const ptr a : it.second.children)
-                stream << "0x" << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(a) << std::dec << std::setfill(' ') << ", ";
+                stream << std::setw(16) << std::setfill('0') << std::hex << reinterpret_cast<int64_t>(a) << std::dec << std::setfill(' ') << ", ";
             stream << "\n";
         }
         return stream.str();
@@ -155,6 +155,22 @@ extern "C" {
 #endif
 
         table[base].children.insert(child);
+
+#if __AGGRESSIVE_GC__
+        gcrun();
+#endif
+    }
+
+    void _swapchild(ptr parent, ptr before, ptr after) {
+#if __DEBUG__
+        printf("swapchild(parent:%p, from %p to %p)\n", parent, before, after);
+#endif
+
+        auto before_p = table[parent].children.find(before);
+        if (before_p == table[parent].children.end())
+            return;
+        table[parent].children.erase(before_p);
+        table[parent].children.insert(after);
 
 #if __AGGRESSIVE_GC__
         gcrun();
