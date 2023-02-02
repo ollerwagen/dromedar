@@ -66,6 +66,7 @@ type instr =
   | Call    of string option * llty * operand * (llty * operand) list
   | Gep     of string        * llty * operand * operand list
   | Bitcast of string        * llty * operand * llty
+  | Phi     of string        * llty * (operand * string) list
 
 type firstblock = instr list * term
 type block = string * instr list * term
@@ -223,6 +224,8 @@ let print_instr (i:instr) : string =
             | _    ,  _      -> "bitcast"
           end in
         Printf.sprintf "%%%s = %s %s %s to %s" wt opcode startt ostr endt
+    | Phi (wt,t,os) ->
+        Printf.sprintf "%%%s = phi %s %s" wt (print_llty t) (String.concat ", " (List.map (fun (op,l) -> Printf.sprintf "[%s, %%%s]" (print_operand op) l) os))
   end
 
 let print_term (t:term) : string =

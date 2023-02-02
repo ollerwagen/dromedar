@@ -2,7 +2,7 @@ declare void @_abort(i64)
 declare void @_checknull(i8*)
 
 ; create argument vector for main function
-declare {i64,[0 x {i64,[0 x i8]*}*]*}* @_makestrvec(i64,i8**)
+declare {i64,[0 x {i64,i64,[0 x i8]*}*]*}* @_makestrvec(i64,i8**)
 
 ; integer exponentiation, used in builtin '**' operator
 declare i64 @_pow_ii(i64,i64)
@@ -13,33 +13,33 @@ declare double @_pow_ff(double,double)
 
 declare void @_memcpy(i8*,i8*,i64)
 
-declare {i64,[0 x i8]*}* @_strconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
-declare {i64,[0 x i8]*}* @_strmul_1({i64,[0 x i8]*}*, i64)
-declare {i64,[0 x i8]*}* @_strmul_2(i64, {i64,[0 x i8]*}*)
+declare {i64,i64,[0 x i8]*}* @_strconcat({i64,i64,[0 x i8]*}*, {i64,i64,[0 x i8]*}*)
+declare {i64,i64,[0 x i8]*}* @_strmul_1({i64,i64,[0 x i8]*}*, i64)
+declare {i64,i64,[0 x i8]*}* @_strmul_2(i64, {i64,i64,[0 x i8]*}*)
 
-declare i64 @_strcmp({i64,[0 x i8]*}*, {i64,[0 x i8]*}*)
+declare i64 @_strcmp({i64,i64,[0 x i8]*}*, {i64,i64,[0 x i8]*}*)
 
-declare {i64,[0 x i8]*}* @_arrconcat({i64,[0 x i8]*}*, {i64,[0 x i8]*}*, i64, i1)
-declare {i64,[0 x i8]*}* @_arrmul({i64,[0 x i8]*}*, i64, i64, i1)
+declare {i64,i64,[0 x i8]*}* @_arrconcat({i64,i64,[0 x i8]*}*, {i64,i64,[0 x i8]*}*, i64, i1)
+declare {i64,i64,[0 x i8]*}* @_arrmul({i64,i64,[0 x i8]*}*, i64, i64, i1)
 
 ; range list
-declare {i64,[0 x i64]*}* @_makerangeintlist(i64,i64,i1,i1)
-declare {i64,[0 x i8]*}*  @_makerangecharlist(i8,i8,i1,i1)
+declare {i64,i64,[0 x i64]*}* @_makerangeintlist(i64,i64,i1,i1)
+declare {i64,i64,[0 x i8]*}*  @_makerangecharlist(i8,i8,i1,i1)
 
 
 ; sprintf helper functions
-declare {i64,[0 x i8]*}* @_sprintf_int(i64)
-declare {i64,[0 x i8]*}* @_sprintf_flt(i64)
-declare {i64,[0 x i8]*}* @_sprintf_char(i64)
-declare {i64,[0 x i8]*}* @_sprintf_bool(i64)
-declare {i64,[0 x i8]*}* @_sprintf_str(i64)
-declare {i64,[0 x i8]*}* @_sprintf_array(i64,i64,i64,{i64,[0 x i8]*}*(i64)*)
-declare {i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
+declare {i64,i64,[0 x i8]*}* @_sprintf_int(i64)
+declare {i64,i64,[0 x i8]*}* @_sprintf_flt(i64)
+declare {i64,i64,[0 x i8]*}* @_sprintf_char(i64)
+declare {i64,i64,[0 x i8]*}* @_sprintf_bool(i64)
+declare {i64,i64,[0 x i8]*}* @_sprintf_str(i64)
+declare {i64,i64,[0 x i8]*}* @_sprintf_array(i64,i64,i64,{i64,i64,[0 x i8]*}*(i64)*)
+declare {i64,i64,[0 x i8]*}* @_sprintf_cat(i64, ...)
 
 ; list comprehension helper functions
 declare i8* @_make_vector()
 declare void @_addelem(i8*, i64)
-declare {i64,[0 x i8]*}* @_genlist(i8*,i64,i1)
+declare {i64,i64,[0 x i8]*}* @_genlist(i8*,i64,i1)
 
 ;
 ; Garbage Collection Functions
@@ -61,4 +61,10 @@ declare void @_swapchild(i8*,i8*,i8*)
 declare void @_addchild(i8*, i8*)
 
 ; helper function for printf
-declare void @_print_string({i64,[0 x i8]*}*)
+declare void @_print_string({i64,i64,[0 x i8]*}*)
+
+; creates arrays
+declare {i64,i64,[0 x i8]*}*  @_allocate_string(i64)
+declare {i64,i64,[0 x i8]*}*  @_allocate_string_of(i8*)
+declare {i64,i64,[0 x i64]*}* @_allocate_intarr(i64)
+declare {i64,i64,[0 x i8]*}* @_allocate_blindarr(i64,i64)

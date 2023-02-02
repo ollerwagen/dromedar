@@ -1,13 +1,6 @@
 #include "templ_intrinsics.h"
 
-blindarr* allocate_blindarr(i64 elems, i64 elemsize) {
-    blindarr* res = (blindarr*) _allocate(sizeof(blindarr));
-    res->size = elems;
-    res->base = _allocate(elems * elemsize);
-    _addchild((i8*) res, res->base);
-    _removeref(res->base);
-    return res;
-}
+#include "common.m"
 
 template<typename T, typename U>
 inline T max(T a, U b) {
@@ -19,7 +12,7 @@ static inline blindarr* _makerangelist_basic(T start, T end, bool inclstart, boo
     if (start < end) {
         if (!inclstart) ++start;
         if (!inclend) --end;
-        blindarr* res = allocate_blindarr(max(end - start + 1, 0), sizeof(T));
+        blindarr* res = _allocate_blindarr(max(end - start + 1, 0), sizeof(T));
         for (i64 i = 0; i < res->size; i++) {
             * (T*) (res->base + sizeof(T) * i) = (start + i);
         }
@@ -27,7 +20,7 @@ static inline blindarr* _makerangelist_basic(T start, T end, bool inclstart, boo
     } else {
         if (!inclstart) --start;
         if (!inclend) ++end;
-        blindarr* res = allocate_blindarr(max(start - end + 1, 0), sizeof(T));
+        blindarr* res = _allocate_blindarr(max(start - end + 1, 0), sizeof(T));
         for (i64 i = res->size - 1; i >= 0; i--) {
             * (T*) (res->base + sizeof(T) * i) = (start - i);
         }

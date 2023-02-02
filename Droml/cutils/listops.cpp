@@ -24,7 +24,7 @@ extern "C" {
     blindarr* _genlist(i8 *l, i64 elemsize, i1 addchildren) {
         list* vl = (list*) l;
         blindarr* res = (blindarr*) _allocate(sizeof(blindarr));
-        res->size = vl->size();
+        res->capacity = res->size = vl->size();
         res->base = (i8*) _allocate(elemsize * vl->size());
         _addchild((i8*) res, (i8*) res->base);
         _removeref((i8*) res->base);

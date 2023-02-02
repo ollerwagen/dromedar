@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-    typedef struct { i64 size; string** base; } strlist;
+    typedef struct { i64 size; i64 capacity; string** base; } strlist;
 
     strlist* _cpputils_File$readall(string* filename);
 

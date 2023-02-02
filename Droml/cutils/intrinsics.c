@@ -19,25 +19,19 @@ void _checknull(i8* ptr) {
 }
 
 stringarr* _makestrvec(i64 argc, i8** argv) {
-    stringarr *res = (stringarr*) _allocate(sizeof(stringarr));
-    res->size = argc;
-    res->base = (string**) _allocate(sizeof(string*) * argc);
-    _addchild((i8*) res, (i8*) res->base);
-    _removeref((i8*) res->base);
+    stringarr* res = (stringarr*) _allocate_blindarr(argc, sizeof(string*));
 
     for (i64 i = 0; i < argc; i++) {
         i8* str = argv[i];
-        res->base[i] = (string*) _allocate(sizeof(string));
-        _addchild((i8*) res, (i8*) res->base[i]);
-        _removeref((i8*) res->base[i]);
 
-        string* arrval = (string*) res->base[i];
-        arrval->size = strlen(str);
-        arrval->base = _allocate(arrval->size);
-        _addchild((i8*) arrval, arrval->base);
-        _removeref((i8*) arrval->base);
+        string* arrval = _allocate_string(strlen(str));
+
+        _addchild((i8*) res, (i8*) arrval);
+        _removeref((i8*) arrval);
 
         memcpy(arrval->base, str, arrval->size);
+
+        res->base[i] = arrval;
     }
 
     return res;
@@ -71,7 +65,7 @@ void _memcpy(i8 *from, i8 *to, i64 size) {
 
 
 string* _strconcat(string *a, string *b) {
-    string* res = allocate_string(a->size + b->size);
+    string* res = _allocate_string(a->size + b->size);
 
     memcpy(res->base, a->base, a->size);
     memcpy(res->base + a->size, b->base, b->size);
@@ -83,7 +77,7 @@ string* _strmul_1(string *s, i64 count) {
     if (count < 0)
         count = 0;
     
-    string* res = allocate_string(count * s->size + 1);
+    string* res = _allocate_string(count * s->size);
 
     int index = 0;
     for (i64 i = 0; i < count; i++) {
@@ -105,9 +99,7 @@ i64 _strcmp(string *a, string *b) {
 blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
     i64 realasize = a->size * elemsize, realbsize = b->size * elemsize;
 
-    blindarr *res = (blindarr*) _allocate(sizeof(blindarr));
-    res->base = _allocate(realasize + realbsize);
-    res->size = a->size + b->size;
+    blindarr* res = _allocate_blindarr(a->size + b->size, elemsize);
 
     _addchild((i8*) res, (i8*) res->base);
     _removeref((i8*) res->base);
@@ -126,16 +118,12 @@ blindarr* _arrconcat(blindarr *a, blindarr *b, i64 elemsize, i1 areptrs) {
 }
 
 blindarr* _arrmul(blindarr *a, i64 elemsize, i64 factor, i1 areptrs) {
-    // printf("arrmul(%p, %ld, %ld, %s)\n", a, elemsize, factor, areptrs ? "true" : "false");
-
     i64 actualsize = a->size * elemsize;
 
     if (factor < 0)
         factor = 0;
 
-    blindarr *res = (blindarr*) _allocate(sizeof(blindarr));
-    res->base = _allocate(actualsize * factor);
-    res->size = a->size * factor;
+    blindarr *res = _allocate_blindarr(a->size * factor, elemsize);
 
     _addchild((i8*) res, (i8*) res->base);
     _removeref((i8*) res->base);

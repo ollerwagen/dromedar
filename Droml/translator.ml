@@ -34,6 +34,9 @@ module Translator = struct
     let add_binding (c:t) (id,bnd : string * (Ast.ty * Ll.llty * Ll.operand)) : t =
       ((id, bnd) :: List.hd c) :: List.tl c
 
+    let get_toplevel_bindings (c:t) : (llty * operand) list =
+      List.map (fun (_,(_,t,o)) -> t,o) (List.hd c)
+
   end
 
   (* local Dromedar instructions *)
@@ -64,7 +67,7 @@ module Translator = struct
 
   and cmp_rty (rt : Ast.rty) : Ll.llty =
     begin match rt with
-      | TArr t       -> Struct [ I64 ; cmp_lllty t ]
+      | TArr t       -> Struct [ I64 ; I64 ; cmp_lllty t ]
       | TNamed _     -> I8
       | TModNamed _  -> I8
       | TFun (a,rt)  -> Struct [ cmp_llfty a rt ]
@@ -162,6 +165,8 @@ module Translator = struct
   (* last return value: true <=> value is linked to its own pref <=> needs to be GC'd *)
   let rec cmp_exp (c : Ctxt.t) (e : annt_exp) : operand * Ll.llty * stream * bool * string list =
 
+    let generic_arr_t = cmp_ty (TRef (TArr TChar)) in
+
     let bop_ts : ((Ast.bop * Ast.ty * Ast.ty) * (Ast.ty * Ll.bop)) list =
       [ (Add,    TInt,  TInt ), (TInt,  Add )
       ; (Add,    TFlt,  TFlt ), (TFlt,  FAdd)
@@ -233,10 +238,9 @@ module Translator = struct
       | LitFlt  f, t  -> Ll.FConst f, cmp_ty t, [], false, []
       | LitChar c, t  -> Ll.IConst (Int64.of_int @@ Char.code c), cmp_ty t, [], false, []
       | LitBool b, t  -> Ll.IConst (if b then 1L else 0L), cmp_ty t, [], false, []
-      
+
       | LitArr es, t ->
-          let rsym, asym = gensym "array", gensym "array" in
-          let size_ptr, arr_ptr = gensym "sizeptr", gensym "arrptr" in
+          let basic_rsym, rsym, asym, arr_ptr = gensym "array", gensym "array", gensym "array", gensym "arrptr" in
           let arrlen = List.length es in
           let elemt, gcelems =
             begin match t with
@@ -247,19 +251,13 @@ module Translator = struct
           let c_t, c_et = cmp_ty t, cmp_ty elemt in
           let arr_elemt = Array (0L, c_et) in
 
-          let alloc_obj = allocate (IConst (Int64.of_int @@ size_ty @@ deptr c_t)) c_t rsym in
-          let alloc_arr = allocate (IConst (Int64.of_int (arrlen * size_ty c_et))) (Ptr arr_elemt) asym in
-
           let c_exps = List.map (cmp_exp c) es in
 
-          Id rsym, c_t, 
-          alloc_obj @ alloc_arr @
-          addchild (c_t, Id rsym) (Ptr arr_elemt, Id asym) @
-          removeref (Ptr arr_elemt, Id asym) @
-          [ I (Gep (size_ptr, c_t, Id rsym, [ IConst 0L ; IConst 0L ]))
-          ; I (Store (I64, IConst (Int64.of_int arrlen), Id size_ptr))
-          ; I (Gep (arr_ptr, c_t, Id rsym, [ IConst 0L ; IConst 1L ]))
-          ; I (Store (Ptr arr_elemt, Id asym, Id arr_ptr))
+          Id rsym, c_t,
+          [ I (Call (Some basic_rsym, generic_arr_t, Gid "_allocate_blindarr", [ I64, IConst (Int64.of_int arrlen) ; I64, IConst (Int64.of_int (size_ty c_et)) ]))
+          ; I (Bitcast (rsym, generic_arr_t, Id basic_rsym, c_t))
+          ; I (Gep (arr_ptr, c_t, Id rsym, [ IConst 0L ; IConst 2L ]))
+          ; I (Load (asym, Ptr arr_elemt, Id arr_ptr))
           ] @
           List.concat (
             List.mapi
@@ -349,7 +347,7 @@ module Translator = struct
               ; I (Cmp (cmpval, ICmp, Less, I64, Id ival, Id listlen))
               ; T (Cbr (Id cmpval, lblbody, lblend))
               ; L lblbody
-              ; I (Gep (elemlistptr, lllt, lop, [ IConst 0L ; IConst 1L ]))
+              ; I (Gep (elemlistptr, lllt, lop, [ IConst 0L ; IConst 2L ]))
               ; I (Load (elemlistval, Ptr (Array (0L, cmp_ty elem_t)), Id elemlistptr))
               ; I (Gep (xid, Ptr (Array (0L, cmp_ty elem_t)), Id elemlistval, [ IConst 0L ; Id ival ]))
               ]
@@ -385,8 +383,8 @@ module Translator = struct
             )
             (List.combine (List.combine indexids looplbls) cd_ls)
           ))) @
-          [ I (Call (Some rsym, Ptr (Struct [ I64 ; Ptr (Array (0L, I8))]), Gid "_genlist", [ Ptr I8, Id vecp ; I64, IConst (Int64.of_int (size_ty (cmp_ty (snd e)))) ; I1, IConst (if handlegc_e then 1L else 0L) ]))
-          ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; Ptr (Array (0L, I8))]), Id rsym, cmp_ty t))
+          [ I (Call (Some rsym, Ptr (Struct [ I64 ; I64 ; Ptr (Array (0L, I8))]), Gid "_genlist", [ Ptr I8, Id vecp ; I64, IConst (Int64.of_int (size_ty (cmp_ty (snd e)))) ; I1, IConst (if handlegc_e then 1L else 0L) ]))
+          ; I (Bitcast (rsym_cast, Ptr (Struct [ I64 ; I64 ; Ptr (Array (0L, I8))]), Id rsym, cmp_ty t))
           ],
           true,
           List.fold_left union cfs (efs :: List.map (fun (_,_,_,_,fs) -> fs) cd_ls)
@@ -395,14 +393,13 @@ module Translator = struct
       | Ternary (cnd,e1,e2), t ->
           let rsym, rptr = gensym "ternres", gensym "ternptr" in
           let lbltrue, lblfalse, lblend = gensym "terntrue", gensym "ternfalse", gensym "ternend" in
-          let (cndop,cndllt,cnds,cndgc,cndfs), (eop1,ellt1,es1,egc1,efs1), (eop2,ellt2,es2,egc2,efs2) = cmp_exp c cnd, cmp_exp c e1, cmp_exp c e2 in
+          let (cndop,_,cnds,_,cndfs), (eop1,ellt1,es1,egc1,efs1), (eop2,ellt2,es2,egc2,efs2) = cmp_exp c cnd, cmp_exp c e1, cmp_exp c e2 in
           let addref1, addref2 = not egc1 && egc2, egc1 && not egc2 in
           Id rsym, cmp_ty t,
-          [ E (Alloca (rptr, cmp_ty t)) ] @ cnds @
-          [ T (Cbr (cndop, lbltrue, lblfalse))
-          ; L lbltrue ] @ es1 @ (if addref1 then addref (ellt1,eop1) else []) @ [ I (Store (ellt1, eop1, Id rptr)) ; T (Br lblend) ] @
-          [ L lblfalse ] @ es2 @ (if addref2 then addref (ellt2,eop2) else []) @ [ I (Store (ellt2, eop2, Id rptr)) ; T (Br lblend)
-          ; L lblend ; I (Load (rsym, cmp_ty t, Id rptr)) ],
+          cnds @
+          [ T (Cbr (cndop, lbltrue, lblfalse)) ; L lbltrue ] @ es1 @ (if addref1 then addref (ellt1,eop1) else []) @
+          [ T (Br lblend) ; L lblfalse ] @ es2 @ (if addref2 then addref (ellt2,eop2) else []) @
+          [ T (Br lblend) ; L lblend ; I (Phi (rsym, cmp_ty t, [ eop1, lbltrue ; eop2, lblfalse ])) ],
           egc1 || egc2,
           union cndfs (union efs1 efs2)
 
@@ -491,7 +488,7 @@ module Translator = struct
             | TRef (TArr t1), TRef (TArr t2), Add ->
                 let elemsize =
                   begin match llt1 with
-                    | Ptr (Struct [_; Ptr (Array (_, llt))]) -> size_ty llt
+                    | Ptr (Struct [_;_; Ptr (Array (_, llt))]) -> size_ty llt
                     | _ -> Stdlib.failwith "bad AST: not array return type"
                   end in
                 let reduced1, reduced2, concatres = gensym "arrcatredop", gensym "arrcatredop", gensym "concat_arr" in
@@ -511,27 +508,11 @@ module Translator = struct
                       let rt,fname = List.assoc (lt,rt) pow_ts in
                       Id rsym, cmp_ty rt, s1 @ s2 @ caststream @ [ I (Call (Some rsym, cmp_ty rt, Gid fname, [ llt1, op1; llt2, op2 ])) ], false, fs
                   | Logand | Logor ->
-                      let shortcircuiteval, shortcircuitstore =
-                        if op = Logand then 0L, 0L else 1L, 1L in
-                      let cmpres = gensym "and" in
-                      let shortcircuit, evalboth, logend = gensym "shortcircuit", gensym "evalboth", gensym "logend" in
-                      let resstack = gensym "logstack" in
-                      Id rsym, cmp_ty TBool,
-                      [ E (Alloca (resstack, I1)) ] @
-                      s1 @
-                      [ I (Cmp (cmpres, ICmp, Eq, I1, op1, IConst shortcircuiteval))
-                      ; T (Cbr (Id cmpres, shortcircuit, evalboth))
-                      ; L shortcircuit
-                      ; I (Store (I1, IConst shortcircuitstore, Id resstack))
-                      ; T (Br logend)
-                      ; L evalboth
-                      ] @
-                      s2 @
-                      [ I (Store (I1, op2, Id resstack))
-                      ; T (Br logend)
-                      ; L logend
-                      ; I (Load (rsym, I1, Id resstack))
-                      ],
+                      let lblstart, lblmid, lblend = gensym "shortcircuitA", gensym "shortcircuitB", gensym "shortcircuitC" in
+                      Id rsym, I1,
+                      [ L lblstart ] @ s1 @
+                      [ T (Cbr (op1, (if op=Logand then lblmid else lblend), if op=Logand then lblend else lblmid)) ; L lblmid ] @ s2 @
+                      [ L lblend ; I (Phi (rsym, I1, [ op1, lblstart ; op2, lblmid ])) ],
                       false,
                       fs
                   | _ ->
@@ -547,7 +528,7 @@ module Translator = struct
           let rt,llop,argop = List.assoc (op, snd e) uop_ts in
           Id rsym, cmp_ty rt, s @ [ I (Binop (rsym, llop, cmp_ty rt, argop, eop)) ], false, fs
 
-      | Cmps (f,rs), t -> (* no GC, as all input results are primitives *)
+      | Cmps (f,rs), t ->
           let rec genislastlist (l : 'a list) : ('a * bool) list =
             begin match l with
               | []  -> Stdlib.failwith "bad AST: empty comparison value list"
@@ -776,7 +757,7 @@ module Translator = struct
     let rsym, arr_p, arr_op = gensym "subscript", gensym "subscript", gensym "subscript" in
     (bop,bllt,bs,bgc), (oop,ollt,os),
     (Id rsym, Ptr (cmp_ty t),
-    [ I (Gep (arr_p, bllt, bop, [ IConst 0L ; IConst 1L ]))
+    [ I (Gep (arr_p, bllt, bop, [ IConst 0L ; IConst 2L ]))
     ; I (Load (arr_op, cmp_lllty t, Id arr_p))
     ; I (Gep (rsym, cmp_lllty t, Id arr_op, [ IConst 0L ; oop ]))
     ]),
@@ -786,15 +767,6 @@ module Translator = struct
   (* refvars: all GC-able variables in scope in the function at any given moment *)
   (* bcvars: all GC-able variables created in the innermost loop *)
   and cmp_stmt (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (bcvars : (llty * operand) list) (bclbls : string * string) (s : annt_stmt) : Ctxt.t * stream * (llty * operand) list * (llty * operand) list * string list =
-    let free_vars (l : (llty * operand) list) : stream =
-      List.concat (List.map
-        (fun (llt,op) ->
-          let refptr = gensym "existstmtdel" in
-          I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)
-        )
-        l
-      )
-    in
   
     begin match s with
       | VDecl (id, _, t, e) ->
@@ -982,7 +954,7 @@ module Translator = struct
             ; T (Cbr (Id ixcmp, lblbody, lblend))
             ; L lblbody
             ; I (Load (ixsetval, I64, Id i))
-            ; I (Gep (arrptr, lllt, lop, [ IConst 0L ; IConst 1L ]))
+            ; I (Gep (arrptr, lllt, lop, [ IConst 0L ; IConst 2L ]))
             ; I (Load (arrval, cmp_lllty et, Id arrptr))
             ; I (Gep (arrelemptr, cmp_lllty et, Id arrval, [ IConst 0L ; Id ixsetval ]))
             ; I (Load (arrelemval, cmp_ty et, Id arrelemptr))
@@ -1019,7 +991,16 @@ module Translator = struct
     end
   and cmp_block (rt : Ast.retty) (c : Ctxt.t) (refvars : (llty * operand) list) (bcvars : (llty * operand) list) (bclbls : string * string) (b : annt_stmt list) : Ctxt.t * stream * string list =
     let c',s,rv',bv',fs = List.fold_left (fun (c,s,rv,bv,fs) st -> let c',sta,rv',bv',fs' = cmp_stmt rt c rv bv bclbls st in c',s@sta,rv',bv',union fs fs') (Ctxt.add_level c,[],refvars,bcvars,[]) b in
-    c', s @ List.concat (List.map (fun (llt,op) -> let refptr = gensym "returndel" in I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)) refvars), fs
+    c', s @ free_vars (Ctxt.get_toplevel_bindings c'), fs
+
+  and free_vars (l : (llty * operand) list) : stream =
+    List.concat (List.map
+      (fun (llt,op) ->
+        let refptr = gensym "existstmtdel" in
+        I (Load (refptr, llt, op)) :: removeref (llt, Id refptr)
+      )
+      l
+    )
   
   let make_cfg (s : stream) : ginstr list * (Ll.firstblock * Ll.block list) =
     let g,ei,et,cl,ci,bs =
@@ -1031,11 +1012,11 @@ module Translator = struct
             | E is -> g,ei@[is],et,cl,ci,bs
             | L s  ->
                 begin match et with
-                  | None -> Stdlib.failwith "entry block has no terminator"
-                  | _    ->
+                  | None   -> g,ei,Some(Br s),Some s,ci,bs
+                  | Some _ -> 
                       begin match cl with
                         | Some l -> g,ei,et,Some s,[],bs@[l,ci,Br s]
-                        | None   -> g,ei,et,Some s,[],bs
+                        | None   -> g,ei,et,Some s,[],bs@[gensym "nolbl", ci, Br s]
                       end
                 end
             | T t  ->
@@ -1085,7 +1066,7 @@ module Translator = struct
           GDecl (rsym, deptr res_llt, SConst [ I64, IConst arrlen ; cmp_lllty et, Null ]) :: ginsns,
           destream (addref (res_llt, Gid rsym)) @
           linsns @ destream alloc_arr @
-            [ Gep (data_p, res_llt, Gid rsym, [ IConst 0L ; IConst 1L ])
+            [ Gep (data_p, res_llt, Gid rsym, [ IConst 0L ; IConst 2L ])
             ; Bitcast (data', Ptr elem_llt, Id data, cmp_lllty et)
             ; Store (cmp_lllty et, Id data', Id data_p)
             ] @

@@ -6,6 +6,8 @@
 
 #include "Regex.h"
 
+#include "common.m"
+
 extern "C" {
 
     i8* _cpputils_Regex$compile(string* rstr) {
@@ -28,33 +30,19 @@ extern "C" {
     
         std::string match = std::cregex_iterator(s->base, s->base + s->size, * (std::regex*) r)->str();
 
-        string* res = (string*) _allocate(sizeof(string));
-        res->size = match.length();
-        res->base = _allocate(res->size);
-        _addchild((i8*) res, res->base);
-        _removeref(res->base);
-
+        string* res = _allocate_string(match.length());
         memcpy(res->base, match.c_str(), res->size);
 
         return res;
     }
 
     stringarr* _cpputils_Regex$all_matches(i8* r, string* s) {
-        stringarr* res = (stringarr*) _allocate(sizeof(stringarr));
-
         std::cregex_iterator it = std::cregex_iterator(s->base, s->base + s->size, * (std::regex*) r);
 
-        res->size = std::distance(it, std::cregex_iterator());
-        res->base = (string**) _allocate(res->size * sizeof(string*));
-        _addchild((i8*) res, (i8*) res->base);
-        _removeref((i8*) res->base);
+        stringarr* res = (stringarr*) _allocate_blindarr(std::distance(it, std::cregex_iterator()), sizeof(string*));
 
         for (i64 i = 0; i < res->size; i++, ++it) {
-            string* match = (string*) _allocate(sizeof(string));
-            match->size = it->str().length();
-            match->base = _allocate(match->size);
-            _addchild((i8*) match, match->base);
-            _removeref((i8*) match->base);
+            string* match = _allocate_string(it->str().length());
             memcpy(match->base, it->str().c_str(), match->size);
             res->base[i] = match;
             _addchild((i8*) res, (i8*) res->base[i]);

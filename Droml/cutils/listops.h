@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <vector>
 
+#include "common.h"
 #include "cppallocator.h"
 
 typedef int64_t i64;
@@ -18,7 +19,6 @@ extern "C" {
     typedef bool i1;
     typedef char i8;
     typedef int64_t i64;
-    typedef struct blindarr { i64 size; i8* base; } blindarr;
 
     i8* _make_vector();
     void _addelem(i8 *l, i64 elem);

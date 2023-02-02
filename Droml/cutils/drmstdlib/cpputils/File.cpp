@@ -10,6 +10,8 @@
 
 #include "File.h"
 
+#include "common.m"
+
 extern "C" {
 
     strlist* _cpputils_File$readall(string* filename) {
@@ -30,23 +32,10 @@ extern "C" {
 
         file.close();
 
-        strlist* res = (strlist*) _allocate(sizeof(strlist));
-
-        res->size = strvec.size();
-        res->base = (string**) _allocate(res->size * sizeof(string*));
-        _addchild((i8*) res, (i8*) res->base);
-        _removeref((i8*) res->base);
+        strlist* res = (strlist*) _allocate_blindarr(strvec.size(), sizeof(string*));
 
         for (i64 i = 0; i < res->size; i++) {
-            res->base[i] = (string*) _allocate(sizeof(string*));
-            _addchild((i8*) res, (i8*) res->base[i]);
-            _removeref((i8*) res->base[i]);
-
-            res->base[i]->size = strvec.at(i).length();
-            res->base[i]->base = _allocate(res->base[i]->size);
-            _addchild((i8*) res->base[i], res->base[i]->base);
-            _removeref(res->base[i]->base);
-            
+            res->base[i] = _allocate_string(strvec.at(i).length());
             memcpy(res->base[i]->base, strvec.at(i).c_str(), res->base[i]->size);
         }
 

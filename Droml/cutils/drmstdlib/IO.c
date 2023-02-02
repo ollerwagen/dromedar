@@ -11,7 +11,8 @@ void _IO$print_flt(IGNORE, double d) {
 }
 
 void _IO$print_str(IGNORE, string* s) {
-    printf("%s", s->base);
+    for (i64 i = 0; i < s->size; i++)
+        putchar(s->base[i]);
 }
 
 void _IO$print_char(IGNORE, i8 c) {

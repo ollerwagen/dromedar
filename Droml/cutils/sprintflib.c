@@ -8,7 +8,7 @@
 
 
 string* _sprintf_int(i64 i) {
-    string* res = allocate_string(30);
+    string* res = _allocate_string(30);
     sprintf(res->base, "%ld", i);
     res->size = strlen(res->base);
     return res;
@@ -16,28 +16,28 @@ string* _sprintf_int(i64 i) {
 
 string* _sprintf_flt(i64 d) {
     double dval = *(double*)(&d);
-    string* res = allocate_string(50);
+    string* res = _allocate_string(50);
     sprintf(res->base, "%lf", dval);
     res->size = strlen(res->base);
     return res;
 }
 
 string* _sprintf_char(i64 c) {
-    string* res = allocate_string(2);
+    string* res = _allocate_string(2);
     sprintf(res->base, "%c", (char) c);
     res->size = 1;
     return res;
 }
 
 string* _sprintf_bool(i64 b) {
-    string* res = allocate_string(b ? 5 : 6);
+    string* res = _allocate_string(b ? 5 : 6);
     sprintf(res->base, "%s", b ? "true" : "false");
     res->size = strlen(res->base);
     return res;
 }
 
 static string* makenullstr() {
-    string* res = allocate_string(5);
+    string* res = _allocate_string(5);
     sprintf(res->base, "null");
     res->size = strlen(res->base);
     return res;
@@ -72,6 +72,7 @@ string* _sprintf_array(i64 ptr, i64 depth, i64 elemsize, string* (*f)(i64)) {
     }
 
     res->size += 2 + (a->size == 0 ? 0 : a->size - 1);
+    res->capacity = res->size;
 
     res->base = _allocate(res->size);
     _addchild((i8*) res, res->base);
@@ -110,7 +111,7 @@ string* _sprintf_cat(i64 size, ...) {
     }
     va_end(va);
 
-    string *res = allocate_string(sumlen);
+    string *res = _allocate_string(sumlen);
     i64 index = 0;
     va_list vb;
     va_start(vb, size);

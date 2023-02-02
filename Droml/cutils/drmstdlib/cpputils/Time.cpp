@@ -15,6 +15,7 @@ extern "C" {
 
     i8* _cpputils_Time$now() {
         P* res = (P*) _allocate(sizeof(P));
+        new (res) P();
         *res = std::chrono::system_clock::now();
         return (i8*) res;
     }
@@ -22,7 +23,7 @@ extern "C" {
     i8* _cpputils_Time$dt(i8* a, i8* b) {
         P *atp = (P*) a, *btp = (P*) b;
         D* res = (D*) _allocate(sizeof(D));
-        // new (res) D(std::chrono::duration_cast<D>(*atp - *btp));
+        new (res) D();
         *res = *atp - *btp;
         return (i8*) res;
     }
@@ -44,16 +45,11 @@ extern "C" {
     }
 
     i8* _cpputils_Time$of_s(i64 i) {
-        D* res = (D*) _allocate(sizeof(D));
-        new (res) D();
-        *res = std::chrono::nanoseconds(i * 1000000000L);
-        return (i8*) res;
+        return _cpputils_Time$of_ms(1000 * i);
     }
 
     i8* _cpputils_Time$of_ms(i64 i) {
-        D* res = (D*) _allocate(sizeof(D));
-        new (res) D(std::chrono::nanoseconds(i * 1000000L));
-        return (i8*) res;
+        return _cpputils_Time$of_us(1000 * i);
     }
 
     i8* _cpputils_Time$of_us(i64 i) {
