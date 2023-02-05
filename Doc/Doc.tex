@@ -18,7 +18,7 @@
 	morekeywords = [6]{printf,sprintf,assert},
 	morekeywords = [7]{module,native},
 	morekeywords = [8]{Str,IO,Util,File,Math,Regex,Sys,Time,List,Turtle},
-	morekeywords = [9]{main,of_int,of_flt,print_int,print_flt,print_char,print_bool,print_char,print_str,randint,randflt,readall,sin,cos,tan,e,pi,compile,matches,first_match,all_matches,cmd,fork,clock,time,sleep_for,now,dt,s,ms,us,of_s,of_ms,of_us,map,make,close,fd,bk,lt,rt,penUp,penDn,setPenColor,setPenWidth,showTurtle,hideTurtle},
+	morekeywords = [9]{main,of_int,of_flt,print_int,print_flt,print_char,print_bool,print_char,print_str,randint,randflt,readall,sin,cos,tan,e,pi,compile,matches,first_match,all_matches,cmd,fork,clock,time,sleep_for,now,dt,s,ms,us,of_s,of_ms,of_us,map,make,close,fd,bk,lt,rt,penUp,penDn,setPenColor,setPenWidth,showTurtle,hideTurtle,length,push,pop,insert,insert_all,erase,sub},
 	comment = [l]{\#},
 	%morecomment = [s]{/*}{*/},
 	string = [b]',
@@ -805,6 +805,27 @@ fn main -> void
 			
 			Functions are also declared globally. They can call each other and themselves recursively within their respective function bodies.
 			
+		\subsection{Builtin Types}
+		
+			\subsubsection{Arrays}
+		
+				The simplest builtin type (after the four primitive types) is the \textit{array} type. Arrays are dynamic. Arrays have the following pseudo-fields and functions (for the array type \code{[t]}):
+				
+				\begin{stdlib}
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
+					\midrule
+					operator \code{[]} & \code{int -> t} & returns the element with the given index and allows the element to be modified \\
+					\code{length} & \code{int} & returns the number of elements in the array \\
+					\code{push} & \code{t -> [t]} & appends a new element to the array (in-place modification), and returns a \code{this} reference \\
+					\code{pop} & \code{void -> [t]} & removes the last element in the array (in-place modification), and returns a \code{this} reference \\
+					\code{insert} & \code{(int,t) -> [t]} & inserts a value at the given position \\
+					\code{insert_all} & \code{(int,[t]) -> [t]} & inserts an array at the given position \\
+					\code{erase} & \code{int -> [t]} & removes the value at the given index \\
+					\code{sub} & \code{(int,int) -> [t]} & returns the subarray with from the start (1\textsuperscript{st} argument) with a given number of elements (2\textsuperscript{nd} argument) \\
+				\end{stdlib}
+			
+				Since \code{string} and \code{[char]} are equivalent, these member fields and methods also exist for strings.
+			
 		\subsection{Standard Library}
 		
 			The Dromedar standard library includes the following functions and objects:
@@ -812,7 +833,7 @@ fn main -> void
 			\subsubsection{\code{Str}: String Operations}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{Str.of_int} & \code{int -> string} & transforms an integer into a string \\
 					\code{Str.of_flt} & \code{flt -> string} & transforms a decimal number into a string
@@ -823,7 +844,7 @@ fn main -> void
 				Printing operations are always preceded by the \code{IO} library name.
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{IO.print_str} & \code{string -> void} & prints a string to the console\\
 					\code{IO.print_int} & \code{int -> void} & prints an integer to the console\\
@@ -835,7 +856,7 @@ fn main -> void
 			\subsubsection{\code{Util}: Miscellaneous Utility Functions}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{Util.randint} & \code{() -> int} & random integer from $-2^63$ to $2^63-1$ \\
 					\code{Util.randflt} & \code{() -> flt} & random floating point number in $[0,1)$
@@ -844,7 +865,7 @@ fn main -> void
 			\subsubsection{\code{File}: File I/O}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{File.readall} & \code{string -> [string]} & returns all lines from the file with the given input name
 				\end{stdlib}
@@ -852,7 +873,7 @@ fn main -> void
 			\subsubsection{\code{Math} : Mathematical Operations}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{Math.sin} & \code{flt -> flt} & sine function \\
 					\code{Math.cos} & \code{flt -> flt} & cosine function \\
@@ -864,7 +885,7 @@ fn main -> void
 			\subsubsection{\code{Regex}: Regular Expressions}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{<type>} & \code{R} & blackbox type that represents a regex automaton \\
 					\code{Regex.compile} & \code{string -> R?} & returns \code{null} if the compilation to a regex automaton fails \\
@@ -876,7 +897,7 @@ fn main -> void
 			\subsubsection{\code{Sys} : System Calls, etc.}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{Sys.cmd} & \code{string -> int} & executes a shell command \\
 					\code{Sys.fork} & \code{() -> int} & executes the \code{fork()} \textsc{Unix} system call
@@ -885,7 +906,7 @@ fn main -> void
 			\subsubsection{\code{Time} : Date and Time Utilities}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{<type>} & \code{P} & blackbox type representing a point in time \\
 					\code{<type>} & \code{D} & blackbox type representing a duration \\
@@ -904,7 +925,7 @@ fn main -> void
 			\subsubsection{\code{List} : List Manipulation Functions}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{List.map} & \code{(<a>-><b>,[<a>]) -> [<b>]} & applies a function on all elements of a list
 				\end{stdlib}
@@ -916,7 +937,7 @@ fn main -> void
 			\subsubsubsection{\code{Turtle} : Turtle Graphics Module}
 			
 				\begin{stdlib}
-					\textbf{Name} & \textbf{Type} & \textbf{Effect} \\
+					\textbf{Name} & \textbf{Type} & \textbf{Description} \\
 					\midrule
 					\code{make} & \code{() -> void} & creates a new turtle window \\
 					\code{close} & \code{() -> void} & waits until the user presses the button to close the window \\

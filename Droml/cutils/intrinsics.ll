@@ -68,3 +68,29 @@ declare {i64,i64,[0 x i8]*}*  @_allocate_string(i64)
 declare {i64,i64,[0 x i8]*}*  @_allocate_string_of(i8*)
 declare {i64,i64,[0 x i64]*}* @_allocate_intarr(i64)
 declare {i64,i64,[0 x i8]*}* @_allocate_blindarr(i64,i64)
+
+; generalized array member functions
+declare {i64,i64,[0 x i8]*}* @_array_push       (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)
+declare {i64,i64,[0 x i8]*}* @_array_pop        (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*)
+declare {i64,i64,[0 x i8]*}* @_array_insert     (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)
+declare {i64,i64,[0 x i8]*}* @_array_insert_all (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,{i64,i64,[0 x i8]*}*)
+declare {i64,i64,[0 x i8]*}* @_array_erase      (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)
+declare {i64,i64,[0 x i8]*}* @_array_sub        (i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)
+
+@_Array$push$c       = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)* @_array_push}
+@_Array$push         = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)*}* @_Array$push$c
+
+@_Array$pop$c        = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*)* @_array_pop}
+@_Array$pop          = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*)*}* @_Array$pop$c
+
+@_Array$insert$c     = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)* @_array_insert}
+@_Array$insert       = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)*}* @_Array$insert$c
+
+@_Array$insert_all$c = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,{i64,i64,[0 x i8]*}*)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,{i64,i64,[0 x i8]*}*)* @_array_insert_all}
+@_Array$insert_all   = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,{i64,i64,[0 x i8]*}*)*}* @_Array$insert_all$c
+
+@_Array$erase$c      = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)* @_array_erase}
+@_Array$erase        = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64)*}* @_Array$erase$c
+
+@_Array$sub$c        = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)*} {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)* @_array_sub}
+@_Array$sub          = global {{i64,i64,[0 x i8]*}*(i64*,i64,i64,i1,{i64,i64,[0 x i8]*}*,i64,i64)*}* @_Array$sub$c

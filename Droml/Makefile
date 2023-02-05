@@ -25,9 +25,10 @@ gc:
 	$(COMPILE_LIB) cutils/gc.cpp -o $(OUT)/gc.so
 
 intrinsics:
-	$(COMPILE) -c cutils/common.c -o $(OUT)/common.o
+	$(COMPILE) -c cutils/common.c     -o $(OUT)/common.o
 	$(COMPILE) -c cutils/intrinsics.c -o $(OUT)/intrinsics.o
 	$(COMPILE) -c cutils/sprintflib.c -o $(OUT)/sprintflib.o
+	$(COMPILE) -c cutils/arrays.c     -o $(OUT)/arrays.o
 	$(COMPILE_LIB) cutils/listops.cpp -o $(OUT)/listops.so
 	$(COMPILE_LIB) cutils/templ_intrinsics.cpp -o $(OUT)/templ_intrinsics.so
 

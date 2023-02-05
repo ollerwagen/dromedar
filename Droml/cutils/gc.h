@@ -13,6 +13,7 @@ extern "C" {
     void  _addref(ptr);
     void  _swapchild(ptr,ptr,ptr);
     void  _addchild(ptr,ptr);
+    void  _removechild(ptr,ptr);
 
     void _transferchildren(ptr,ptr);
 

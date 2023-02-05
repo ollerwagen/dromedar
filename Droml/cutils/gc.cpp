@@ -161,6 +161,18 @@ extern "C" {
 #endif
     }
 
+    void _removechild(ptr base, ptr child) {
+#if __DEBUG__
+        printf("removechild(%p -> %p)\n", base, child);
+#endif
+
+        table[base].children.erase(child);
+
+#if __AGGRESSIVE_GC__
+        gcrun();
+#endif
+    }
+
     void _swapchild(ptr parent, ptr before, ptr after) {
 #if __DEBUG__
         printf("swapchild(parent:%p, from %p to %p)\n", parent, before, after);

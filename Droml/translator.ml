@@ -84,8 +84,17 @@ module Translator = struct
 
   and cmp_lllty (a : ty) : Ll.llty = Ptr (Array (0L, cmp_ty a))
 
-  let base_ctxt = Ctxt.empty
-
+  let base_ctxt =
+    let blindarr = TRef (TArr TChar) in
+    List.fold_left Ctxt.add_binding Ctxt.empty @@
+      List.map (fun (id,t) -> id, (t, cmp_ty t, Gid id))
+        [ "_Array$push",       TRef (TFun ([TInt;TInt;TBool;blindarr;TInt         ], Ret blindarr))
+        ; "_Array$pop",        TRef (TFun ([TInt;TInt;TBool;blindarr              ], Ret blindarr))
+        ; "_Array$insert",     TRef (TFun ([TInt;TInt;TBool;blindarr;TInt;TInt    ], Ret blindarr))
+        ; "_Array$insert_all", TRef (TFun ([TInt;TInt;TBool;blindarr;TInt;blindarr], Ret blindarr))
+        ; "_Array$erase",      TRef (TFun ([TInt;TInt;TBool;blindarr;TInt         ], Ret blindarr))
+        ; "_Array$sub",        TRef (TFun ([TInt;TInt;TBool;blindarr;TInt;TInt    ], Ret blindarr))
+        ]
   
   let allocate (size : Ll.operand) (t : Ll.llty) (name : string) : stream =
     let ptrsym = gensym "malloc" in
@@ -140,7 +149,7 @@ module Translator = struct
 
   let cross_cast (et : ty) (lt,lllt,lop : ty * llty * operand) : (llty * operand) * stream =
     begin match et,lt with
-      | TInt,TFlt | TFlt,TInt ->
+      | TInt,TFlt | TFlt,TInt | TRef (TArr TChar), TRef (TArr _)->
           let rsym, c_et = gensym "crosscast", cmp_ty et in
           (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
       | _ -> (lllt,lop), []
@@ -624,11 +633,14 @@ module Translator = struct
               | TRef (TFun (a, _)) -> a
               | _ -> Stdlib.failwith "bad outer function type"
             end in
+          
+          let stored_ts = List.filter_map (function | Some _, t -> Some t | _ -> None) (List.combine a outer_args) in
 
           let res_f_t = cmp_llfty ats rt in
           let res_ty = cmp_ty (TRef (TFun (ats,rt))) in
           
-          let closure_t = Ptr (Struct ([ res_f_t ; Ptr I64 ] @ List.concat (List.map2 (fun e t -> match e,t with | Some _,t -> [cmp_ty t] | _ -> []) a outer_args))) in
+          let closure_elem_ts = List.concat (List.map2 (fun e t -> match e,t with | Some _,t -> [cmp_ty t] | _ -> []) a outer_args) in
+          let closure_t = Ptr (Struct ([ res_f_t ; Ptr I64 ] @ closure_elem_ts)) in
 
           let closure_arg, closure = gensym "inner_clos", gensym "inner_clos" in
           let innerfunction = gensym "clos_inner" in
@@ -655,11 +667,13 @@ module Translator = struct
               ] @
               (* load args from inner closure *)
               (List.concat @@ List.mapi
-                  (fun i (t,id) ->
-                    let arg_ptr = gensym "stored_arg_p" in
-                    [ Gep (arg_ptr, closure_t, Id closure, [ IConst 0L ; IConst (Int64.of_int @@ 2 + i) ]) ; Load (id, cmp_ty t, Id arg_ptr) ]
+                  (fun i ((t,id),clos_t) ->
+                    let arg_ptr, casted_arg_ptr = gensym "stored_arg_p", gensym "casted_arg_ptr" in
+                    [ Gep (arg_ptr, closure_t, Id closure, [ IConst 0L ; IConst (Int64.of_int @@ 2 + i) ])
+                    ; Bitcast (casted_arg_ptr, Ptr clos_t, Id arg_ptr, Ptr (cmp_ty t))
+                    ; Load (id, cmp_ty t, Id casted_arg_ptr) ]
                   )
-                  stored_args)  @
+                  (List.combine stored_args closure_elem_ts))  @
               [ Call ((if rt <> Void then Some inner_res else None), cmp_retty rt, Id outerclosure_function,
                 ((Ptr I64, Id outerclosure_i) ::
                   ((fun (res,_,_) -> res)
@@ -700,9 +714,10 @@ module Translator = struct
             List.concat (List.mapi
               (fun i ((t,_),(op,llt,s,gc)) ->
                 let clos_loc_p = gensym "clos_arg_loc" in
-                s @
+                let (llt',op'), crosscaststream = cross_cast (List.nth stored_ts i) (t,llt,op) in
+                s @ crosscaststream @
                 [ I (Gep (clos_loc_p, closure_t, Id clos, [ IConst 0L ; IConst (Int64.of_int (2+i)) ]))
-                ; I (Store (llt, op, Id clos_loc_p))
+                ; I (Store (llt', op', Id clos_loc_p))
                 ] @
                 begin match t with
                   | TRef _ | TNullRef _ ->
@@ -730,6 +745,27 @@ module Translator = struct
                 Id rsym, I64,
                 s @ [ I (Gep (rptr, llt, op, [ IConst 0L ; IConst 0L ])) ; I (Load (rsym, I64, Id rptr)) ] @ (if gc then removeref (llt,op) else []),
                 false, fs
+
+            | TRef (TArr t), id ->
+                let fname = Printf.sprintf "_Array$%s" id in
+                let ftype = (fun (t,_,_) -> t) (Ctxt.get c fname) in
+                let arglist_rem, retty =
+                  begin match ftype with
+                    | TRef (TFun (a, rt)) -> drop 4 a, rt
+                    | _                   -> Stdlib.failwith "bad array projection method type"
+                  end in
+                let tsize = size_ty (cmp_ty t) in
+                let parfapp =
+                  ParFApp ((Id fname, (fun (t,_,_) -> t) (Ctxt.get c fname)),
+                    [ Some (LitInt (Int64.of_int tsize),                                                                               TInt )
+                    ; Some (LitInt (if tsize = 8 then -1L else if tsize = 1 then 0xFFL else Stdlib.failwith "bad array element size"), TInt )
+                    ; Some (LitBool (match t with | TRef _ | TNullRef _ -> true | _ -> false),                                         TBool)
+                    ; Some (fst lhs, TRef (TArr TChar))
+                    ] @
+                    List.map (fun _ -> None) arglist_rem
+                  ) in
+                cmp_exp c (parfapp, TRef (TFun (arglist_rem, retty)))
+                
             | _ -> Stdlib.failwith "bad AST: bad projection type/id"
           end
     end

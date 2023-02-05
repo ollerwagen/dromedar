@@ -231,6 +231,16 @@ module TypeChecker = struct
     ; TChar,TChar
     ; TRef (TArr TChar), TRef (TArr TChar)
     ]
+
+  let array_fields (t:ty) : (string * ty) list =
+    [ "length",     TInt
+    ; "push",       TRef (TFun ([t],                 Ret (TRef (TArr t))))
+    ; "pop",        TRef (TFun ([],                  Ret (TRef (TArr t))))
+    ; "insert",     TRef (TFun ([TInt;t],            Ret (TRef (TArr t))))
+    ; "insert_all", TRef (TFun ([TInt;TRef(TArr t)], Ret (TRef (TArr t))))
+    ; "erase",      TRef (TFun ([TInt],              Ret (TRef (TArr t))))
+    ; "sub",        TRef (TFun ([TInt;TInt],         Ret (TRef (TArr t))))
+    ]
   
   let rec is_assignable (c:Ctxt.t) (e:exp node) : bool =
     let rec is_assignable_with_const (e:exp node) : bool =
@@ -548,9 +558,13 @@ module TypeChecker = struct
           begin match mayberes with
             | Some res -> c, res
             | _ ->
-                begin match check_exp c None false lhs, id.t with
-                  | (c', (e', TRef (TArr t))), "length" -> c', (Proj ((e', TRef (TArr t)), "length"), TInt)
-                  | (_, (_,t)), id -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id) e)
+                begin match check_exp c None false lhs with
+                  | c', (e', TRef (TArr t)) ->
+                      begin match List.assoc_opt id.t (array_fields t) with
+                        | Some mt -> c', (Proj ((e', TRef (TArr t)), id.t), mt)
+                        | None    -> raise @@ TypeError (ofnode (Printf.sprintf "Array type doesn't have element %s" id.t) e)
+                      end
+                  | _, (_,t) -> raise @@ TypeError (ofnode (Printf.sprintf "Cannot use projection with type %s and projector name %s" (Ast.print_ty (ofnode t e)) id.t) e)
                 end
           end
     end
