@@ -84,7 +84,7 @@ let rec size_ty (t:llty) : int =
     | Void         -> 0
     | VariadicDots -> Stdlib.failwith "cannot ask for size of variadic dots type"
     | Namedt s     -> Stdlib.failwith "named types unimplemented"
-    | Struct ts    -> List.fold_left (+) 0 @@ List.map size_ty ts
+    | Struct ts    -> List.fold_left (fun x s -> x + if s > 8 then s else 8) 0 @@ List.map size_ty ts
     | Array  (s,t) -> Int64.to_int s * size_ty t
     | I1 | I8      -> 1
     | I64 | Double | Ptr _ -> 8

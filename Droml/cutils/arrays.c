@@ -26,6 +26,7 @@ blindarr* _array_push(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blindarr* a
         _addchild((i8*) a, (i8*) elem);
     a->size++;
 
+    _addref((i8*) a);
     return a;
 }
 
@@ -39,6 +40,7 @@ blindarr* _array_pop(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blindarr* a)
     if (isptrs)
         _removechild((i8*) a, * (i8**) (a->base + a->size * elemsize));
     
+    _addref((i8*) a);
     return a;
 }
 
@@ -70,6 +72,7 @@ blindarr* _array_insert(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blindarr*
         _addchild((i8*) a, (i8*) val);
     a->size++;
 
+    _addref((i8*) a);
     return a;
 }
 
@@ -83,8 +86,8 @@ blindarr* _array_insert_all(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blind
         i64 newcapacity = 2 * a->capacity + vals->size + 1;
         i8* newbase = _allocate(newcapacity * elemsize);
         memcpy(newbase, a->base, index * elemsize);
-        memcpy(newbase + (index + 1) * elemsize, vals->base, vals->size * elemsize);
-        memcpy(newbase + (index + 1) * elemsize + vals->size * elemsize, a->base + index * elemsize, (a->size - index) * elemsize);
+        memcpy(newbase + index * elemsize, vals->base, vals->size * elemsize);
+        memcpy(newbase + (index + vals->size) * elemsize, a->base + index * elemsize, (a->size - index) * elemsize);
         _removechild((i8*) a, a->base);
         a->capacity = newcapacity;
         a->base = newbase;
@@ -103,6 +106,7 @@ blindarr* _array_insert_all(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blind
 
     a->size += vals->size;
 
+    _addref((i8*) a);
     return a;
 }
 
@@ -122,6 +126,7 @@ blindarr* _array_erase(IGNORE, i64 elemsize, i64 sizeflag, i1 isptrs, blindarr* 
 
     a->size--;
 
+    _addref((i8*) a);
     return a;
 }
 

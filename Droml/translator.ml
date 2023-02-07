@@ -148,12 +148,11 @@ module Translator = struct
     end
 
   let cross_cast (et : ty) (lt,lllt,lop : ty * llty * operand) : (llty * operand) * stream =
-    begin match et,lt with
-      | TInt,TFlt | TFlt,TInt | TRef (TArr TChar), TRef (TArr _)->
-          let rsym, c_et = gensym "crosscast", cmp_ty et in
-          (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
-      | _ -> (lllt,lop), []
-    end
+    if et <> lt then
+      let rsym, c_et = gensym "crosscast", cmp_ty et in
+      (c_et, Id rsym), [ I (Bitcast (rsym, lllt, lop, c_et)) ]
+    else
+      (lllt,lop), []
 
   let double_to_i64 (op : operand) : operand * stream =
     let fptr, iptr, rsym = gensym "dti_ptr", gensym "dti_ptr_asi", gensym "dti_res" in
@@ -653,7 +652,7 @@ module Translator = struct
           let inner_f_p, inner_p_outer, inner_p_outer_asi = gensym "clos_inner_func_ptr", gensym "clos_inner_outer_func", gensym "clos_inner_outer_func" in
 
           let inner_args = List.filter_map (function | None, t -> Some (t, gensym "clos_arg") | _ -> None) (List.combine a outer_args) in
-          let stored_args = List.filter_map (function | Some (e,t) -> Some (t, gensym "stored_arg") | _ -> None) a in
+          let stored_args = List.map (fun t -> t, gensym "stored_arg") stored_ts in
 
           (* <outerclosure_function> holds the outer function *)
 
@@ -670,8 +669,8 @@ module Translator = struct
                   (fun i ((t,id),clos_t) ->
                     let arg_ptr, casted_arg_ptr = gensym "stored_arg_p", gensym "casted_arg_ptr" in
                     [ Gep (arg_ptr, closure_t, Id closure, [ IConst 0L ; IConst (Int64.of_int @@ 2 + i) ])
-                    ; Bitcast (casted_arg_ptr, Ptr clos_t, Id arg_ptr, Ptr (cmp_ty t))
-                    ; Load (id, cmp_ty t, Id casted_arg_ptr) ]
+                    (*; Bitcast (casted_arg_ptr, Ptr clos_t, Id arg_ptr, Ptr (cmp_ty t))*)
+                    ; Load (id, cmp_ty t, Id arg_ptr) ]
                   )
                   (List.combine stored_args closure_elem_ts))  @
               [ Call ((if rt <> Void then Some inner_res else None), cmp_retty rt, Id outerclosure_function,
@@ -693,7 +692,7 @@ module Translator = struct
             )) in
 
           let fop,fllt,fs,fgc,ffs = cmp_exp c f in
-          let cd_args, usedfs = List.fold_left (fun (res,fs) exp -> match exp with | None -> res,fs | Some exp -> let op,llt,s,gc,efs = cmp_exp c exp in res@[op,llt,s,gc], union fs efs) ([],ffs) a in
+          let cd_args, usedfs = List.fold_left (fun (res,fs) exp -> match exp with | None -> res,fs | Some exp -> let op,llt,s,gc,efs = cmp_exp c exp in res@[op,snd exp,llt,s,gc], union fs efs) ([],ffs) a in
 
           (*
             what the LLVM code needs to do:
@@ -712,9 +711,9 @@ module Translator = struct
             ; I (Store (Ptr I64, Id inner_p_outer_asi, Id inner_p_outer))
             ] @ addchild (closure_t, Id clos) (fllt, fop) @ (if fgc then removeref (fllt,fop) else []) @
             List.concat (List.mapi
-              (fun i ((t,_),(op,llt,s,gc)) ->
+              (fun i ((t,_),(op,pt,llt,s,gc)) ->
                 let clos_loc_p = gensym "clos_arg_loc" in
-                let (llt',op'), crosscaststream = cross_cast (List.nth stored_ts i) (t,llt,op) in
+                let (llt',op'), crosscaststream = cross_cast t (pt,llt,op) in
                 s @ crosscaststream @
                 [ I (Gep (clos_loc_p, closure_t, Id clos, [ IConst 0L ; IConst (Int64.of_int (2+i)) ]))
                 ; I (Store (llt', op', Id clos_loc_p))
@@ -760,7 +759,7 @@ module Translator = struct
                     [ Some (LitInt (Int64.of_int tsize),                                                                               TInt )
                     ; Some (LitInt (if tsize = 8 then -1L else if tsize = 1 then 0xFFL else Stdlib.failwith "bad array element size"), TInt )
                     ; Some (LitBool (match t with | TRef _ | TNullRef _ -> true | _ -> false),                                         TBool)
-                    ; Some (fst lhs, TRef (TArr TChar))
+                    ; Some lhs
                     ] @
                     List.map (fun _ -> None) arglist_rem
                   ) in
