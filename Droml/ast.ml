@@ -110,6 +110,7 @@ type stmt =
 type gstmt =
   | GVDecl  of string * mutability * ty node option * exp node
   | GFDecl  of string * (string * ty node) list * retty node * stmt node list
+  | GTDecl  of string * (string * ty node) list * (string * ((string * ty node) list * retty node * stmt node list)) list
   | Module  of string
   | Using   of string
   | GNFDecl of string * ty node list * retty node
@@ -136,7 +137,6 @@ and print_retty (t : retty node) : string =
   end
 and print_rty (r : rty node) : string =
   begin match r.t with
-    | TArr TChar -> "string"
     | TArr t     -> Printf.sprintf "[%s]" (print_ty @@ ofnode t r)
     | TFun (args,rt) ->
         Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map (fun arg -> print_ty (ofnode arg r)) args)) (print_retty (ofnode rt r))
@@ -211,6 +211,7 @@ let print_gstmt (gs : gstmt node) : string =
     | GVDecl (id,Mut,Some t,e)   -> Printf.sprintf "global mut %s:%s := %s\n\n" id (print_ty t) (print_exp e)
     | GFDecl (id,[],rt,b)        -> Printf.sprintf "fn %s => %s\n%s\n" id (print_retty rt) (print_block 1 b)
     | GFDecl (id,args,rt,b)      -> Printf.sprintf "fn %s : %s => %s\n%s\n" id (String.concat ", " (List.map (fun (s,t) -> Printf.sprintf "%s:%s" s (print_ty t)) args)) (print_retty rt) (print_block 1 b)
+    | GTDecl (id,vals,fs)        -> Printf.sprintf "type %s\n%s\n%s\n" id (String.concat "\n" (List.map (fun (id,t) -> Printf.sprintf "  %s : %s" id (print_ty t)) vals)) (String.concat "\n" (List.map (fun (id,(a,rt,b)) -> Printf.sprintf "  fn %s (%s) -> %s\n%s\n" id (String.concat ", " (List.map (fun (id,t) -> Printf.sprintf "%s : %s" id (print_ty t)) a)) (print_retty rt) (print_block 2 b)) fs))
     | Module m                   -> Printf.sprintf "module %s\n\n\n" m
     | Using  m                   -> Printf.sprintf "using %s\n" m
     | GNFDecl (id,ats,rt)        -> Printf.sprintf "native fn %s%s %s => %s\n" id (if ats=[] then "" else ":") (String.concat ", " (List.map print_ty ats)) (print_retty rt)

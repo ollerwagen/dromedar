@@ -60,10 +60,10 @@ type token =
   | KNative
   | KUsing
   | KGlobal
+  | KType
   | KFn
   | KLet
   | KMut
-  | KType
   | KInt
   | KFlt
   | KChar
@@ -144,10 +144,10 @@ let print_token (t:token) : string =
     | KNative      -> "[native]"
     | KUsing       -> "[using]"
     | KGlobal      -> "[global]"
+    | KType        -> "[type]"
     | KFn          -> "[fn]"
     | KLet         -> "[let]"
     | KMut         -> "[mut]"
-    | KType        -> "[type]"
     | KInt         -> "[int]"
     | KFlt         -> "[flt]"
     | KChar        -> "[char]"
@@ -171,7 +171,7 @@ let print_token (t:token) : string =
     | KBreak       -> "[break]"
     | KContinue    -> "[continue]"
     | KReturn      -> "[return]"
-    | Whitespace (Left i) -> Printf.sprintf "[Whitespace %d]" i
+    | Whitespace (Left  i) -> Printf.sprintf "[Whitespace %d]" i
     | Whitespace (Right _) -> Stdlib.failwith "cannot print pure-string indent, should resolve first"
     | Semicolon    -> "[Semicolon]"
   end

@@ -72,6 +72,7 @@ module Lexer = struct
     ; "native",   KNative
     ; "using",    KUsing
     ; "global",   KGlobal
+    ; "type",     KType
     ; "fn",       KFn
     ; "let",      KLet
     ; "mut",      KMut

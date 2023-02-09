@@ -1764,14 +1764,19 @@ f(null of [string], [null of string])
 			\begin{small}\begin{verbatim}
 				Program          ::= { GlobalStatement }
 				                 
-				GlobalStatement  ::= GVDeclaration | GFDeclaration | %Module %Identifier | %Native NatDecl | %Using %Identifier
+				GlobalStatement  ::= GVDeclaration | GFDeclaration | GTDeclaration
+				                     | %Module %Identifier | %Native NatDecl | %Using %Identifier
 				                 
-				GVDeclaration    ::=  %Global [ %Mut ] %Identifier [ %Colon Type ] %Assign GlobalExpression
-				                      { %Comma %Identifier [ %Colon Type ] %Assign GlobalExpression }
+				GVDeclaration    ::= %Global [ %Mut ] %Identifier [ %Colon Type ] %Assign GlobalExpression
+				                       { %Comma %Identifier [ %Colon Type ] %Assign GlobalExpression }
+				                      
 				GFDeclaration    ::= %Fn %Identifier [ %LParen FArguments %Rparen ] %Arrow ReturnType Block
-				NatDecl          ::=
-				    %Type %Identifier | Type %Identifier
-				    | %Fn %Identifier [ %LParen FArguments %RParen ] %Arrow ReturnType
+				
+				GTDeclaration    ::= %Type %Identifier { (%Identifier {%Comma %Identifier} %Colon Type) |
+				                       GFDeclaration }
+				
+				NatDecl          ::= %Type %Identifier | Type %Identifier
+				                     | %Fn %Identifier [ %LParen FArguments %RParen ] %Arrow ReturnType
 				                 
 				FArguments       ::= [ %Identifier %Colon Type { %Comma %Identifier %Colon Type } ]
 				
@@ -1779,16 +1784,15 @@ f(null of [string], [null of string])
 				                 
 				Block            ::= { Statement }
 				
-				Statement        ::=
-				    VDeclaration | AssignStmt
-				    | IfStmt | NullCastStmt
-				    | WhileStmt | DoWhileStmt | ForStmt | RepeatStmt
-				    | ExprStmt
-				    | %Break | %Continue
-				    | ReturnStmt
+				Statement        ::= VDeclaration | AssignStmt
+				                     | IfStmt | NullCastStmt
+				                     | WhileStmt | DoWhileStmt | ForStmt | RepeatStmt
+				                     | ExprStmt
+				                     | %Break | %Continue
+				                     | ReturnStmt
 				                 
 				VDeclaration     ::= [ %Let | %Mut ] %Identifier [ %Colon Type ] %Assign Expression
-				                     { %Comma %Identifier [ %Colon Type ] %Assign Expression }
+				                       { %Comma %Identifier [ %Colon Type ] %Assign Expression }
 				                 
 				AssignStmt       ::= LHS %Assign Expression
 				                 
@@ -1798,17 +1802,15 @@ f(null of [string], [null of string])
 				                 
 				WhileStmt        ::= %While Expression Block
 				DoWhileStmt      ::= %Do Block %While Expression
-				ForStmt          ::=
-				    %For %Id %Assign Expr RangeSpecifier Expr Block
-				    | %For %Id %In Expr Block
+				ForStmt          ::= %For %Id %Assign Expr RangeSpecifier Expr Block
+				                     | %For %Id %In Expr Block
 				RepeatStmt       ::= %Repeat Expression Block
 				                 
 				RangeSpecifier   ::= %Dots | %DotsPipe | %PipeDots | %PipeDotPipe
 				                 
-				ExprStmt         ::=
-				    Expression
-				    | %Printf %LParen %LiteralStr PrintfArglist %RParen
-				    | %Assert Expression
+				ExprStmt         ::= Expression
+				                     | %Printf %LParen %LiteralStr PrintfArglist %RParen
+				                     | %Assert Expression
 				                 
 				ReturnStmt       ::= %Return [ Expression ]
 				                 
@@ -1824,16 +1826,14 @@ f(null of [string], [null of string])
 				                 
 				GlobalExpression ::= Expression
 			
-				Expression       ::=
-				    %Null %Of RefType
-				    | %LBrack %RBrack %Of Type
-				    | %QuestionMark Expression %Arrow Expression %Colon Expression
- 				    | %Assert Expression
-				    | ExprPrec30
+				Expression       ::= %Null %Of RefType
+				                     | %LBrack %RBrack %Of Type
+				                     | %QuestionMark Expression %Arrow Expression %Colon Expression
+ 				                     | %Assert Expression
+				                     | ExprPrec30
 				
-				ExprPrec20       ::=
-				     ExprPrec30 [ (%Equal | %NotEqual | %Greater | %Less | %GreaterEq
-				         | %LessEq | %RefEqual | %RefNotEqual) ExprPrec20 ]
+				ExprPrec20       ::= ExprPrec30 [ (%Equal | %NotEqual | %Greater | %Less | %GreaterEq
+				                     | %LessEq | %RefEqual | %RefNotEqual) ExprPrec20 ]
 				         
 				ExprPrec30       ::= ExprPrec40 [ %Bitor ExprPrec30 ]
 				ExprPrec40       ::= ExprPrec50 [ %Xor ExprPrec40 ]
@@ -1846,22 +1846,20 @@ f(null of [string], [null of string])
 				                 
 				SimpleExpression ::= BaseExpression { Application }
 				
-				BaseExpression   ::=
-				    %LParen Expression %RParen
-				    | %LBrack [ Expression { %Comma Expression } ] %RBrack
-				    | %LBrack Expression RangeSpecifier Expression %RBrack
-				    | %LBrack Expression %Colon
-				        [ %Identifier %In Expression { %Comma %Identifier %In Expression } ]
-				        [ %Colon Expression ] %RBrack
-				    | %LiteralInt | %LiteralFlt | %LiteralChar | %LiteralBool | %LiteralStr
-				    | %Identifier
-				    | %Sprintf %LParen %LiteralStr
-				        [ Expression { %Comma PrintfArglist } ] %RParen
+				BaseExpression   ::= %LParen Expression %RParen
+				                     | %LBrack [ Expression { %Comma Expression } ] %RBrack
+				                     | %LBrack Expression RangeSpecifier Expression %RBrack
+				                     | %LBrack Expression %Colon
+				                         [ %Identifier %In Expression { %Comma %Identifier %In Expression } ]
+				                         [ %Colon Expression ] %RBrack
+				                     | %LiteralInt | %LiteralFlt | %LiteralChar | %LiteralBool | %LiteralStr
+				                     | %Identifier
+				                     | %Sprintf %LParen %LiteralStr
+				                        [ Expression { %Comma PrintfArglist } ] %RParen
 				                 
-				Application      ::=
-				    %LParen [ FArg { %Comma FArg } ] %RParen
-				    | %LBrack Expression %RBrack
-				    | %Dot Identifier
+				Application      ::= %LParen [ FArg { %Comma FArg } ] %RParen
+				                     | %LBrack Expression %RBrack
+				                     | %Dot Identifier
 				                 
 				FArg             ::= Expression | %Underscore
 			\end{verbatim}\end{small}

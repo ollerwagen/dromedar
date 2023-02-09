@@ -17,3 +17,11 @@ i64 _Sys$cmd(IGNORE, string* cmd) {
 i64 _Sys$fork(IGNORE) {
     return fork();
 }
+
+void _Sys$abort(IGNORE) {
+    exit(0);
+}
+
+void _Sys$exit(IGNORE, i64 code) {
+    exit(code);
+}

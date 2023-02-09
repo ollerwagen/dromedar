@@ -711,7 +711,7 @@ module Parser = struct
 
   let parse_gstmt (indent:int) (s:state) : gstmt node list * state =
 
-    let rec parse_gvdecl (s:state) : gstmt node list * state =
+    let rec parse_gvdecl (indent:int) (s:state) : gstmt node list * state =
       let parse_single (m:mutability) (s:state) (indent:int) : gstmt node * state =
         let start = (peek s indent).start in
         let id,s' =
@@ -746,7 +746,7 @@ module Parser = struct
       gs, s'''
      
 
-    and parse_gfdecl (s:state) : gstmt node list * state =
+    and parse_gfdecl (indent:int) (s:state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KFn in
       let id,s'' =
@@ -780,10 +780,74 @@ module Parser = struct
         end in
       let s'''' = expect s''' indent Token.Arrow in
       let rt,s''''' = parse_retty s'''' indent in
-      let b,s'''''' = parse_block s''''' 1 in
+      let b,s'''''' = parse_block s''''' (indent+1) in
       [{ t = GFDecl (id,arglist,rt,b) ; start = start ; length = (peek s'''''' indent).start - start }], s''''''
     
-    and parse_gmodule (s : state) : gstmt node list * state =
+    and parse_gtdecl (indent:int) (s : state) : gstmt node list * state =
+      let rec aux (indent:int) (s:state) : state * (string * ty node) list * (string * ((string * ty node) list * retty node * stmt node list)) list =
+        let rec aux_var (s:state) : state * (string list) * ty node =
+          begin match (peek s indent).t with
+            | Id id ->
+                let s' = snd @@ advance s indent in
+                begin match (peek s' indent).t with
+                  | Comma ->
+                      let s'' = snd @@ advance s' indent in
+                      let s''', vars, t = aux_var s'' in
+                      s''', id::vars, t
+                  | Colon ->
+                      let s'' = snd @@ advance s' indent in
+                      let t,s''' = parse_ty s'' indent in
+                      s''', [id], t
+                  | _ -> raise @@ ParseError (ofnode "Expected either a comma or a colon in member variable declaration for structured data type" (peek s' indent))
+                end
+            | _ -> raise @@ ParseError (ofnode "Expected an identifier in member variable list" (peek s indent))
+          end
+        in
+        begin match (peek_raw s).t with
+          | Whitespace (Left ind') ->
+              if indent = ind' then
+                let s' = snd @@ advance s indent in
+                begin match (peek s' indent).t with
+                  | Id id ->
+                      let s',ids,t = aux_var s' in
+                      let s'',vars,fs = aux indent s' in
+                      s'', (List.map (fun id -> id,t) ids) @ vars, fs
+                  | KFn   ->
+                      let ast_stmt, s' = parse_gfdecl indent s' in
+                      begin match ast_stmt with
+                        | [d] ->
+                            begin match d.t with
+                              | GFDecl (id,a,r,b) ->
+                                  let s'',vars,fs = aux indent s' in
+                                  s'', vars, (id,(a,r,b)) :: fs
+                              | _ -> Stdlib.failwith "bad parse for member function"
+                            end
+                        | _ -> Stdlib.failwith "bad parse for member function"
+                      end
+                  | _ -> s, [], []
+                end
+              else
+                s, [], []
+          | EOF -> s, [], []
+          | _ -> raise @@ ParseError (ofnode "expected matching indentation" (peek_raw s))
+        end        
+      in
+      let start = (peek s indent).start in
+      let s' = expect s indent Token.KType in
+      let s'',id =
+        begin match (peek s' indent).t with
+          | Id id -> snd (advance s' indent), id
+          | _     -> raise @@ ParseError (ofnode "Expected a name in 'type' declaration" (peek s' indent))
+        end in
+      let s''', vals, fs =
+        begin match (peek_raw s'').t with
+          | Whitespace (Left ind) ->
+              if ind > indent then aux ind s'' else s'', [], []
+          | _ -> raise @@ ParseError (ofnode "Expected a fixed indent" (peek_raw s''))
+        end in
+      [{ t = GTDecl (id, vals, fs) ; start = start ; length = (peek s''' indent).start - start }], s'''
+
+    and parse_gmodule (indent:int) (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KModule in
       begin match (peek s' indent).t with
@@ -793,7 +857,7 @@ module Parser = struct
         | _ -> raise @@ ParseError (ofnode "Expected an identifier in module declaration" (peek s' indent))
       end
     
-    and parse_gusing (s : state) : gstmt node list * state =
+    and parse_gusing (indent:int) (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KUsing in
       let s'',id =
@@ -803,17 +867,17 @@ module Parser = struct
         end in
       [{ t = Using id ; start = start ; length = (peek s'' indent).start - start }], s''
 
-    and parse_gnative (s : state) : gstmt node list * state =
+    and parse_gnative (indent:int) (s : state) : gstmt node list * state =
       let start = (peek s indent).start in
       let s' = expect s indent Token.KNative in
       begin match (peek s' indent).t with
-        | Token.KFn   -> parse_gnfdecl start s'
-        | Token.KType -> parse_gntdecl start s'
-        | Token.Id _  -> parse_gnvdecl start s'
+        | Token.KFn   -> parse_gnfdecl start indent s'
+        | Token.KType -> parse_gntdecl start indent s'
+        | Token.Id _  -> parse_gnvdecl start indent s'
         | _           -> raise @@ ParseError (ofnode "Expected a native declaration" (peek s' indent))
       end
 
-    and parse_gnfdecl (start : int) (s : state) : gstmt node list * state =
+    and parse_gnfdecl (indent:int) (start : int) (s : state) : gstmt node list * state =
       let s' = expect s indent Token.KFn in
       let id,s'' =
         begin match (peek s' indent).t with
@@ -842,7 +906,7 @@ module Parser = struct
       let rt,s''''' = parse_retty s'''' indent in
       [{ t = GNFDecl (id,arglist,rt) ; start = start ; length = (peek s''''' indent).start - start }], s'''''
 
-    and parse_gnvdecl (start : int) (s : state) : gstmt node list * state =
+    and parse_gnvdecl (indent:int) (start : int) (s : state) : gstmt node list * state =
       let id,s' =
         begin match (peek s indent).t with
           | Id id -> id, snd @@ advance s indent
@@ -852,7 +916,7 @@ module Parser = struct
       let t,s''' = parse_ty s'' indent in
       [{ t = GNVDecl (id,t) ; start = start ; length = (peek s''' indent).start - start }], s'''
     
-    and parse_gntdecl (start : int) (s : state) : gstmt node list * state =
+    and parse_gntdecl (indent:int) (start : int) (s : state) : gstmt node list * state =
       let s' = expect s indent Token.KType in
       let id,s'' =
         begin match (peek s' indent).t with
@@ -865,11 +929,12 @@ module Parser = struct
 
     let s' = expect s indent (Token.Whitespace (Left indent)) in
     begin match (peek s' indent).t with
-      | Token.KModule -> parse_gmodule s'
-      | Token.KUsing  -> parse_gusing s'
-      | Token.KGlobal -> parse_gvdecl s'
-      | Token.KFn     -> parse_gfdecl s'
-      | Token.KNative -> parse_gnative s'
+      | Token.KModule -> parse_gmodule indent s'
+      | Token.KUsing  -> parse_gusing  indent s'
+      | Token.KGlobal -> parse_gvdecl  indent s'
+      | Token.KFn     -> parse_gfdecl  indent s'
+      | Token.KNative -> parse_gnative indent s'
+      | Token.KType   -> parse_gtdecl  indent s'
       | _             -> raise @@ ParseError (ofnode "Expected a global variable or function declaration" (peek s' indent))
     end
   

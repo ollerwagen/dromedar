@@ -45,8 +45,10 @@ native fn all_matches (R,string) -> [string]
 
 module Sys
 
-native fn cmd  (string) -> int
-native fn fork          -> int
+native fn cmd   (string) -> int
+native fn fork           -> int
+native fn abort          -> void
+native fn exit  (int)    -> void
 
 
 module Time

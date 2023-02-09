@@ -41,6 +41,7 @@ type annt_stmt =
 type annt_gstmt =
   | GVDecl  of string * mutability * ty option * annt_exp
   | GFDecl  of string * (string * ty) list * retty * annt_stmt list
+  | GTDecl  of string * (string * ty) list * (string * ((string * ty) list * retty * annt_stmt list)) list
   | GNFDecl of string * ty list * retty
   | GNVDecl of string * ty
   | GNTDecl of string
